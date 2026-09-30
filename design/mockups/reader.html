@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<title>阅读器 · 方向一「纸感静谧」· 桌面端</title>
+<!--
+  设计稿，非产品代码。按 1440px 窗口宽度设计。
+  字体：产品中正文为内嵌的思源宋体（SIL OFL，仅 Regular 字重）。
+  本稿在未嵌入字体的环境下回退到系统衬线，字形略有差异，排版参数一致。
+  平台适配：本稿画的是 macOS 形态（左上角红绿灯）。
+            Windows 形态把窗口控件移到标题栏右上角，其余不变。
+-->
+<style>
+  :root {
+    --shell: #E8E3DA;
+    --panel: #F3EFE7;
+    --paper: #FCFAF6;
+    --paper-raised: #FFFFFF;
+    --hover: rgba(43, 39, 35, 0.05);
+    --active: rgba(43, 39, 35, 0.09);
+    --line: #DBD4C8;
+    --ink: #2B2723;
+    --ink-muted: #6B635B;
+    --accent-link: #2C4A7C;
+    --accent-mark: #B4462F;
+    --hl-yellow: #F2E3A8;
+    --hl-green: #C9DFC4;
+    --hl-blue: #C6D6E8;
+    --hl-pink: #EDCFD4;
+
+    --shadow-sheet: 0 1px 2px rgba(43,39,35,.05), 0 10px 30px rgba(43,39,35,.09);
+    --shadow-pop: 0 6px 22px rgba(43,39,35,.16);
+
+    --serif: "Source Han Serif SC", "Noto Serif SC", "Songti SC", SimSun, serif;
+    --sans: "PingFang SC", "Microsoft YaHei", system-ui, -apple-system, "Segoe UI", sans-serif;
+
+    --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px;
+    --s5: 24px; --s6: 32px; --s7: 48px;
+
+    --r-sm: 4px; --r-md: 8px; --r-lg: 12px;
+    --ease: 160ms ease-out;
+
+    /* 用户排版偏好。产品中这三项要注入 epub 的 iframe，本稿直接作用于文档 */
+    --body-size: 19px;
+    --body-leading: 1.85;
+    --body-cols: 34;
+    --body-font: var(--serif);
+  }
+
+  html[data-theme="dark"] {
+    --shell: #100F0E;
+    --panel: #1A1816;
+    --paper: #211E1B;
+    --paper-raised: #2A2620;
+    --hover: rgba(230, 224, 216, 0.07);
+    --active: rgba(230, 224, 216, 0.12);
+    --line: #332E28;
+    --ink: #E6E0D8;
+    --ink-muted: #9A9188;
+    --accent-link: #8FB0E0;
+    --accent-mark: #D9836A;
+    --hl-yellow: #4A4023;
+    --hl-green: #2F3E2C;
+    --hl-blue: #2A3644;
+    --hl-pink: #452F33;
+    --shadow-sheet: 0 1px 2px rgba(0,0,0,.5), 0 10px 30px rgba(0,0,0,.45);
+    --shadow-pop: 0 6px 22px rgba(0,0,0,.6);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--shell);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 14px;
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+    transition: background var(--ease), color var(--ease);
+  }
+  button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--ink) 18%, transparent);
+    border: 3px solid transparent; background-clip: content-box; border-radius: 6px;
+  }
+  ::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--ink) 32%, transparent); background-clip: content-box; }
+
+  .app { height: 100vh; display: flex; flex-direction: column; }
+
+  /* ================= 标题栏 ================= */
+  .titlebar {
+    position: relative; z-index: 40;
+    flex: 0 0 44px;
+    display: flex; align-items: center; gap: var(--s3);
+    padding: 0 var(--s3) 0 0;
+    background: var(--shell);
+    border-bottom: 1px solid var(--line);
+    user-select: none;
+  }
+  /* macOS 红绿灯 */
+  .traffic { display: flex; gap: 8px; padding: 0 var(--s4) 0 18px; }
+  .traffic i { width: 12px; height: 12px; border-radius: 50%; display: block; }
+  .traffic i:nth-child(1) { background: #FF5F57; }
+  .traffic i:nth-child(2) { background: #FEBC2E; }
+  .traffic i:nth-child(3) { background: #28C840; }
+
+  .titlebar__title {
+    font-size: 13px; font-weight: 500; color: var(--ink);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .titlebar__title span { color: var(--ink-muted); font-weight: 400; }
+  .titlebar__spacer { flex: 1; }
+  .titlebar__tools { display: flex; align-items: center; gap: 2px; }
+  .tb-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    height: 28px; padding: 0 10px;
+    border-radius: var(--r-sm);
+    font-size: 13px; color: var(--ink-muted);
+    transition: background var(--ease), color var(--ease);
+  }
+  .tb-btn:hover { background: var(--hover); color: var(--ink); }
+  .tb-btn--on { background: var(--active); color: var(--ink); }
+  .tb-sep { width: 1px; height: 18px; background: var(--line); margin: 0 6px; }
+
+  /* ---------- 排版面板 ---------- */
+  .pop-wrap { position: relative; }
+  .pop {
+    position: absolute; top: calc(100% + 8px); right: 0;
+    width: 272px; padding: 10px 16px 16px;
+    background: var(--paper-raised);
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+    box-shadow: var(--shadow-pop);
+    display: none; cursor: default;
+  }
+  .pop.is-open { display: block; }
+  .pop__title {
+    font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--ink-muted); padding: 4px 0 8px;
+  }
+  .pop__row { display: flex; align-items: center; gap: 12px; height: 34px; }
+  .pop__row > label { flex: 0 0 58px; font-size: 12px; color: var(--ink-muted); }
+  .pop input[type="range"] { flex: 1; min-width: 0; height: 16px; accent-color: var(--ink); }
+  .pop__val {
+    flex: 0 0 32px; text-align: right;
+    font-size: 12px; color: var(--ink); font-variant-numeric: tabular-nums;
+  }
+  .pop__note {
+    display: none; margin: 0 0 6px 70px;
+    font-size: 11px; line-height: 1.55; color: var(--accent-mark);
+  }
+  .pop__note.is-on { display: block; }
+  .seg { display: flex; flex: 1; gap: 2px; padding: 2px; background: var(--shell); border-radius: var(--r-sm); }
+  .seg__b { flex: 1; height: 24px; border-radius: 2px; font-size: 12px; color: var(--ink-muted); transition: background var(--ease), color var(--ease); }
+  .seg__b:hover { color: var(--ink); }
+  .seg__b.is-on { background: var(--paper-raised); color: var(--ink); box-shadow: 0 1px 2px rgba(43,39,35,.14); }
+  html[data-theme="dark"] .seg__b.is-on { box-shadow: none; }
+
+  /* ================= 主体三栏 ================= */
+  .body { flex: 1; display: flex; min-height: 0; }
+
+  /* ---------- 侧栏 ---------- */
+  .sidebar {
+    flex: 0 0 248px;
+    background: var(--panel);
+    border-right: 1px solid var(--line);
+    display: flex; flex-direction: column; min-height: 0;
+    padding: var(--s3) var(--s2);
+  }
+  .nav-item {
+    display: flex; align-items: center; gap: 10px;
+    height: 32px; padding: 0 var(--s3);
+    border-radius: var(--r-sm);
+    font-size: 13px; color: var(--ink-muted);
+    transition: background var(--ease), color var(--ease);
+  }
+  .nav-item:hover { background: var(--hover); color: var(--ink); }
+  .nav-item--active { background: var(--active); color: var(--ink); font-weight: 500; }
+  .nav-item__icon { width: 16px; text-align: center; opacity: 0.75; }
+
+  .sidebar__section {
+    margin: var(--s5) var(--s3) var(--s2);
+    font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--ink-muted);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .toc { list-style: none; margin: 0; padding: 0 0 var(--s3); overflow-y: auto; flex: 1; }
+  .toc li {
+    display: flex; align-items: baseline; gap: var(--s2);
+    padding: 7px var(--s3); border-radius: var(--r-sm);
+    font-size: 13px; line-height: 1.5; color: var(--ink-muted);
+    cursor: pointer; transition: background var(--ease), color var(--ease);
+  }
+  .toc li:hover { background: var(--hover); color: var(--ink); }
+  .toc li.is-current { background: var(--active); color: var(--ink); font-weight: 500; }
+  .toc li .no { font-size: 11px; opacity: 0.6; font-variant-numeric: tabular-nums; flex: 0 0 auto; }
+  .toc li .t { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+  .toc li .pct { font-size: 11px; opacity: 0.55; font-variant-numeric: tabular-nums; }
+
+  /* ---------- 中栏：书桌 + 纸 ---------- */
+  .stage {
+    flex: 1; min-width: 0; min-height: 0;
+    background: var(--shell);
+    display: flex; flex-direction: column;
+    padding: var(--s4) var(--s5) 0;
+  }
+  .sheet {
+    flex: 1; min-height: 0;
+    display: flex; flex-direction: column;
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-top-left-radius: var(--r-lg);
+    border-top-right-radius: var(--r-lg);
+    border-bottom: 0;
+    box-shadow: var(--shadow-sheet);
+    overflow: hidden;
+  }
+  .sheet__scroll { flex: 1; overflow-y: auto; padding: var(--s7) var(--s7) 56px; }
+  /* 版心宽度 = 每行字数 × 字号。中文一字宽约等于字号，所以这个乘积就是版心 */
+  .page { max-width: calc(var(--body-cols) * var(--body-size)); margin: 0 auto; }
+
+  .chapter-no {
+    font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--ink-muted); margin-bottom: var(--s3);
+  }
+  h1.chapter-title {
+    font-size: 25px; font-weight: 600; letter-spacing: 0.02em; line-height: 1.4;
+    margin: 0 0 30px;
+  }
+  .page p {
+    font-family: var(--body-font);
+    font-size: var(--body-size); line-height: var(--body-leading);
+    text-indent: 2em; margin: 0 0 1.2em;
+    text-align: justify;
+  }
+  .page p.no-indent { text-indent: 0; }
+  a { color: var(--accent-link); text-decoration: none; border-bottom: 1px solid currentColor; }
+
+  mark.hl {
+    background: var(--hl-yellow); color: inherit;
+    padding: 0.1em 0.05em; border-radius: 2px;
+    box-decoration-break: clone; -webkit-box-decoration-break: clone;
+  }
+  .sel-context { position: relative; }
+  .selection {
+    background: var(--hl-blue); border-radius: 2px; padding: 0.1em 0.05em;
+    box-decoration-break: clone; -webkit-box-decoration-break: clone;
+  }
+
+  /* 划词浮条 */
+  .sel-toolbar {
+    position: absolute; left: 50%; top: -10px;
+    transform: translate(-50%, -100%);
+    display: flex; align-items: center; gap: 2px;
+    padding: 6px 8px;
+    background: var(--paper-raised);
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+    box-shadow: var(--shadow-pop);
+    white-space: nowrap; z-index: 20;
+  }
+  .sel-toolbar::after {
+    content: ""; position: absolute; left: 50%; bottom: -5px;
+    width: 8px; height: 8px; transform: translateX(-50%) rotate(45deg);
+    background: var(--paper-raised);
+    border-right: 1px solid var(--line); border-bottom: 1px solid var(--line);
+  }
+  .dot { width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--line); transition: transform var(--ease); }
+  .dot:hover { transform: scale(1.16); }
+  .dot--y { background: var(--hl-yellow); }
+  .dot--g { background: var(--hl-green); }
+  .dot--b { background: var(--hl-blue); }
+  .dot--p { background: var(--hl-pink); }
+  .sel-sep { width: 1px; height: 18px; background: var(--line); margin: 0 8px; }
+  .sel-btn {
+    height: 28px; padding: 0 8px; border-radius: var(--r-sm);
+    font-size: 13px; color: var(--ink-muted);
+    transition: background var(--ease), color var(--ease);
+  }
+  .sel-btn:hover { background: var(--hover); color: var(--ink); }
+  .sel-btn--primary { color: var(--accent-mark); }
+  .sel-btn--primary:hover { background: color-mix(in srgb, var(--accent-mark) 12%, transparent); color: var(--accent-mark); }
+
+  /* 中栏底部进度（在书桌上，不在纸上） */
+  .stage__foot {
+    flex: 0 0 40px;
+    display: flex; align-items: center; gap: var(--s4);
+    padding: 0 var(--s3);
+    font-size: 12px; color: var(--ink-muted);
+  }
+  .progress__track {
+    flex: 1; height: 3px; border-radius: 2px; background: color-mix(in srgb, var(--ink) 12%, transparent);
+    position: relative; cursor: pointer;
+  }
+  .progress__fill { position: absolute; inset: 0 auto 0 0; width: 38%; background: var(--ink-muted); border-radius: 2px; }
+  .progress__knob {
+    position: absolute; left: 38%; top: 50%;
+    width: 10px; height: 10px; margin: -5px 0 0 -5px;
+    border-radius: 50%; background: var(--ink);
+    opacity: 0; transition: opacity var(--ease);
+  }
+  .progress__track:hover .progress__knob { opacity: 1; }
+  .progress__count { font-variant-numeric: tabular-nums; }
+
+  /* ---------- 右栏：AI 面板 ---------- */
+  .panel {
+    flex: 0 0 360px;
+    background: var(--panel);
+    border-left: 1px solid var(--line);
+    display: flex; flex-direction: column; min-height: 0;
+  }
+  .panel__tabs {
+    flex: 0 0 auto; display: flex; gap: var(--s5);
+    padding: 12px var(--s5) 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .tab {
+    padding: 0 0 10px;
+    font-size: 13px; color: var(--ink-muted);
+    border-bottom: 2px solid transparent; margin-bottom: -1px;
+    transition: color var(--ease), border-color var(--ease);
+  }
+  .tab:hover { color: var(--ink); }
+  .tab--active { color: var(--ink); border-bottom-color: var(--ink); }
+
+  .panel__body { flex: 1; overflow-y: auto; padding: var(--s5); }
+  .msg { margin-bottom: var(--s5); }
+  .msg__role { font-size: 11px; letter-spacing: 0.08em; color: var(--ink-muted); margin-bottom: 6px; }
+  .msg__text { font-size: 13.5px; line-height: 1.75; margin: 0; }
+  .msg--ai .msg__text { font-family: var(--serif); font-size: 15px; line-height: 1.8; }
+  .cite {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 18px; height: 18px; padding: 0 5px; margin: 0 2px; vertical-align: 1px;
+    background: color-mix(in srgb, var(--accent-link) 14%, transparent);
+    color: var(--accent-link); border-radius: var(--r-sm);
+    font: 500 11px/1 var(--sans); font-variant-numeric: tabular-nums;
+    transition: background var(--ease);
+  }
+  .cite:hover { background: color-mix(in srgb, var(--accent-link) 26%, transparent); }
+  .source {
+    margin-top: 10px; padding: 10px 12px 10px 14px;
+    background: var(--paper);
+    border: 1px solid var(--line); border-left: 2px solid var(--line);
+    border-radius: var(--r-sm);
+    font-size: 13px; line-height: 1.7; color: var(--ink-muted);
+  }
+  .source__head { font-size: 11px; margin-bottom: 4px; }
+  .hint {
+    margin-top: var(--s4); padding-top: var(--s3);
+    border-top: 1px dashed var(--line);
+    font-size: 12px; line-height: 1.7; color: var(--ink-muted);
+  }
+
+  .panel__foot { flex: 0 0 auto; padding: var(--s4) var(--s5); border-top: 1px solid var(--line); }
+  .ask {
+    display: flex; align-items: center; gap: var(--s2);
+    height: 38px; padding: 0 6px 0 var(--s3);
+    background: var(--paper);
+    border: 1px solid var(--line); border-radius: var(--r-md);
+    transition: border-color var(--ease);
+  }
+  .ask:focus-within { border-color: color-mix(in srgb, var(--ink) 30%, transparent); }
+  .ask input {
+    flex: 1; border: 0; background: none; outline: none;
+    font: 400 13.5px/1 var(--sans); color: var(--ink);
+  }
+  .ask input::placeholder { color: var(--ink-muted); }
+  .ask__go {
+    width: 26px; height: 26px; border-radius: var(--r-sm);
+    background: var(--ink); color: var(--paper); font-size: 12px;
+  }
+
+  /* ================= 自适应 =================
+     原则：
+     1. 面板（侧栏 / AI 面板）先退让，中栏优先——窗口变窄时不能把正文挤死
+     2. 纸面跟随窗口增长，但有上限——过宽的行长会让眼睛难以折返到下一行行首
+     3. 超出上限的宽度不留给纸面上的空白，而是交给「对开双页」
+  */
+  .sheet { width: 100%; max-width: 1040px; margin: 0 auto; }
+
+  /* 超宽屏（≥1900）：单栏会留下大片空白，改为对开双页，真正消耗掉多出来的宽度 */
+  @media (min-width: 1900px) {
+    .sheet { max-width: 1440px; }
+    .sheet__scroll { padding: 56px 72px; }
+    .page { max-width: none; column-count: 2; column-gap: 84px; column-rule: 1px solid var(--line); }
+    .chapter-no, h1.chapter-title { column-span: all; }
+  }
+
+  /* 中等窗口：面板先退让 */
+  @media (max-width: 1279px) {
+    .sidebar { flex-basis: 208px; }
+    .panel { flex-basis: 320px; }
+    .stage { padding: 12px 16px 0; }
+    .sheet__scroll { padding: 40px; }
+  }
+
+  /* 窄窗口：AI 面板转为浮层（本稿直接隐藏），把宽度让给正文 */
+  @media (max-width: 1023px) {
+    .panel { display: none; }
+  }
+
+  /* 更窄：侧栏收成图标栏 */
+  @media (max-width: 839px) {
+    .sidebar { flex-basis: 56px; padding: 12px 8px; }
+    .nav-item { justify-content: center; padding: 0; }
+    .nav-item__label, .sidebar__section, .toc { display: none; }
+    .stage { padding: 8px 12px 0; }
+    .sheet__scroll { padding: 32px 24px; }
+    .page p { font-size: 17px; line-height: 1.8; }
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ============ 标题栏 ============ -->
+  <header class="titlebar">
+    <div class="traffic"><i></i><i></i><i></i></div>
+    <div class="titlebar__title">深度工作 <span>· 第二章 注意力的形状</span></div>
+    <div class="titlebar__spacer"></div>
+    <div class="titlebar__tools">
+      <div class="pop-wrap">
+        <button class="tb-btn" id="btn-typo">Aa 排版</button>
+        <div class="pop" id="pop-typo">
+          <div class="pop__title">排版</div>
+
+          <div class="pop__row">
+            <label>字体</label>
+            <div class="seg" id="seg-font">
+              <button class="seg__b is-on" data-font="serif">宋体</button>
+              <button class="seg__b" data-font="sans">黑体</button>
+            </div>
+          </div>
+
+          <div class="pop__row">
+            <label>字号</label>
+            <input type="range" id="s-size" min="15" max="24" step="1" value="19">
+            <span class="pop__val" id="v-size">19</span>
+          </div>
+
+          <div class="pop__row">
+            <label>每行字数</label>
+            <input type="range" id="s-cols" min="24" max="48" step="1" value="34">
+            <span class="pop__val" id="v-cols">34</span>
+          </div>
+          <div class="pop__note" id="n-cols"></div>
+
+          <div class="pop__row">
+            <label>行距</label>
+            <input type="range" id="s-lead" min="150" max="220" step="5" value="185">
+            <span class="pop__val" id="v-lead">1.85</span>
+          </div>
+
+          <div class="pop__row">
+            <label>主题</label>
+            <div class="seg" id="seg-theme">
+              <button class="seg__b is-on" data-theme="light">亮</button>
+              <button class="seg__b" data-theme="dark">暗</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <button class="tb-btn">笔记</button>
+      <span class="tb-sep"></span>
+      <button class="tb-btn tb-btn--on">AI 面板</button>
+    </div>
+  </header>
+
+  <div class="body">
+
+    <!-- ============ 侧栏 ============ -->
+    <nav class="sidebar">
+      <a class="nav-item"><span class="nav-item__icon">▤</span><span class="nav-item__label"></span>书架</span></a>
+      <a class="nav-item nav-item--active"><span class="nav-item__icon">▭</span><span class="nav-item__label">正在阅读</span></a>
+      <a class="nav-item"><span class="nav-item__icon">✎</span><span class="nav-item__label">笔记</span></a>
+
+      <div class="sidebar__section"><span>目录</span><span>5 章</span></div>
+      <ul class="toc">
+        <li><span class="no">01</span><span class="t">第一章　忙碌的代价</span><span class="pct">100%</span></li>
+        <li class="is-current"><span class="no">02</span><span class="t">第二章　注意力的形状</span><span class="pct">38%</span></li>
+        <li><span class="no">03</span><span class="t">第三章　深度工作的仪式</span><span class="pct">—</span></li>
+        <li><span class="no">04</span><span class="t">第四章　远离社交</span><span class="pct">—</span></li>
+        <li><span class="no">05</span><span class="t">第五章　拥抱无聊</span><span class="pct">—</span></li>
+      </ul>
+
+      <a class="nav-item"><span class="nav-item__icon">⚙</span>设置</a>
+    </nav>
+
+    <!-- ============ 中栏：书桌 + 纸 ============ -->
+    <main class="stage">
+      <div class="sheet">
+        <div class="sheet__scroll">
+          <article class="page">
+            <div class="chapter-no">Chapter Two</div>
+            <h1 class="chapter-title">第二章　注意力的形状</h1>
+
+            <p>他把书摊在桌上，先不去读，只是看着。纸页边缘有些发黄，是许多年前留下的，像一层薄薄的包浆。屋外的雨还在下，屋檐底下滴水的节奏很稳，一下，又一下，不知疲倦。</p>
+
+            <p class="no-indent">读一本书，究竟是在读什么？这个问题听起来迂腐，但每次翻开一本旧书，他都会再想一遍。文字是死的，可当目光掠过一行行铅字，某种东西被唤起了——不是信息，信息早就知道；不是道理，道理听得太多。是别的什么。</p>
+
+            <p class="sel-context">后来他在一篇文章里读到<span class="selection">心流</span>这个词，才隐约明白一点。所谓心流，并不是全神贯注那么简单，而是当一个人把注意力收拢到恰好能容纳一件事的程度时，时间会变得不一样。太容易的事让人走神，太难的事让人焦虑，只有在那条窄窄的边界上，人才会真的沉下去。
+
+              <span class="sel-toolbar">
+                <span class="dot dot--y"></span>
+                <span class="dot dot--g"></span>
+                <span class="dot dot--b"></span>
+                <span class="dot dot--p"></span>
+                <span class="sel-sep"></span>
+                <button class="sel-btn">笔记</button>
+                <button class="sel-btn">复制</button>
+                <button class="sel-btn">翻译</button>
+                <button class="sel-btn sel-btn--primary">问 AI</button>
+              </span>
+            </p>
+
+            <p>他合上书，往窗外看。雨小了些，天光从云缝里漏下来，落在对面楼顶的水泥面上，亮得有点晃眼。他想起小时候在图书馆，也是这样下雨的下午，一排排书架之间没有人，只有翻页的声音。</p>
+
+            <p class="no-indent">那种安静，他后来很少遇到了。现在他读电子书，手机就搁在右手边，屏幕朝下，但他知道它在。每隔几分钟，手会不自觉地伸过去，摸一下，看一眼，再放下。<mark class="hl">不是有什么必须处理的事情，只是那个动作本身已经长进了肌肉里。</mark></p>
+
+            <p>要把它拔出来，得费些力气。</p>
+          </article>
+        </div>
+      </div>
+
+      <div class="stage__foot">
+        <span>全书 38%</span>
+        <div class="progress__track">
+          <div class="progress__fill"></div>
+          <div class="progress__knob"></div>
+        </div>
+        <span class="progress__count">第 2 / 5 章</span>
+      </div>
+    </main>
+
+    <!-- ============ 右栏：AI 面板 ============ -->
+    <aside class="panel">
+      <div class="panel__tabs">
+        <button class="tab">本书分析</button>
+        <button class="tab tab--active">对话</button>
+        <button class="tab">笔记</button>
+      </div>
+
+      <div class="panel__body">
+        <div class="msg msg--user">
+          <div class="msg__role">你</div>
+          <p class="msg__text">作者说的"心流"，和心理学里的心流是一回事吗？</p>
+        </div>
+
+        <div class="msg msg--ai">
+          <div class="msg__role">深度求索 · deepseek-chat</div>
+          <p class="msg__text">基本同源，但作者做了简化。心理学里的心流强调"技能与挑战匹配"<span class="cite">1</span>，作者把它收敛成了"注意力收拢到恰好能容纳一件事的程度"，更偏体验描述，去掉了技能维度的讨论。</p>
+
+          <div class="source">
+            <div class="source__head">引自 第二章 · 注意力的形状</div>
+            "所谓心流，并不是全神贯注那么简单，而是当一个人把注意力收拢到恰好能容纳一件事的程度时，时间会变得不一样。"
+          </div>
+        </div>
+
+        <div class="hint">
+          AI 只会回答你提出的问题，不会在后台自动分析整本书。<br>
+          每次调用都会消耗你在设置里填的 API 额度。
+        </div>
+      </div>
+
+      <div class="panel__foot">
+        <div class="ask">
+          <input type="text" placeholder="就这本书提问…">
+          <button class="ask__go">↑</button>
+        </div>
+      </div>
+    </aside>
+
+  </div>
+</div>
+
+<script>
+(function () {
+  var root = document.documentElement;
+  var scroll = document.querySelector('.sheet__scroll');
+  var pop = document.getElementById('pop-typo');
+  var size = document.getElementById('s-size');
+  var cols = document.getElementById('s-cols');
+  var lead = document.getElementById('s-lead');
+  var note = document.getElementById('n-cols');
+
+  document.getElementById('btn-typo').addEventListener('click', function () {
+    pop.classList.toggle('is-open');
+  });
+  // 点面板外部关闭。用 closest 判断而不是 stopPropagation，避免依赖冒泡顺序
+  document.addEventListener('click', function (e) {
+    var t = e.target;
+    if (!(t instanceof Element) || !t.closest('.pop-wrap')) pop.classList.remove('is-open');
+  });
+
+  function updateNote() {
+    var cs = getComputedStyle(scroll);
+    var avail = scroll.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    if (cols.value * size.value > avail) {
+      note.textContent = '窗口宽度只够 ' + Math.max(1, Math.floor(avail / size.value)) + ' 字／行，已按上限显示';
+      note.classList.add('is-on');
+    } else {
+      note.classList.remove('is-on');
+    }
+  }
+
+  function apply() {
+    root.style.setProperty('--body-size', size.value + 'px');
+    root.style.setProperty('--body-cols', cols.value);
+    root.style.setProperty('--body-leading', (lead.value / 100).toFixed(2));
+    document.getElementById('v-size').textContent = size.value;
+    document.getElementById('v-cols').textContent = cols.value;
+    document.getElementById('v-lead').textContent = (lead.value / 100).toFixed(2);
+    updateNote();
+  }
+
+  [size, cols, lead].forEach(function (el) { el.addEventListener('input', apply); });
+  window.addEventListener('resize', updateNote);
+
+  document.getElementById('seg-font').addEventListener('click', function (e) {
+    var b = e.target.closest('.seg__b'); if (!b) return;
+    this.querySelectorAll('.seg__b').forEach(function (x) { x.classList.remove('is-on'); });
+    b.classList.add('is-on');
+    root.style.setProperty('--body-font', b.dataset.font === 'sans' ? 'var(--sans)' : 'var(--serif)');
+  });
+
+  document.getElementById('seg-theme').addEventListener('click', function (e) {
+    var b = e.target.closest('.seg__b'); if (!b) return;
+    this.querySelectorAll('.seg__b').forEach(function (x) { x.classList.remove('is-on'); });
+    b.classList.add('is-on');
+    root.dataset.theme = b.dataset.theme;
+    updateNote();
+  });
+
+  apply();
+})();
+</script>
+
+</body>
+</html>

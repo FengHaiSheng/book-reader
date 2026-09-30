@@ -1,0 +1,63 @@
+:root {
+  --shell: #e8e3da;
+  --panel: #f3efe7;
+  --paper: #fcfaf6;
+  --paper-raised: #ffffff;
+  --hover: rgba(43, 39, 35, 0.05);
+  --active: rgba(43, 39, 35, 0.09);
+  --line: #dbd4c8;
+  --ink: #2b2723;
+  --ink-muted: #6b635b;
+  --accent-link: #2c4a7c;
+  --accent-mark: #b4462f;
+  --hl-yellow: #f2e3a8;
+  --hl-green: #c9dfc4;
+  --hl-blue: #c6d6e8;
+  --hl-pink: #edcfd4;
+
+  --shadow-sheet: 0 1px 2px rgba(43, 39, 35, 0.05), 0 10px 30px rgba(43, 39, 35, 0.09);
+  --shadow-pop: 0 6px 22px rgba(43, 39, 35, 0.16);
+
+  --serif: 'Source Han Serif SC', 'Noto Serif SC', 'Songti SC', SimSun, serif;
+  --sans: 'PingFang SC', 'Microsoft YaHei', system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  --s1: 4px;
+  --s2: 8px;
+  --s3: 12px;
+  --s4: 16px;
+  --s5: 24px;
+  --s6: 32px;
+  --s7: 48px;
+
+  --r-sm: 4px;
+  --r-md: 8px;
+  --r-lg: 12px;
+  --ease: 160ms ease-out;
+}
+
+html[data-theme='dark'] {
+  --shell: #100f0e;
+  --panel: #1a1816;
+  --paper: #211e1b;
+  --paper-raised: #2a2620;
+  --hover: rgba(230, 224, 216, 0.07);
+  --active: rgba(230, 224, 216, 0.12);
+  --line: #332e28;
+  --ink: #e6e0d8;
+  --ink-muted: #9a9188;
+  --accent-link: #8fb0e0;
+  --accent-mark: #d9836a;
+  --hl-yellow: #4a4023;
+  --hl-green: #2f3e2c;
+  --hl-blue: #2a3644;
+  --hl-pink: #452f33;
+  --shadow-sheet: 0 1px 2px rgba(0, 0, 0, 0.5), 0 10px 30px rgba(0, 0, 0, 0.45);
+  --shadow-pop: 0 6px 22px rgba(0, 0, 0, 0.6);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
+}
