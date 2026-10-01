@@ -1,5 +1,5 @@
 import type Database from 'better-sqlite3'
-import type { BookSummary, ChapterRowView, ImportOutcome } from '@shared/types'
+import type { BookSummary, ChapterRowView, ImportOutcome, SearchHit } from '@shared/types'
 import { toIndexText, toMatchQuery } from '../epub/bigram'
 import type { ChapterRow, ChunkDraft } from '../epub/types'
 
@@ -20,14 +20,6 @@ export type BookInsert = {
 }
 
 export type ChapterInsert = { row: ChapterRow; chunks: ChunkDraft[]; headingPath: string }
-
-export type SearchHit = {
-  chunkId: number
-  chapterId: number | null
-  headingPath: string
-  text: string
-  score: number
-}
 
 export function findByHash(db: Database.Database, hash: string): { id: string; title: string } | null {
   const row = db.prepare('SELECT id, title FROM books WHERE file_hash = ?').get(hash) as

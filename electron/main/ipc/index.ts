@@ -1,3 +1,4 @@
+import { registerLibraryIpc } from './library'
 import { registerSecretsIpc } from './secrets'
 import { registerSettingsIpc } from './settings'
 
@@ -5,4 +6,5 @@ import { registerSettingsIpc } from './settings'
 export function registerIpc(): void {
   registerSettingsIpc()
   registerSecretsIpc()
+  registerLibraryIpc()
 }

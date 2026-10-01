@@ -1,5 +1,19 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { CH } from '@shared/ipc'
+import type {
+  BookSummary,
+  ChapterRowView,
+  ImportOutcome,
+  ImportProgress,
+  IpcResult,
+  SearchHit
+} from '@shared/types'
+
+/** 把导入类调用回传的结果信封还原成「返回值或干净的中文 Error」。 */
+function unwrap<T>(result: IpcResult<T>): T {
+  if (result.ok) return result.value
+  throw Object.assign(new Error(result.error.message), result.error)
+}
 
 const api = {
   settings: {
@@ -13,6 +27,25 @@ const api = {
     set: (provider: string, key: string): Promise<void> =>
       ipcRenderer.invoke(CH.secretsSet, provider, key),
     clear: (provider: string): Promise<void> => ipcRenderer.invoke(CH.secretsClear, provider)
+  },
+  library: {
+    pickAndImport: async (): Promise<ImportOutcome[] | null> =>
+      unwrap(await ipcRenderer.invoke(CH.libraryPickAndImport)),
+    importPath: async (filePath: string): Promise<ImportOutcome> =>
+      unwrap(await ipcRenderer.invoke(CH.libraryImportPath, filePath)),
+    list: (): Promise<BookSummary[]> => ipcRenderer.invoke(CH.libraryList),
+    chapters: (bookId: string): Promise<ChapterRowView[]> =>
+      ipcRenderer.invoke(CH.libraryChapters, bookId),
+    search: (bookId: string, query: string, limit?: number): Promise<SearchHit[]> =>
+      ipcRenderer.invoke(CH.librarySearch, bookId, query, limit),
+    remove: (bookId: string): Promise<void> => ipcRenderer.invoke(CH.libraryRemove, bookId),
+    /** 返回取消订阅函数，供 React 的 useEffect 清理 */
+    onImportProgress: (listener: (progress: ImportProgress) => void): (() => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, progress: ImportProgress): void =>
+        listener(progress)
+      ipcRenderer.on(CH.libraryImportProgress, handler)
+      return () => ipcRenderer.removeListener(CH.libraryImportProgress, handler)
+    }
   }
 }
 

@@ -1,3 +1,5 @@
+import type { AppError } from './errors'
+
 export type ProviderId = 'deepseek' | 'qwen' | 'zhipu' | 'kimi'
 
 export const PROVIDERS: { id: ProviderId; name: string; baseURL: string }[] = [
@@ -62,3 +64,18 @@ export type ImportProgress = {
   done: number
   total: number
 }
+
+export type SearchHit = {
+  chunkId: number
+  chapterId: number | null
+  headingPath: string
+  text: string
+  score: number
+}
+
+/**
+ * IPC 结果信封。用于需要展示可读中文错误的调用：主进程直接 throw 会被 Electron
+ * 套上 "Error invoking remote method '...'" 英文前缀，这里改成回传结果，由 preload
+ * 还原成干净的 Error 再抛给渲染进程。
+ */
+export type IpcResult<T> = { ok: true; value: T } | { ok: false; error: AppError }

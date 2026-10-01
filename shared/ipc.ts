@@ -4,7 +4,15 @@ export const CH = {
   settingsSet: 'settings:set',
   secretsStatus: 'secrets:status',
   secretsSet: 'secrets:set',
-  secretsClear: 'secrets:clear'
+  secretsClear: 'secrets:clear',
+  libraryPickAndImport: 'library:pickAndImport',
+  libraryImportPath: 'library:importPath',
+  libraryList: 'library:list',
+  libraryChapters: 'library:chapters',
+  librarySearch: 'library:search',
+  libraryRemove: 'library:remove',
+  /** 主 → 渲染 的单向事件，不是 invoke */
+  libraryImportProgress: 'library:importProgress'
 } as const
 
 export type Channel = (typeof CH)[keyof typeof CH]
@@ -12,5 +20,6 @@ export type Channel = (typeof CH)[keyof typeof CH]
 /** preload 暴露给渲染进程的白名单方法名，冒烟测试会断言它完全一致 */
 export const API_SHAPE = {
   settings: ['getAll', 'set'],
-  secrets: ['status', 'set', 'clear']
+  secrets: ['status', 'set', 'clear'],
+  library: ['pickAndImport', 'importPath', 'list', 'chapters', 'search', 'remove', 'onImportProgress']
 } as const
