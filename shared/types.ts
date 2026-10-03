@@ -1,4 +1,5 @@
 import type { AppError } from './errors'
+import type { HighlightColor } from './highlights'
 
 export type ProviderId = 'deepseek' | 'qwen' | 'zhipu' | 'kimi'
 
@@ -143,4 +144,76 @@ export type ProgressInput = {
   /** 定位失败时允许为 null —— 进度仍要存，下次至少能跳回这一章开头 */
   chapterId: number | null
   percent: number
+}
+
+export type Highlight = {
+  id: number
+  bookId: string
+  chapterId: number | null
+  startCfi: string
+  endCfi: string
+  /** 标注时的选中原文 */
+  text: string
+  /** 批注；null 表示只划了线没写批注 */
+  note: string | null
+  color: HighlightColor
+  createdAt: number
+  updatedAt: number
+}
+
+export type HighlightInput = {
+  bookId: string
+  chapterId: number | null
+  startCfi: string
+  endCfi: string
+  text: string
+  note?: string | null
+  color?: HighlightColor
+}
+
+/** 只允许改这两项。位置与原文是既成事实，改位置等于重新标注 */
+export type HighlightPatch = {
+  note?: string | null
+  color?: HighlightColor
+}
+
+/** 跨书汇总用：多带书名、章节名与在全书的相对位置 */
+export type HighlightWithBook = Highlight & {
+  bookTitle: string
+  chapterTitle: string | null
+  /** 0–1，按「本章是可读章节里的第几章」折算，与阅读器的进度同一口径 */
+  percent: number
+}
+
+/** 右栏的原文上下文 */
+export type HighlightContext = {
+  /** 是否在章节正文里重新定位到了这段文字 */
+  located: boolean
+  chapterTitle: string | null
+  before: string
+  /** 命中处的原文；located 为 false 时是库里存的那一份 */
+  matched: string
+  after: string
+}
+
+/** 阅读落点：从书架进来只有 bookId，从笔记「回到原文」进来带章节与位置 */
+export type ReadingTarget = {
+  bookId: string
+  /** 指定时优先于上次进度 */
+  chapterId: number | null
+  /** 仅当 chapterId 不为 null 时有意义 */
+  cfi: string | null
+}
+
+export type NotesExportOptions = {
+  includeNotes: boolean
+  includeLocation: boolean
+  includeContext: boolean
+}
+
+export type NotesExportPreview = {
+  markdown: string
+  total: number
+  /** 附上下文时，没能在章节正文里重新定位到的条数 —— 界面要明说 */
+  unlocated: number
 }
