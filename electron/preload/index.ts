@@ -3,6 +3,11 @@ import { CH } from '@shared/ipc'
 import type {
   BookSummary,
   ChapterRowView,
+  Highlight,
+  HighlightContext,
+  HighlightInput,
+  HighlightPatch,
+  HighlightWithBook,
   ImportOutcome,
   ImportProgress,
   IpcResult,
@@ -57,6 +62,17 @@ const api = {
     open: (bookId: string): Promise<ReaderBook | null> => ipcRenderer.invoke(CH.readerOpen, bookId),
     saveProgress: (input: ProgressInput): Promise<void> =>
       ipcRenderer.invoke(CH.readerSaveProgress, input)
+  },
+  notes: {
+    listChapter: (bookId: string, chapterId: number): Promise<Highlight[]> =>
+      ipcRenderer.invoke(CH.notesListChapter, bookId, chapterId),
+    listAll: (): Promise<HighlightWithBook[]> => ipcRenderer.invoke(CH.notesListAll),
+    create: (input: HighlightInput): Promise<Highlight> =>
+      ipcRenderer.invoke(CH.notesCreate, input),
+    update: (id: number, patch: HighlightPatch): Promise<Highlight | null> =>
+      ipcRenderer.invoke(CH.notesUpdate, id, patch),
+    remove: (id: number): Promise<void> => ipcRenderer.invoke(CH.notesRemove, id),
+    context: (id: number): Promise<HighlightContext> => ipcRenderer.invoke(CH.notesContext, id)
   },
   shell: {
     openExternal: (url: string): Promise<void> =>

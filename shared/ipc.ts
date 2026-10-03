@@ -15,6 +15,12 @@ export const CH = {
   libraryRemove: 'library:remove',
   readerOpen: 'reader:open',
   readerSaveProgress: 'reader:saveProgress',
+  notesListChapter: 'notes:listChapter',
+  notesListAll: 'notes:listAll',
+  notesCreate: 'notes:create',
+  notesUpdate: 'notes:update',
+  notesRemove: 'notes:remove',
+  notesContext: 'notes:context',
   shellOpenExternal: 'shell:openExternal',
   /** 主 → 渲染 的单向事件，不是 invoke */
   libraryImportProgress: 'library:importProgress'
@@ -28,5 +34,6 @@ export const API_SHAPE = {
   secrets: ['status', 'set', 'clear'],
   library: ['pickAndImport', 'importPath', 'list', 'chapters', 'search', 'remove', 'onImportProgress'],
   reader: ['open', 'saveProgress'],
+  notes: ['listChapter', 'listAll', 'create', 'update', 'remove', 'context'],
   shell: ['openExternal']
 } as const
