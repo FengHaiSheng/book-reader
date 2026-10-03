@@ -124,3 +124,82 @@ export function missingOpfFiles(): EpubFiles {
     'OEBPS/ch1.xhtml': '<html><body><p>正文</p></body></html>'
   }
 }
+
+/**
+ * 骨架安全测试用的一本书：第一章里塞进内联脚本、外链脚本与一张图片。
+ * 期望行为——脚本一次都不执行，图片正常显示（图片能否真的解码由 Task 8 的 secureFiles 负责）。
+ */
+export function scriptedFiles(): EpubFiles {
+  const files = novelFiles()
+  files['OEBPS/ch1.xhtml'] = `<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml"><head><title>第一章</title>
+<link rel="stylesheet" href="style.css"/>
+</head>
+<body><h1>第一章 河边</h1>
+<p>月色沉入河底，量子纠缠的影子在水面碎成一片。</p>
+<img src="images/dot.jpg" alt="一个点"/>
+<script>document.title = '脚本执行了'; window.__pwned = true;</script>
+<script src="evil.js"></script>
+</body></html>`
+  files['OEBPS/evil.js'] = 'window.__pwned = true'
+  files['OEBPS/style.css'] = 'body { --from-book: 1; }'
+  files['OEBPS/images/dot.jpg'] = Buffer.from([0xff, 0xd8, 0xff, 0xd9, 0xff, 0xd9])
+  return files
+}
+
+/**
+ * 分页测试书：第一章长到一定会跨好几页，第二章短到只有一页。
+ * 分页、翻章边界、进度这些事，只有在内容超出一屏时才有东西可测。
+ * 目录与书名沿用 `novelFiles()`，所以既有的断言不受影响。
+ */
+export function longBookFiles(): EpubFiles {
+  const files = novelFiles()
+  const sentence = '河面上浮着一层薄薄的雾，像是有人把整条河搬进了梦里。'
+  const paragraphs = Array.from(
+    { length: 60 },
+    (_, index) => `<p>第 ${index + 1} 段。${sentence.repeat(3)}</p>`
+  ).join('\n')
+
+  files['OEBPS/ch1.xhtml'] = `<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml"><head><title>第一章 河边</title></head>
+<body><h1>第一章 河边</h1>
+${paragraphs}</body></html>`
+
+  files['OEBPS/ch2.xhtml'] = `<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml"><head><title>第二章 夏夜</title></head>
+<body><h1>第二章 夏夜</h1>
+<p>蝉声一直响到后半夜，月光把瓦片照得发白。</p></body></html>`
+
+  return files
+}
+
+/**
+ * 安全验收用的书：书里同时塞了内联脚本、外链脚本、一张图片和一条书内样式。
+ *
+ * 与 `scriptedFiles()` 的区别在图片：那一本用的是占位字节，`naturalWidth` 恒为 0，
+ * 因此只能证明「脚本没跑」，证明不了「图片显示了」。这里换成真正可解码的 1×1 GIF，
+ * 断言才能落到 `naturalWidth === 1`。
+ */
+export function secureFiles(): EpubFiles {
+  const files = scriptedFiles()
+  delete files['OEBPS/images/dot.jpg']
+
+  files['OEBPS/ch1.xhtml'] = `<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml"><head><title>第一章</title>
+<link rel="stylesheet" href="style.css"/>
+</head>
+<body><h1 id="book-h">第一章 河边</h1>
+<p id="book-p">月色沉入河底，量子纠缠的影子在水面碎成一片。</p>
+<img id="book-img" src="images/dot.gif" alt="一个点"/>
+<script>window.__pwned = true; document.body.setAttribute('data-pwned', '1');</script>
+<script src="evil.js"></script>
+</body></html>`
+
+  // 书内样式表必须生效（spec §3.4：书自己的样式优先，主题只覆盖阅读相关的部分）
+  files['OEBPS/style.css'] = '#book-h { color: rgb(1, 2, 3); }'
+  files['OEBPS/images/dot.gif'] = Buffer.from(
+    'R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
+    'base64'
+  )
+  return files
+}

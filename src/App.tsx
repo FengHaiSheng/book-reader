@@ -5,6 +5,7 @@ import { Sidebar, type PageId } from './shell/Sidebar'
 import { LibraryPage } from './pages/LibraryPage'
 import { NotesPage } from './pages/NotesPage'
 import { SettingsPage } from './pages/SettingsPage'
+import { ReaderPage } from './features/reader/ReaderPage'
 import './styles/base.css'
 
 const TITLES: Record<PageId, string> = {
@@ -15,6 +16,7 @@ const TITLES: Record<PageId, string> = {
 
 export default function App() {
   const [page, setPage] = useState<PageId>('library')
+  const [reading, setReading] = useState<string | null>(null)
 
   // 启动时应用已持久化的主题。index.html 里只写了默认亮色，
   // 不做这一步的话「切暗色后重启」会回到亮色。
@@ -33,13 +35,16 @@ export default function App() {
     })
   }, [])
 
+  // 阅读器是沉浸式全屏（spec §4.1），它自带标题栏与返回入口，不叠在外壳里
+  if (reading) return <ReaderPage bookId={reading} onExit={() => setReading(null)} />
+
   return (
     <div className="app">
       <TitleBar title={TITLES[page]} />
       <div className="body">
         <Sidebar current={page} onSelect={setPage} />
         <main className="content">
-          {page === 'library' && <LibraryPage />}
+          {page === 'library' && <LibraryPage onOpen={setReading} />}
           {page === 'notes' && <NotesPage />}
           {page === 'settings' && <SettingsPage />}
         </main>

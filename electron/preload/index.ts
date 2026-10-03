@@ -6,6 +6,9 @@ import type {
   ImportOutcome,
   ImportProgress,
   IpcResult,
+  ProgressInput,
+  ReaderBook,
+  ReadingPrefs,
   SearchHit
 } from '@shared/types'
 
@@ -19,7 +22,10 @@ const api = {
   settings: {
     getAll: (): Promise<Record<string, string>> => ipcRenderer.invoke(CH.settingsGetAll),
     set: (key: string, value: string): Promise<void> =>
-      ipcRenderer.invoke(CH.settingsSet, key, value)
+      ipcRenderer.invoke(CH.settingsSet, key, value),
+    getPrefs: (): Promise<ReadingPrefs> => ipcRenderer.invoke(CH.settingsGetPrefs),
+    setPrefs: (prefs: Partial<ReadingPrefs>): Promise<ReadingPrefs> =>
+      ipcRenderer.invoke(CH.settingsSetPrefs, prefs)
   },
   secrets: {
     status: (): Promise<{ available: boolean; providers: Record<string, string> }> =>
@@ -46,6 +52,15 @@ const api = {
       ipcRenderer.on(CH.libraryImportProgress, handler)
       return () => ipcRenderer.removeListener(CH.libraryImportProgress, handler)
     }
+  },
+  reader: {
+    open: (bookId: string): Promise<ReaderBook | null> => ipcRenderer.invoke(CH.readerOpen, bookId),
+    saveProgress: (input: ProgressInput): Promise<void> =>
+      ipcRenderer.invoke(CH.readerSaveProgress, input)
+  },
+  shell: {
+    openExternal: (url: string): Promise<void> =>
+      ipcRenderer.invoke(CH.shellOpenExternal, url)
   }
 }
 

@@ -2,6 +2,8 @@
 export const CH = {
   settingsGetAll: 'settings:getAll',
   settingsSet: 'settings:set',
+  settingsGetPrefs: 'settings:getPrefs',
+  settingsSetPrefs: 'settings:setPrefs',
   secretsStatus: 'secrets:status',
   secretsSet: 'secrets:set',
   secretsClear: 'secrets:clear',
@@ -11,6 +13,9 @@ export const CH = {
   libraryChapters: 'library:chapters',
   librarySearch: 'library:search',
   libraryRemove: 'library:remove',
+  readerOpen: 'reader:open',
+  readerSaveProgress: 'reader:saveProgress',
+  shellOpenExternal: 'shell:openExternal',
   /** 主 → 渲染 的单向事件，不是 invoke */
   libraryImportProgress: 'library:importProgress'
 } as const
@@ -19,7 +24,9 @@ export type Channel = (typeof CH)[keyof typeof CH]
 
 /** preload 暴露给渲染进程的白名单方法名，冒烟测试会断言它完全一致 */
 export const API_SHAPE = {
-  settings: ['getAll', 'set'],
+  settings: ['getAll', 'set', 'getPrefs', 'setPrefs'],
   secrets: ['status', 'set', 'clear'],
-  library: ['pickAndImport', 'importPath', 'list', 'chapters', 'search', 'remove', 'onImportProgress']
+  library: ['pickAndImport', 'importPath', 'list', 'chapters', 'search', 'remove', 'onImportProgress'],
+  reader: ['open', 'saveProgress'],
+  shell: ['openExternal']
 } as const

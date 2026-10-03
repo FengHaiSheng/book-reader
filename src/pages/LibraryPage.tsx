@@ -3,7 +3,7 @@ import type { BookSummary } from '@shared/types'
 import { BookList } from '../features/library/BookList'
 import { ImportButton } from '../features/library/ImportButton'
 
-export function LibraryPage() {
+export function LibraryPage({ onOpen }: { onOpen: (id: string) => void }) {
   const [books, setBooks] = useState<BookSummary[] | null>(null)
 
   const refresh = useCallback(async () => {
@@ -24,6 +24,7 @@ export function LibraryPage() {
       </div>
       <BookList
         books={books}
+        onOpen={onOpen}
         onRemove={(id) => {
           void window.api.library.remove(id).then(refresh)
         }}

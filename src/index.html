@@ -2,9 +2,16 @@
 <html lang="zh-CN" data-theme="light">
   <head>
     <meta charset="UTF-8" />
+    <!--
+      比计划 01 多了三处，都是章节文档要用到的：
+      - img-src / style-src / font-src / connect-src 放开 epub:：书里的图片、样式表、字体都从自定义协议来；
+      - frame-src blob:：章节文档以 Blob URL 装进 iframe；
+      - connect-src 的 ws://localhost:* 只为 dev 的 Vite HMR，生产环境用不到。
+      章节文档自己还有更严的 CHAPTER_CSP（script-src 'none'），这里的 'self' 是给它兜底。
+    -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; script-src 'self'"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' epub:; img-src 'self' data: epub:; font-src 'self' data: epub:; media-src 'self' epub:; frame-src 'self' blob:; connect-src 'self' epub: ws://localhost:*"
     />
     <title>书架</title>
   </head>

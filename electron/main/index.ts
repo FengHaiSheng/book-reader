@@ -1,7 +1,11 @@
 import { app, BrowserWindow } from 'electron'
+import { handleEpubProtocol, registerEpubScheme } from './epub/protocol'
 import { registerIpc } from './ipc'
 import { closeDatabase, openDatabase } from './store/db'
 import { createMainWindow } from './window'
+
+// 协议权限必须在 app ready 之前登记，放在最外层
+registerEpubScheme()
 
 // 单实例锁：第二次启动时聚焦已有窗口，而不是开出第二个库
 const gotLock = app.requestSingleInstanceLock()
@@ -19,6 +23,7 @@ if (!gotLock) {
   app.whenReady().then(() => {
     openDatabase(app.getPath('userData'))
     registerIpc()
+    handleEpubProtocol()
     createMainWindow()
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createMainWindow()

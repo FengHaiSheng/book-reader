@@ -21,6 +21,7 @@
   "dependencies": {
     "better-sqlite3": "^13.0.3",
     "domhandler": "^6.0.1",
+    "foliate-js": "^1.0.1",
     "htmlparser2": "^12.0.0",
     "yauzl": "^3.4.0"
   },
