@@ -1,5 +1,6 @@
-import { fake, fromRange, joinIndir, parse, toRange, type CfiPart } from 'foliate-js/epubcfi.js'
+import { toRange } from 'foliate-js/epubcfi.js'
 import type { ReaderLayout } from './layout'
+import { localParts, pointCfi } from './cfi'
 
 /** 取页首位置时探的坐标：正文区左上角往里缩一点，保证落在第一行文字里 */
 const PROBE_X = 2
@@ -104,7 +105,8 @@ export class ChapterPaginator {
    * 只有「屏幕左上角是什么字」才是与页面对应的真实锚点。
    */
   currentCfi(): string {
-    return joinIndir(fake.fromIndex(this.spineIndex), fromRange(this.pageStartRange()))
+    const range = this.pageStartRange()
+    return pointCfi(this.doc, range.startContainer, range.startOffset, this.spineIndex)
   }
 
   private pageStartRange(): Range {
@@ -115,18 +117,6 @@ export class ChapterPaginator {
     if (body) fallback.selectNodeContents(body)
     fallback.collapse(true)
     return fallback
-  }
-
-  /** CFI 可能带 `!`（spine 段）也可能是区间；这里只取本章文档内的那一段 */
-  private localParts(cfi: string): CfiPart[][] | null {
-    try {
-      const parsed = parse(cfi)
-      const indirection = Array.isArray(parsed) ? parsed : parsed.start
-      const local = indirection[indirection.length - 1]
-      return local ? [local] : null
-    } catch {
-      return null
-    }
   }
 
   /** 把 rect 从「视口坐标」换算成「内容坐标」 */
@@ -140,7 +130,7 @@ export class ChapterPaginator {
 
   /** 把定位点移到 CFI 所在页；CFI 坏掉或找不到节点时返回 false，由调用方兜底 */
   goToCfi(cfi: string): boolean {
-    const parts = this.localParts(cfi)
+    const parts = localParts(cfi)
     if (!parts) return false
     let range: Range
     try {
