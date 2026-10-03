@@ -747,3 +747,378 @@ html[data-theme='dark'] .seg__b.is-on {
 .btn--accent:hover:not(:disabled) {
   background: color-mix(in srgb, var(--accent-mark) 12%, transparent);
 }
+
+/* ---- 笔记页三栏 ---- */
+.notes-page {
+  height: 100%;
+  display: flex;
+  overflow: hidden;
+}
+
+.notes-side {
+  flex: 0 0 248px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s1);
+  padding: var(--s3) var(--s2);
+  background: var(--panel);
+  border-right: 1px solid var(--line);
+  overflow-y: auto;
+}
+
+.notes-side__section {
+  padding: var(--s3) var(--s2) var(--s1);
+  color: var(--ink-muted);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+}
+
+.notes-side__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.notes-side__item {
+  width: 100%;
+  min-height: 30px;
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  padding: 0 var(--s2);
+  border-radius: var(--r-sm);
+  color: var(--ink-muted);
+  font-size: 13px;
+  text-align: left;
+}
+
+.notes-side__item:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.notes-side__item.is-on {
+  background: var(--active);
+  color: var(--ink);
+}
+
+.notes-side__label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.notes-side__count {
+  color: var(--ink-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.notes-side__spacer {
+  flex: 1;
+}
+
+.notes-side__foot {
+  margin-top: auto;
+  padding: var(--s3) var(--s2) 0;
+  border-top: 1px solid var(--line);
+  color: var(--ink-muted);
+  font-size: 11px;
+  line-height: 1.7;
+}
+
+.notes-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--shell);
+}
+
+.notes-bar {
+  flex: 0 0 40px;
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  padding: 0 var(--s4);
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+}
+
+.notes-bar__title {
+  font-weight: 600;
+}
+
+.notes-bar__count {
+  color: var(--ink-muted);
+  font-size: 12px;
+}
+
+.notes-bar__error {
+  margin: 0;
+  padding: 6px var(--s4);
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  color: var(--accent-mark);
+  font-size: 12px;
+}
+
+.notes-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 var(--s4) var(--s6);
+}
+
+.notes-empty {
+  padding: var(--s6) var(--s4);
+  color: var(--ink-muted);
+  font-size: 13px;
+}
+
+/* 分组头吸顶：滚的是 .notes-scroll，吸顶就相对它 */
+.notes-group__head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  margin: 0 calc(var(--s4) * -1);
+  padding: var(--s2) var(--s4);
+  background: var(--shell);
+  border-bottom: 1px solid var(--line);
+}
+
+.notes-group__name {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.notes-group__n {
+  color: var(--ink-muted);
+  font-size: 12px;
+}
+
+.notes-group__spacer {
+  flex: 1;
+}
+
+/* ---- 笔记卡 ---- */
+.note {
+  position: relative;
+  margin: var(--s3) 0;
+  padding: var(--s3) var(--s3) var(--s2) var(--s4);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  cursor: pointer;
+  transition: border-color var(--ease), box-shadow var(--ease);
+}
+
+/* 左侧色条对应书内高亮颜色（spec §4.5） */
+.note::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: var(--s3);
+  bottom: var(--s3);
+  width: 3px;
+  border-radius: 0 2px 2px 0;
+  background: var(--hl-yellow);
+}
+
+.note[data-color='yellow']::before { background: var(--hl-yellow); }
+.note[data-color='green']::before { background: var(--hl-green); }
+.note[data-color='blue']::before { background: var(--hl-blue); }
+.note[data-color='pink']::before { background: var(--hl-pink); }
+
+.note:hover {
+  border-color: color-mix(in srgb, var(--ink) 18%, transparent);
+}
+
+.note--sel {
+  border-color: var(--ink-muted);
+  box-shadow: var(--shadow-sheet);
+}
+
+.note__quote {
+  margin: 0 0 var(--s2);
+  padding: 0 0 0 var(--s2);
+  border-left: 1px solid var(--line);
+  color: var(--ink);
+  font-family: var(--serif);
+  font-size: 14px;
+  line-height: 1.75;
+}
+
+.note__quote p {
+  margin: 0;
+}
+
+.note__memo {
+  margin-bottom: var(--s2);
+  padding: var(--s2);
+  background: var(--panel);
+  border-radius: var(--r-sm);
+  color: var(--ink-muted);
+  font-size: 13px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+.note__label {
+  margin-right: var(--s2);
+  color: var(--ink-muted);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+}
+
+.note__editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  margin-bottom: var(--s2);
+}
+
+.note__textarea {
+  min-height: 64px;
+  padding: var(--s2);
+  resize: vertical;
+  background: var(--paper-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.note__editor-foot,
+.note__foot {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  color: var(--ink-muted);
+  font-size: 12px;
+}
+
+.note__dot {
+  opacity: 0.6;
+}
+
+.note__spacer {
+  flex: 1;
+}
+
+.act {
+  height: 26px;
+  padding: 0 8px;
+  border-radius: var(--r-sm);
+  color: var(--ink-muted);
+  font-size: 12px;
+  transition: background var(--ease), color var(--ease);
+}
+
+.act:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.act--accent {
+  color: var(--accent-mark);
+}
+
+.act--accent:hover {
+  background: color-mix(in srgb, var(--accent-mark) 12%, transparent);
+  color: var(--accent-mark);
+}
+
+/* ---- 右栏 ---- */
+.notes-aside {
+  flex: 0 0 360px;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border-left: 1px solid var(--line);
+}
+
+.notes-aside__empty,
+.notes-aside__hint {
+  margin: 0;
+  padding: var(--s3) var(--s4);
+  color: var(--ink-muted);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.notes-aside__head {
+  padding: var(--s3) var(--s4);
+  border-bottom: 1px solid var(--line);
+}
+
+.notes-aside__kicker {
+  color: var(--ink-muted);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+}
+
+.notes-aside__book {
+  margin-top: 2px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.notes-aside__loc {
+  margin-top: 2px;
+  color: var(--ink-muted);
+  font-size: 12px;
+}
+
+.notes-aside__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--s3) var(--s4);
+}
+
+.notes-aside__note {
+  margin-top: var(--s4);
+  padding-top: var(--s3);
+  border-top: 1px solid var(--line);
+  color: var(--ink-muted);
+  font-size: 11px;
+  line-height: 1.7;
+}
+
+.notes-aside__foot {
+  display: flex;
+  gap: var(--s2);
+  padding: var(--s3) var(--s4);
+  border-top: 1px solid var(--line);
+}
+
+.notes-aside__foot .btn {
+  flex: 1;
+}
+
+.ctx p {
+  margin: 0 0 var(--s3);
+  color: var(--ink-muted);
+  font-family: var(--serif);
+  font-size: 13px;
+  line-height: 1.8;
+}
+
+/* 命中那一段：只有它是正文的颜色，前后文故意压低 */
+.ctx .ctx__cur {
+  margin: 0 0 var(--s3);
+  padding-left: var(--s2);
+  border-left: 2px solid var(--accent-mark);
+  color: var(--ink);
+  font-family: var(--serif);
+  font-size: 14px;
+  line-height: 1.8;
+}
