@@ -1,7 +1,13 @@
-import { ipcMain } from 'electron'
+import { writeFile } from 'node:fs/promises'
+import { dialog, ipcMain } from 'electron'
 import { CH } from '@shared/ipc'
 import { toAppError } from '@shared/errors'
-import type { HighlightInput, HighlightPatch } from '@shared/types'
+import type {
+  HighlightInput,
+  HighlightPatch,
+  NotesExportOptions,
+  NotesExportResult
+} from '@shared/types'
 import {
   createHighlight,
   deleteHighlight,
@@ -10,6 +16,7 @@ import {
   listChapterHighlights,
   updateHighlight
 } from '../notes/repo'
+import { fileStamp, previewExport } from '../notes/export'
 import { getDatabase } from '../store/db'
 
 export function registerNotesIpc(): void {
@@ -38,4 +45,33 @@ export function registerNotesIpc(): void {
   })
 
   ipcMain.handle(CH.notesContext, (_event, id: number) => highlightContext(getDatabase(), id))
+
+  ipcMain.handle(
+    CH.notesPreviewExport,
+    (_event, ids: number[] | null, options: NotesExportOptions) =>
+      previewExport(getDatabase(), ids, options, Date.now())
+  )
+
+  ipcMain.handle(
+    CH.notesExportMarkdown,
+    async (_event, ids: number[] | null, options: NotesExportOptions): Promise<NotesExportResult> => {
+      const now = new Date()
+      const preview = previewExport(getDatabase(), ids, options, now.getTime())
+
+      // 保存对话框归主进程：渲染进程碰不到 fs，也不该知道用户选了哪个目录
+      const picked = await dialog.showSaveDialog({
+        title: '导出 Markdown',
+        defaultPath: `读书笔记-${fileStamp(now)}.md`,
+        filters: [{ name: 'Markdown', extensions: ['md'] }]
+      })
+      if (picked.canceled || !picked.filePath) return { saved: false, path: null }
+
+      try {
+        await writeFile(picked.filePath, preview.markdown, 'utf8')
+      } catch (error) {
+        throw new Error(toAppError(error, '文件没有写成功').message)
+      }
+      return { saved: true, path: picked.filePath }
+    }
+  )
 }

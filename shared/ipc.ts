@@ -21,6 +21,8 @@ export const CH = {
   notesUpdate: 'notes:update',
   notesRemove: 'notes:remove',
   notesContext: 'notes:context',
+  notesPreviewExport: 'notes:previewExport',
+  notesExportMarkdown: 'notes:exportMarkdown',
   shellOpenExternal: 'shell:openExternal',
   /** 主 → 渲染 的单向事件，不是 invoke */
   libraryImportProgress: 'library:importProgress'
@@ -34,6 +36,6 @@ export const API_SHAPE = {
   secrets: ['status', 'set', 'clear'],
   library: ['pickAndImport', 'importPath', 'list', 'chapters', 'search', 'remove', 'onImportProgress'],
   reader: ['open', 'saveProgress'],
-  notes: ['listChapter', 'listAll', 'create', 'update', 'remove', 'context'],
+  notes: ['listChapter', 'listAll', 'create', 'update', 'remove', 'context', 'previewExport', 'exportMarkdown'],
   shell: ['openExternal']
 } as const

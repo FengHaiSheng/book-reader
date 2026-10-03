@@ -11,6 +11,9 @@ import type {
   ImportOutcome,
   ImportProgress,
   IpcResult,
+  NotesExportOptions,
+  NotesExportPreview,
+  NotesExportResult,
   ProgressInput,
   ReaderBook,
   ReadingPrefs,
@@ -72,7 +75,15 @@ const api = {
     update: (id: number, patch: HighlightPatch): Promise<Highlight | null> =>
       ipcRenderer.invoke(CH.notesUpdate, id, patch),
     remove: (id: number): Promise<void> => ipcRenderer.invoke(CH.notesRemove, id),
-    context: (id: number): Promise<HighlightContext> => ipcRenderer.invoke(CH.notesContext, id)
+    context: (id: number): Promise<HighlightContext> => ipcRenderer.invoke(CH.notesContext, id),
+    previewExport: (
+      ids: number[] | null,
+      options: NotesExportOptions
+    ): Promise<NotesExportPreview> => ipcRenderer.invoke(CH.notesPreviewExport, ids, options),
+    exportMarkdown: (
+      ids: number[] | null,
+      options: NotesExportOptions
+    ): Promise<NotesExportResult> => ipcRenderer.invoke(CH.notesExportMarkdown, ids, options)
   },
   shell: {
     openExternal: (url: string): Promise<void> =>

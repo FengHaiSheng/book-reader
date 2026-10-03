@@ -1122,3 +1122,145 @@ html[data-theme='dark'] .seg__b.is-on {
   font-size: 14px;
   line-height: 1.8;
 }
+
+/* ---- 标题栏工具区与导出浮层 ---- */
+.titlebar__spacer {
+  flex: 1;
+}
+
+/* 标题栏整体是拖拽区，工具区必须显式退出拖拽，否则按钮点不动 */
+.titlebar__tools {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-right: var(--s3);
+  -webkit-app-region: no-drag;
+}
+
+.tb-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: var(--r-sm);
+  font-size: 13px;
+  color: var(--ink-muted);
+  transition: background var(--ease), color var(--ease);
+}
+
+.tb-btn:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+/* 标题栏上唯一的强调动作 */
+.tb-btn--accent {
+  color: var(--accent-mark);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-mark) 42%, transparent);
+}
+
+.tb-btn--accent:hover {
+  background: color-mix(in srgb, var(--accent-mark) 10%, transparent);
+  color: var(--accent-mark);
+}
+
+.pop-wrap {
+  position: relative;
+}
+
+.pop {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 50;
+  width: 380px;
+  padding: var(--s3) var(--s4) 14px;
+  background: var(--paper-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-pop);
+  cursor: default;
+}
+
+.pop__title {
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: var(--s2);
+}
+
+.pop__row {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  min-height: 30px;
+}
+
+.pop__row > .lb {
+  flex: 0 0 32px;
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+
+.pop__row .seg {
+  flex: 1;
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  min-height: 28px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.check input {
+  width: 13px;
+  height: 13px;
+  accent-color: var(--ink);
+}
+
+.check .hint2 {
+  font-size: 11.5px;
+  color: var(--ink-muted);
+}
+
+.pop__warn {
+  margin: var(--s1) 0 0;
+  color: var(--accent-mark);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.pop__preview {
+  margin: 10px 0 var(--s3);
+  padding: 10px 12px;
+  max-height: 152px;
+  overflow-y: auto;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  font-family: var(--mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 11.5px;
+  line-height: 1.7;
+  color: var(--ink-muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.pop__foot {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+}
+
+.pop__done {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11.5px;
+  color: var(--ink-muted);
+}

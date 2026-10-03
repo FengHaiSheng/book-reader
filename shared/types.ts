@@ -217,3 +217,9 @@ export type NotesExportPreview = {
   /** 附上下文时，没能在章节正文里重新定位到的条数 —— 界面要明说 */
   unlocated: number
 }
+
+/** 导出落盘的结果。用户点了「取消」也是正常路径，所以用 saved 而不是抛错 */
+export type NotesExportResult = {
+  saved: boolean
+  path: string | null
+}

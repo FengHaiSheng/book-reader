@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { HighlightWithBook, ReadingTarget } from '@shared/types'
+import { ExportPopover } from '../features/notes/ExportPopover'
 import { NoteCard } from '../features/notes/NoteCard'
 import { NoteContextPanel } from '../features/notes/NoteContextPanel'
 import { NotesFilters } from '../features/notes/NotesFilters'
@@ -45,6 +46,9 @@ export function NotesPage({ onOpenAt }: { onOpenAt: (target: ReadingTarget) => v
   const changeKind = useCallback((next: NotesKind) => setKind(next), [])
   const changeBook = useCallback((next: string | null) => setBookId(next), [])
 
+  const allIds = useMemo(() => notes.map((note) => note.id), [notes])
+  const filteredIds = useMemo(() => filtered.map((note) => note.id), [filtered])
+
   const saveNote = useCallback(async (id: number, note: string | null) => {
     // update 只回 Highlight，不带书名与章节位置这些汇总字段，所以是并到原条目上
     const updated = await window.api.notes.update(id, { note })
@@ -69,6 +73,7 @@ export function NotesPage({ onOpenAt }: { onOpenAt: (target: ReadingTarget) => v
 
   return (
     <div className="notes-page">
+      <ExportPopover allIds={allIds} filteredIds={filteredIds} />
       <NotesFilters
         counts={counts}
         books={books}
