@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { DEFAULT_HIGHLIGHT_COLOR, MAX_HIGHLIGHT_CHARS, type HighlightColor } from '@shared/highlights'
-import type { Highlight, ReadingPrefs, ReaderBook } from '@shared/types'
+import type { Highlight, ReadingPrefs, ReaderBook, ReadingTarget } from '@shared/types'
 import { chapterBlobUrl, prepareChapter } from './document'
 import { computeLayout, type ReaderLayout } from './layout'
 import { ChapterPaginator } from './paginator'
@@ -28,7 +28,16 @@ function chapterBaseHref(bookId: string, entry: string): string {
   return url.href.slice(0, url.href.lastIndexOf('/') + 1)
 }
 
-export function ReaderPage({ bookId, onExit }: { bookId: string; onExit: () => void }) {
+export function ReaderPage({
+  bookId,
+  target,
+  onExit
+}: {
+  bookId: string
+  /** 从笔记「回到原文」进来时指定落点；从书架进来传 null，沿用上次进度 */
+  target?: ReadingTarget | null
+  onExit: () => void
+}) {
   const [book, setBook] = useState<ReaderBook | null>(null)
   const [prefs, setPrefs] = useState<ReadingPrefs | null>(null)
   const [missing, setMissing] = useState(false)
@@ -135,12 +144,14 @@ export function ReaderPage({ bookId, onExit }: { bookId: string; onExit: () => v
         setPrefs(saved)
         setBook(opened)
         const list = opened.chapters.filter((item) => item.href !== '')
-        const found = opened.progress
-          ? list.findIndex((item) => item.id === opened.progress?.chapterId)
-          : -1
+        // 指定了章节就用它，否则回到上次读到的位置
+        const wanted = target?.chapterId ?? opened.progress?.chapterId ?? null
+        const found = list.findIndex((item) => item.id === wanted)
         setChapterIndex(found >= 0 ? found : 0)
-        // 定位失败时停在章首即可：进度仍然指向这一章，不会跳到别处
-        pendingRef.current = opened.progress ? { cfi: opened.progress.cfi } : null
+        // cfi 只在「确实要落在指定章节」时才跟着 target 走，
+        // 否则会拿 A 章的 cfi 去定位 B 章，必然失败并退化成章首
+        const cfi = target?.chapterId != null ? target.cfi : (opened.progress?.cfi ?? null)
+        pendingRef.current = cfi ? { cfi } : null
       } catch (e) {
         if (alive) setError(e instanceof Error ? e.message : '打开失败')
       }
@@ -148,7 +159,7 @@ export function ReaderPage({ bookId, onExit }: { bookId: string; onExit: () => v
     return () => {
       alive = false
     }
-  }, [bookId])
+  }, [bookId, target])
 
   // ② 量正文区。首次同步量一次，之后交给 ResizeObserver
   useEffect(() => {
