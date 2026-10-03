@@ -406,6 +406,7 @@ html[data-theme='dark'] .seg__b.is-on {
 }
 
 .reader__stage {
+  position: relative;
   flex: 1;
   min-width: 0;
   display: flex;
@@ -570,4 +571,179 @@ html[data-theme='dark'] .seg__b.is-on {
   background: var(--active);
   color: var(--ink);
   font-weight: 600;
+}
+
+/* ---- 划词浮条 ---- */
+.sel-toolbar {
+  position: absolute;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 520px;
+  padding: 6px 8px;
+  background: var(--paper-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-pop);
+  white-space: nowrap;
+  transform: translate(-50%, calc(-100% - 10px));
+}
+
+/* 贴到正文上沿时翻到选区下方 */
+.sel-toolbar--below {
+  transform: translate(-50%, 10px);
+}
+
+.sel-toolbar__sep {
+  width: 1px;
+  height: 18px;
+  margin: 0 4px;
+  background: var(--line);
+}
+
+.sel-toolbar__btn {
+  height: 28px;
+  padding: 0 8px;
+  border-radius: var(--r-sm);
+  font-size: 13px;
+  color: var(--ink-muted);
+  transition: background var(--ease), color var(--ease);
+}
+
+.sel-toolbar__btn:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.sel-toolbar__btn--accent {
+  color: var(--accent-mark);
+}
+
+.sel-toolbar__btn--accent:hover {
+  background: color-mix(in srgb, var(--accent-mark) 12%, transparent);
+  color: var(--accent-mark);
+}
+
+.sel-toolbar__warn {
+  padding: 0 4px;
+  font-size: 12px;
+  color: var(--accent-mark);
+  white-space: normal;
+}
+
+.sel-dot {
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  transition: transform var(--ease);
+}
+
+.sel-dot:hover {
+  transform: scale(1.16);
+}
+
+.sel-dot.is-on {
+  outline: 2px solid var(--ink);
+  outline-offset: 1px;
+}
+
+.sel-dot--yellow { background: var(--hl-yellow); }
+.sel-dot--green { background: var(--hl-green); }
+.sel-dot--blue { background: var(--hl-blue); }
+.sel-dot--pink { background: var(--hl-pink); }
+
+/* ---- 点已有高亮的浮层 ---- */
+.annot {
+  position: absolute;
+  z-index: 30;
+  width: 300px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  padding: var(--s3);
+  overflow-y: auto;
+  background: var(--paper-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-pop);
+}
+
+.annot__dots {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.annot__spacer {
+  flex: 1;
+}
+
+.annot__x {
+  width: 22px;
+  height: 22px;
+  border-radius: var(--r-sm);
+  color: var(--ink-muted);
+  font-size: 16px;
+  line-height: 1;
+}
+
+.annot__x:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.annot__quote {
+  margin: 0;
+  padding-left: var(--s2);
+  border-left: 2px solid var(--line);
+  color: var(--ink-muted);
+  font-size: 12px;
+  line-height: 1.6;
+  max-height: 72px;
+  overflow: hidden;
+}
+
+.annot__note {
+  min-height: 64px;
+  padding: var(--s2);
+  resize: vertical;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.annot__foot {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+}
+
+.annot__del {
+  height: 28px;
+  padding: 0 8px;
+  border-radius: var(--r-sm);
+  color: var(--accent-mark);
+  font-size: 12px;
+}
+
+.annot__del:hover {
+  background: color-mix(in srgb, var(--accent-mark) 12%, transparent);
+}
+
+.reader__degrade--error {
+  color: var(--accent-mark);
+}
+
+.btn--accent {
+  color: var(--accent-mark);
+}
+
+.btn--accent:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent-mark) 12%, transparent);
 }

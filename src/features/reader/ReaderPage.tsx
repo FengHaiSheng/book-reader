@@ -1,10 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { ReadingPrefs, ReaderBook } from '@shared/types'
+import { DEFAULT_HIGHLIGHT_COLOR, MAX_HIGHLIGHT_CHARS, type HighlightColor } from '@shared/highlights'
+import type { Highlight, ReadingPrefs, ReaderBook } from '@shared/types'
 import { chapterBlobUrl, prepareChapter } from './document'
 import { computeLayout, type ReaderLayout } from './layout'
 import { ChapterPaginator } from './paginator'
 import { buildReaderCss } from './theme'
 import { classifyLink } from './links'
+import { anchorOf, rangeFromSpan, spanFromSelection } from './cfi'
+import { clearHighlights, highlightAt, paintHighlights, supportsHighlights } from './highlights'
+import { HighlightPopover, POPOVER_MAX_HEIGHT } from './HighlightPopover'
+import { SelectionToolbar, type SelectionState } from './SelectionToolbar'
 import { TocPanel } from './TocPanel'
 import { TypographyPanel } from './TypographyPanel'
 
@@ -35,6 +40,12 @@ export function ReaderPage({ bookId, onExit }: { bookId: string; onExit: () => v
   const [page, setPage] = useState(1)
   const [pageCount, setPageCount] = useState(1)
   const [panelOpen, setPanelOpen] = useState(false)
+  const [highlights, setHighlights] = useState<Highlight[]>([])
+  const [selection, setSelection] = useState<SelectionState | null>(null)
+  const [active, setActive] = useState<{ highlight: Highlight; x: number; y: number } | null>(null)
+  const [annotError, setAnnotError] = useState<string | null>(null)
+  /** 当前环境不支持 CSS Custom Highlight API 时，界面上要明说，而不是静静地不画 */
+  const [canHighlight, setCanHighlight] = useState(true)
 
   const stageRef = useRef<HTMLDivElement | null>(null)
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
@@ -70,6 +81,42 @@ export function ReaderPage({ bookId, onExit }: { bookId: string; onExit: () => v
     layoutRef.current = layout
     prefsRef.current = prefs
   }, [layout, prefs])
+
+  const chapter = readable[chapterIndex] ?? null
+
+  // ⑥ 取本章标注。换章、换书都要重取，翻页不用——标注是章级的
+  useEffect(() => {
+    if (!book || !chapter) {
+      setHighlights([])
+      return
+    }
+    let alive = true
+    void window.api.notes
+      .listChapter(book.id, chapter.id)
+      .then((list) => {
+        if (alive) setHighlights(list)
+      })
+      .catch((e: unknown) => {
+        if (alive) setAnnotError(e instanceof Error ? e.message : '本章的标注没读出来')
+      })
+    return () => {
+      alive = false
+    }
+  }, [book, chapter])
+
+  // ⑦ 画高亮。文档换了、本章标注变了都要重画；翻页不用，Range 跟着 DOM 走，与 translateX 无关
+  useEffect(() => {
+    const win = iframeRef.current?.contentWindow
+    const doc = iframeRef.current?.contentDocument
+    if (!win || !doc) return
+    if (!supportsHighlights(win)) {
+      setCanHighlight(false)
+      return
+    }
+    setCanHighlight(true)
+    paintHighlights(win, doc, highlights)
+    return () => clearHighlights(win)
+  }, [highlights, docVersion])
 
   // ① 开书：书名、目录、上次读到哪里，一次拿齐
   useEffect(() => {
@@ -222,6 +269,9 @@ export function ReaderPage({ bookId, onExit }: { bookId: string; onExit: () => v
 
   const turn = useCallback(
     (direction: 1 | -1) => {
+      // 翻页时收掉浮条与浮层：它们的坐标锚在上一页的正文上，留着就是错位
+      setActive(null)
+      setSelection(null)
       const paginator = paginatorRef.current
       if (!paginator) return
       if (direction === 1 ? paginator.next() : paginator.prev()) {
@@ -285,7 +335,6 @@ export function ReaderPage({ bookId, onExit }: { bookId: string; onExit: () => v
    */
   const saveNow = useCallback(() => {
     const paginator = paginatorRef.current
-    const chapter = readable[chapterIndex]
     if (!book || !paginator || !chapter) return
     const share = 1 / Math.max(1, readable.length)
     void window.api.reader.saveProgress({
@@ -294,7 +343,7 @@ export function ReaderPage({ bookId, onExit }: { bookId: string; onExit: () => v
       chapterId: chapter.id,
       percent: Math.min(1, chapterIndex * share + paginator.chapterFraction() * share)
     })
-  }, [book, readable, chapterIndex])
+  }, [book, readable, chapter, chapterIndex])
 
   const saveNowRef = useRef(saveNow)
   useEffect(() => {
@@ -314,6 +363,88 @@ export function ReaderPage({ bookId, onExit }: { bookId: string; onExit: () => v
     window.addEventListener('blur', flush)
     return () => window.removeEventListener('blur', flush)
   }, [])
+
+  // ⑧ 划词：文档里任何一次选区变化都先落到 state，坐标换算到 .reader__stage 上
+  useEffect(() => {
+    const doc = iframeRef.current?.contentDocument
+    const iframe = iframeRef.current
+    const stage = stageRef.current
+    if (!doc || !iframe || !stage || !chapter) return
+
+    setSelection(null)
+
+    const onSelectionChange = (): void => {
+      const current = doc.getSelection()
+      if (!current || current.rangeCount === 0 || current.isCollapsed) {
+        setSelection(null)
+        return
+      }
+      const range = current.getRangeAt(0)
+      const anchor = anchorOf(range)
+      if (!anchor) {
+        setSelection(null)
+        return
+      }
+      const span = spanFromSelection(doc, range, chapter.spineIndex ?? chapterIndex)
+      if (!span) {
+        setSelection(null)
+        return
+      }
+      const iframeRect = iframe.getBoundingClientRect()
+      const stageRect = stage.getBoundingClientRect()
+      setSelection({
+        ...span,
+        tooLong: span.text.length > MAX_HIGHLIGHT_CHARS,
+        x: iframeRect.left - stageRect.left + anchor.x,
+        y: iframeRect.top - stageRect.top + anchor.y
+      })
+      setActive(null)
+    }
+
+    doc.addEventListener('selectionchange', onSelectionChange)
+    return () => doc.removeEventListener('selectionchange', onSelectionChange)
+  }, [docVersion, chapter, chapterIndex])
+
+  // ⑨ 点已有高亮。链接优先于标注：点链接是导航，不该被批注浮层抢走
+  useEffect(() => {
+    const doc = iframeRef.current?.contentDocument
+    const iframe = iframeRef.current
+    const stage = stageRef.current
+    if (!doc || !iframe || !stage) return
+
+    const onClick = (event: MouseEvent): void => {
+      const node = event.target as { closest?: (selector: string) => Element | null } | null
+      if (node?.closest?.('a[href]')) return
+
+      const caret = doc.caretRangeFromPoint(event.clientX, event.clientY)
+      if (!caret) {
+        setActive(null)
+        return
+      }
+      const hit = highlightAt(doc, highlights, caret.startContainer, caret.startOffset)
+      if (!hit) {
+        setActive(null)
+        return
+      }
+
+      const range = rangeFromSpan(doc, hit.startCfi, hit.endCfi)
+      const anchor = range ? anchorOf(range) : null
+      const iframeRect = iframe.getBoundingClientRect()
+      const stageRect = stage.getBoundingClientRect()
+      const rawTop = iframeRect.top - stageRect.top + (anchor ? anchor.y : event.clientY)
+      const left = iframeRect.left - stageRect.left + (anchor ? anchor.x : event.clientX)
+      setSelection(null)
+      setActive({
+        highlight: hit,
+        // 夹在正文区里：贴底时往上收，贴顶时往下放，避免被 .reader__stage 的 overflow 裁掉
+        x: Math.min(Math.max(8, left), Math.max(8, stageRect.width - 8)),
+        y: Math.min(Math.max(8, rawTop + 8), Math.max(8, stageRect.height - POPOVER_MAX_HEIGHT - 8))
+      })
+    }
+
+    doc.addEventListener('click', onClick)
+    return () => doc.removeEventListener('click', onClick)
+  }, [docVersion, highlights])
 
   /** 待落库的偏好改动：拖滑块期间累积，防抖 300ms 后一次写回，不每动一下就发一次 IPC */
   const pendingPrefsRef = useRef<Partial<ReadingPrefs>>({})
@@ -344,6 +475,81 @@ export function ReaderPage({ bookId, onExit }: { bookId: string; onExit: () => v
     },
     [flushPrefs]
   )
+
+  const markSelection = useCallback(
+    async (color: HighlightColor, withNote: boolean) => {
+      if (!book || !chapter || !selection || selection.tooLong) return
+      const anchor = { x: selection.x, y: selection.y }
+      try {
+        const created = await window.api.notes.create({
+          bookId: book.id,
+          chapterId: chapter.id,
+          startCfi: selection.startCfi,
+          endCfi: selection.endCfi,
+          text: selection.text,
+          note: null,
+          color
+        })
+        setHighlights((list) => [...list, created])
+        setAnnotError(null)
+        setSelection(null)
+        // 选区不清掉，下一次 selectionchange 会把浮条又唤醒
+        iframeRef.current?.contentWindow?.getSelection()?.removeAllRanges()
+        if (withNote) {
+          setActive({
+            highlight: created,
+            x: Math.min(Math.max(8, anchor.x), 400),
+            y: Math.min(Math.max(8, anchor.y + 8), Math.max(8, 400))
+          })
+        }
+      } catch (e) {
+        setAnnotError(e instanceof Error ? e.message : '标注没有保存成功')
+      }
+    },
+    [book, chapter, selection]
+  )
+
+  const copySelection = useCallback(() => {
+    if (!selection) return
+    void navigator.clipboard.writeText(selection.text)
+    setSelection(null)
+    iframeRef.current?.contentWindow?.getSelection()?.removeAllRanges()
+  }, [selection])
+
+  const changeActiveColor = useCallback(
+    async (color: HighlightColor) => {
+      if (!active) return
+      const updated = await window.api.notes.update(active.highlight.id, { color })
+      if (!updated) return
+      setHighlights((list) => list.map((item) => (item.id === updated.id ? updated : item)))
+      setActive({ ...active, highlight: updated })
+    },
+    [active]
+  )
+
+  const saveActiveNote = useCallback(
+    async (note: string | null) => {
+      if (!active) return
+      try {
+        const updated = await window.api.notes.update(active.highlight.id, { note })
+        if (!updated) return
+        setHighlights((list) => list.map((item) => (item.id === updated.id ? updated : item)))
+        setActive({ ...active, highlight: updated })
+        setAnnotError(null)
+      } catch (e) {
+        setAnnotError(e instanceof Error ? e.message : '批注没有保存成功')
+      }
+    },
+    [active]
+  )
+
+  const removeActive = useCallback(async () => {
+    if (!active) return
+    const id = active.highlight.id
+    await window.api.notes.remove(id)
+    setHighlights((list) => list.filter((item) => item.id !== id))
+    setActive(null)
+  }, [active])
 
   /**
    * 退出前把偏好与阅读位置都补一次。
@@ -466,6 +672,16 @@ export function ReaderPage({ bookId, onExit }: { bookId: string; onExit: () => v
           {layout.fontSizeClamped && `；字号已从 ${prefs?.fontSize} 降到 ${layout.fontSize} 显示`}
         </p>
       )}
+      {!canHighlight && docVersion > 0 && (
+        <p className="reader__degrade" role="status">
+          当前环境不支持无侵入高亮，书内标注只保存不显示；笔记页仍能看到全部内容。
+        </p>
+      )}
+      {annotError && (
+        <p className="reader__degrade reader__degrade--error" role="status">
+          {annotError}
+        </p>
+      )}
       <div className="reader__body">
         <TocPanel
           chapters={book?.chapters ?? []}
@@ -484,6 +700,25 @@ export function ReaderPage({ bookId, onExit }: { bookId: string; onExit: () => v
               sandbox="allow-same-origin"
             />
           </div>
+          {selection && (
+            <SelectionToolbar
+              selection={selection}
+              onMark={(color) => void markSelection(color, false)}
+              onNote={() => void markSelection(DEFAULT_HIGHLIGHT_COLOR, true)}
+              onCopy={copySelection}
+            />
+          )}
+          {active && (
+            <HighlightPopover
+              highlight={active.highlight}
+              x={active.x}
+              y={active.y}
+              onColor={(color) => void changeActiveColor(color)}
+              onSaveNote={(note) => void saveActiveNote(note)}
+              onRemove={() => void removeActive()}
+              onClose={() => setActive(null)}
+            />
+          )}
         </div>
         {panelOpen && prefs && layout && (
           <TypographyPanel

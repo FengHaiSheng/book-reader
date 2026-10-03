@@ -15,9 +15,9 @@ import type {
 } from '@shared/types'
 import { sliceContext } from './context'
 
-const COLUMNS = `id, book_id AS bookId, chapter_id AS chapterId,
-  start_cfi AS startCfi, end_cfi AS endCfi, text, note, color,
-  created_at AS createdAt, updated_at AS updatedAt`
+const COLUMNS = `h.id, h.book_id AS bookId, h.chapter_id AS chapterId,
+  h.start_cfi AS startCfi, h.end_cfi AS endCfi, h.text, h.note, h.color,
+  h.created_at AS createdAt, h.updated_at AS updatedAt`
 
 /** 阅读器只要本章的：一章一个 iframe，注册别章的 Range 没有意义 */
 export function listChapterHighlights(
@@ -26,12 +26,14 @@ export function listChapterHighlights(
   chapterId: number
 ): Highlight[] {
   return db
-    .prepare(`SELECT ${COLUMNS} FROM highlights WHERE book_id = ? AND chapter_id = ? ORDER BY id`)
+    .prepare(
+      `SELECT ${COLUMNS} FROM highlights h WHERE h.book_id = ? AND h.chapter_id = ? ORDER BY h.id`
+    )
     .all(bookId, chapterId) as Highlight[]
 }
 
 export function getHighlight(db: Database.Database, id: number): Highlight | null {
-  const row = db.prepare(`SELECT ${COLUMNS} FROM highlights WHERE id = ?`).get(id)
+  const row = db.prepare(`SELECT ${COLUMNS} FROM highlights h WHERE h.id = ?`).get(id)
   return (row as Highlight | undefined) ?? null
 }
 
