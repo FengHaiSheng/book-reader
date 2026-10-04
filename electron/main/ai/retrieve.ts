@@ -79,6 +79,36 @@ export function toPassages(hits: readonly SearchHit[], startIndex = 1): Passage[
 }
 
 /**
+ * 融合多路检索的名次（Reciprocal Rank Fusion）。
+ *
+ * 关键词走 bm25（越小越相关）、向量走余弦（越大越相关），两者量纲不可比，
+ * 所以只看名次不看分数：同一段在任一路排得越靠前，总分越高。调用方负责
+ * 把每路结果按相关度排好序，本函数不感知量纲。
+ *
+ * 去重是跨列表的：同一段在两条列表里出现只累加分数、只输出一行；同一条列表里
+ * 重复出现也只认最靠前的那次，否则一段重复几次就能把分数刷上去。
+ * 并列时按「首次出现」破平局——遍历序是列表顺序 × 列表内名次，Map 的
+ * 插入序天然保留它，配合现代引擎的稳定排序，结果可复现。
+ */
+export function fuseRanks(
+  lists: readonly (readonly number[])[],
+  k = 60
+): { chunkId: number; score: number }[] {
+  const scores = new Map<number, number>()
+  for (const list of lists) {
+    const seen = new Set<number>()
+    list.forEach((chunkId, index) => {
+      if (seen.has(chunkId)) return
+      seen.add(chunkId)
+      scores.set(chunkId, (scores.get(chunkId) ?? 0) + 1 / (k + index + 1))
+    })
+  }
+  return [...scores.entries()]
+    .map(([chunkId, score]) => ({ chunkId, score }))
+    .sort((a, b) => b.score - a.score)
+}
+
+/**
  * 把一整章正文切成可以送进模型的片段。
  *
  * 切点落在段落边界：段落是作者给的语义单位，从中间劈开会让模型读到半句话。

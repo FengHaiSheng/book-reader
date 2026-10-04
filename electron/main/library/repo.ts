@@ -73,6 +73,26 @@ export function searchChunks(
 }
 
 /**
+ * 按 id 批量取回 chunk 的完整信息。
+ *
+ * 向量检索只给 id 与相似度，正文得回这里取。SQL 的 IN 不保证返回顺序，
+ * 所以按传入 ids 的顺序回填——调用方（融合后的名次）就是优先级，不能被打乱。
+ */
+export function chunksByIds(db: Database.Database, ids: readonly number[]): SearchHit[] {
+  if (ids.length === 0) return []
+  const placeholders = ids.map(() => '?').join(', ')
+  const rows = db
+    .prepare(
+      `SELECT id AS chunkId, chapter_id AS chapterId, heading_path AS headingPath,
+              text AS text, 0 AS score
+       FROM chunks WHERE id IN (${placeholders})`
+    )
+    .all(...ids) as SearchHit[]
+  const byId = new Map(rows.map((row) => [row.chunkId, row]))
+  return ids.map((id) => byId.get(id)).filter((row): row is SearchHit => row !== undefined)
+}
+
+/**
  * 全书落库。调用方保证已在事务里。
  * chapters 必须按 buildChapters 的顺序传入：parentIndex 指向的是同数组下标，父行一定先于子行插入。
  */

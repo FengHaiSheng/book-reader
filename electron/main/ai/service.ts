@@ -11,15 +11,22 @@ import type {
   IndexState,
   ProviderId
 } from '@shared/types'
-import { searchChunks } from '../library/repo'
+import { chunksByIds, searchChunks } from '../library/repo'
 import { getKey } from '../secrets'
 import { getAll } from '../store/settings'
 import { excerptOf, usedCitations } from './citations'
-import { isRunning, indexState } from './index-builder'
+import { indexState, isRunning, searchByVector } from './index-builder'
 import { buildMessages } from './prompts'
-import { chat } from './provider'
-import { unavailableCaps } from './repo'
-import { estimateTokens, fitPassages, toPassages, windowFromText, type Passage } from './retrieve'
+import { chat, embed } from './provider'
+import { markUnavailable, unavailableCaps } from './repo'
+import {
+  estimateTokens,
+  fitPassages,
+  fuseRanks,
+  toPassages,
+  windowFromText,
+  type Passage
+} from './retrieve'
 
 export const DEFAULT_AI_MODEL: Record<ProviderId, string> = {
   deepseek: 'deepseek-chat',
@@ -115,7 +122,40 @@ export async function runChat(
   }
 
   const query = (input.question ?? input.excerpt ?? '').trim()
-  const hits = query === '' ? [] : searchChunks(db, input.bookId, query, 12)
+  const keywordHits = query === '' ? [] : searchChunks(db, input.bookId, query, 12)
+
+  // 建过索引的书才走向量：query 向量是一次付费调用，索引为空就没有可比的对象。
+  // 这部分 token 不计入展示用量——用量只统计对话本身（AiUsage 的语义）。
+  let vectorRanked: number[] = []
+  if (canEmbed && state.done > 0 && query !== '') {
+    try {
+      const { vectors } = await embed(providerId, [query], hooks.signal)
+      const vector = vectors[0]
+      if (vector && vector.length > 0) {
+        // searchByVector 已按相似度取过 topK，这里再排一次，保证「越相关越靠前」的约定
+        vectorRanked = searchByVector(db, input.bookId, vector, 12)
+          .sort((a, b) => b.score - a.score)
+          .map((hit) => hit.chunkId)
+      }
+    } catch (error) {
+      // 用户点了「停下」不是能力降级，别把它写进 settings 污染持久化状态
+      if (hooks.signal.aborted) throw error
+      const normalized = toAppError(error, '向量检索本次没有成功')
+      if (normalized.code === 'AI_UNSUPPORTED') markUnavailable(db, providerId, 'embed')
+      degraded.push({
+        kind: 'noEmbed',
+        message: '本次向量检索没有成功，只用了关键词检索，跨章节召回会变弱。'
+      })
+    }
+  }
+
+  // 两路名次融合（RRF）后再取回正文：融合后的顺序就是优先级。关键词那路覆盖全部段落，
+  // 所以融合只可能补进向量召回的新段，不会丢掉原有的。
+  const fusedIds =
+    vectorRanked.length === 0
+      ? []
+      : fuseRanks([keywordHits.map((hit) => hit.chunkId), vectorRanked]).map((rank) => rank.chunkId)
+  const hits = fusedIds.length === 0 ? keywordHits : chunksByIds(db, fusedIds)
 
   const sources: Source[] = toPassages(hits).map((passage, index) => {
     const hit = hits[index]!

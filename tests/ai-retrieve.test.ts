@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { estimateTokens, fitPassages, slicesOf, windowFromText } from '../electron/main/ai/retrieve'
+import {
+  estimateTokens,
+  fitPassages,
+  fuseRanks,
+  slicesOf,
+  windowFromText
+} from '../electron/main/ai/retrieve'
 
 describe('estimateTokens', () => {
   it('中文按 1 字 ≈ 1 token，拉丁按 4 字符 ≈ 1 token', () => {
@@ -78,5 +84,50 @@ describe('slicesOf', () => {
 
   it('空文本返回空数组', () => {
     expect(slicesOf('', 120)).toEqual([])
+  })
+})
+
+describe('fuseRanks', () => {
+  it('只有一路时退化成该路原顺序', () => {
+    expect(fuseRanks([[3, 1, 2]]).map((rank) => rank.chunkId)).toEqual([3, 1, 2])
+  })
+
+  it('两路都命中的段落分数相加，因此排到最前', () => {
+    const fused = fuseRanks([[7, 9], [7]])
+    expect(fused[0]!.chunkId).toBe(7)
+    // 7 在两路都是名次 1，分数是 1/61 的两倍
+    expect(fused[0]!.score).toBeCloseTo(2 / 61, 10)
+  })
+
+  it('同一路里重复出现只认最靠前那次，不刷分', () => {
+    const fused = fuseRanks([[5, 5, 5]])
+    expect(fused).toHaveLength(1)
+    expect(fused[0]!.score).toBeCloseTo(1 / 61, 10)
+  })
+
+  it('空输入与空列表都返回空数组，不抛错', () => {
+    expect(fuseRanks([])).toEqual([])
+    expect(fuseRanks([[], []])).toEqual([])
+  })
+
+  it('分数并列时按首次出现顺序，且可复现', () => {
+    expect(fuseRanks([[1], [2]]).map((rank) => rank.chunkId)).toEqual([1, 2])
+    expect(fuseRanks([[1], [2]])).toEqual(fuseRanks([[1], [2]]))
+  })
+
+  it('输出按分数单调不增', () => {
+    const fused = fuseRanks([[1, 2, 3], [3, 4], [2, 5]])
+    const scores = fused.map((rank) => rank.score)
+    expect(scores).toEqual([...scores].sort((a, b) => b - a))
+  })
+
+  it('两路完全不重叠时输出长度等于并集大小', () => {
+    expect(fuseRanks([[1, 2], [3, 4]])).toHaveLength(4)
+  })
+
+  it('k=0 时名次 1 得 1、名次 2 得 1/2', () => {
+    const fused = fuseRanks([[10, 20]], 0)
+    expect(fused[0]!.score).toBe(1)
+    expect(fused[1]!.score).toBe(0.5)
   })
 })
