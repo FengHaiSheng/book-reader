@@ -78,4 +78,47 @@ export function toPassages(hits: readonly SearchHit[], startIndex = 1): Passage[
   }))
 }
 
+/**
+ * 把一整章正文切成可以送进模型的片段。
+ *
+ * 切点落在段落边界：段落是作者给的语义单位，从中间劈开会让模型读到半句话。
+ * 只有单段本身就超过上限时才硬切——那种情况硬切也比整段丢失强。
+ */
+export function slicesOf(text: string, size = 1200): Passage[] {
+  if (size <= 0) throw new Error('分片大小必须是正数')
+  const paragraphs = text
+    .split(/\n+/)
+    .map((paragraph) => paragraph.trim())
+    .filter((paragraph) => paragraph !== '')
+
+  const slices: Passage[] = []
+  let buffer = ''
+
+  const push = (body: string): void => {
+    slices.push({ index: slices.length + 1, headingPath: '本章', text: body })
+  }
+
+  for (const paragraph of paragraphs) {
+    if (paragraph.length > size) {
+      if (buffer !== '') {
+        push(buffer)
+        buffer = ''
+      }
+      for (let at = 0; at < paragraph.length; at += size) push(paragraph.slice(at, at + size))
+      continue
+    }
+
+    const next = buffer === '' ? paragraph : `${buffer}\n${paragraph}`
+    if (next.length > size) {
+      push(buffer)
+      buffer = paragraph
+    } else {
+      buffer = next
+    }
+  }
+
+  if (buffer !== '') push(buffer)
+  return slices
+}
+
 export { toMatchQuery }

@@ -15,6 +15,13 @@ import {
   toReadable,
   type ChatInput
 } from '../ai/service'
+import {
+  runBookDigest,
+  runChapterSummary,
+  runMindmap,
+  runTerms,
+  type TaskProgress
+} from '../ai/tasks'
 import { getDatabase } from '../store/db'
 
 /** 单通道串行：手快连点也不会并发烧钱（spec §5.6） */
@@ -22,6 +29,9 @@ const queue = new AiQueue()
 
 /** requestId → 中止信号。切章、关面板、关窗口都要能停流。 */
 const inflight = new Map<string, AbortController>()
+
+/** 全书要点是长任务：它按 bookId 停，而不是按 requestId */
+const digestInflight = new Map<string, AbortController>()
 
 type ChatRequest = Omit<ChatInput, 'chapterText' | 'scopeKey'> & {
   /** 章节级会话；传 null 表示这本书的全局会话 */
@@ -139,6 +149,73 @@ export function registerAiIpc(): void {
   ipcMain.handle(CH.aiCancelIndex, (_event, bookId: string) => {
     cancelIndex(bookId)
   })
+
+  ipcMain.handle(CH.aiSummary, async (_event, bookId: string, chapterId: number) => {
+    const database = getDatabase()
+    const { providerId, model } = aiSettings(database)
+    const controller = new AbortController()
+    try {
+      return await queue.run(`summary:${chapterId}`, () =>
+        runChapterSummary(database, {
+          bookId,
+          chapterId,
+          providerId,
+          model,
+          signal: controller.signal
+        })
+      )
+    } catch (error) {
+      throw toReadable(error, '本章小结没有生成成功')
+    }
+  })
+
+  ipcMain.handle(CH.aiDigest, async (event, bookId: string) => {
+    if (digestInflight.has(bookId)) throw new Error('这本书的全书要点正在生成中')
+    const database = getDatabase()
+    const { providerId, model } = aiSettings(database)
+    const controller = new AbortController()
+    digestInflight.set(bookId, controller)
+    try {
+      return await queue.run(`digest:${bookId}`, () =>
+        runBookDigest(
+          database,
+          { bookId, providerId, model, signal: controller.signal },
+          (progress) => emitDigestProgress(event.sender, bookId, progress)
+        )
+      )
+    } catch (error) {
+      throw toReadable(error, '全书要点没有生成成功')
+    } finally {
+      digestInflight.delete(bookId)
+    }
+  })
+
+  ipcMain.handle(CH.aiTerms, async (_event, bookId: string) => {
+    const database = getDatabase()
+    const { providerId, model } = aiSettings(database)
+    const controller = new AbortController()
+    try {
+      return await queue.run(`terms:${bookId}`, () =>
+        runTerms(database, { bookId, providerId, model, signal: controller.signal })
+      )
+    } catch (error) {
+      throw toReadable(error, '关键词没有生成成功')
+    }
+  })
+
+  ipcMain.handle(CH.aiMindmap, (_event, bookId: string) => {
+    const database = getDatabase()
+    const { providerId, model } = aiSettings(database)
+    try {
+      return runMindmap(database, { bookId, providerId, model })
+    } catch (error) {
+      throw toReadable(error, '思维导图没有生成成功')
+    }
+  })
+
+  ipcMain.handle(CH.aiCancelDigest, (_event, bookId: string) => {
+    digestInflight.get(bookId)?.abort()
+  })
 }
 
 function emitDelta(sender: WebContents, payload: AiDegradeEvent): void {
@@ -154,4 +231,8 @@ function emitProgress(sender: WebContents, payload: Omit<AiProgressEvent, 'kind'
       bookId: payload.bookId
     })
   }
+}
+
+function emitDigestProgress(sender: WebContents, bookId: string, progress: TaskProgress): void {
+  if (!sender.isDestroyed()) sender.send(CH.aiProgress, { kind: 'digest', bookId, ...progress })
 }

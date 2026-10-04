@@ -6,9 +6,12 @@ import type {
   AiDegradeEvent,
   AiMessage,
   AiProgressEvent,
+  AiResultView,
   AiStatus,
+  BookDigestPayload,
   BookSummary,
   ChapterRowView,
+  ChapterSummaryPayload,
   Highlight,
   HighlightContext,
   HighlightInput,
@@ -18,6 +21,7 @@ import type {
   ImportProgress,
   IndexState,
   IpcResult,
+  MindmapNode,
   NotesExportOptions,
   NotesExportPreview,
   NotesExportResult,
@@ -25,7 +29,8 @@ import type {
   ProviderId,
   ReaderBook,
   ReadingPrefs,
-  SearchHit
+  SearchHit,
+  TermsPayload
 } from '@shared/types'
 
 /** 把导入类调用回传的结果信封还原成「返回值或干净的中文 Error」。 */
@@ -127,7 +132,17 @@ const api = {
       const handler = (_event: unknown, payload: AiProgressEvent): void => listener(payload)
       ipcRenderer.on(CH.aiProgress, handler)
       return () => ipcRenderer.removeListener(CH.aiProgress, handler)
-    }
+    },
+    summary: (bookId: string, chapterId: number): Promise<AiResultView<ChapterSummaryPayload>> =>
+      ipcRenderer.invoke(CH.aiSummary, bookId, chapterId),
+    digest: (bookId: string): Promise<AiResultView<BookDigestPayload>> =>
+      ipcRenderer.invoke(CH.aiDigest, bookId),
+    terms: (bookId: string): Promise<AiResultView<TermsPayload>> =>
+      ipcRenderer.invoke(CH.aiTerms, bookId),
+    mindmap: (bookId: string): Promise<AiResultView<MindmapNode>> =>
+      ipcRenderer.invoke(CH.aiMindmap, bookId),
+    cancelDigest: (bookId: string): Promise<void> =>
+      ipcRenderer.invoke(CH.aiCancelDigest, bookId)
   },
   shell: {
     openExternal: (url: string): Promise<void> =>

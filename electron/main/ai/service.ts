@@ -194,7 +194,7 @@ export async function runChat(
   }
 }
 
-export function statusOf(db: Database.Database, bookId: string): AiStatus {
+export function statusOf(db: Database.Database, bookId: string | null): AiStatus {
   const { providerId, model } = aiSettings(db)
   return {
     providerId,
@@ -202,7 +202,8 @@ export function statusOf(db: Database.Database, bookId: string): AiStatus {
     configured: hasKey(providerId),
     caps: PROVIDER_AI[providerId],
     unavailable: unavailableCaps(db, providerId),
-    index: indexState(db, bookId)
+    // 设置页只关心「这家能不能用」，没有书就没有索引可言，不编一个假的 0/0
+    index: bookId === null ? { total: 0, done: 0, running: false } : indexState(db, bookId)
   }
 }
 

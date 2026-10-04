@@ -1,0 +1,556 @@
+import type Database from 'better-sqlite3'
+import { PROVIDER_AI, modelOf } from '@shared/ai'
+import { appError } from '@shared/errors'
+import type {
+  AiResultView,
+  AiUsage,
+  BookDigestPayload,
+  ChapterSummaryPayload,
+  MindmapNode,
+  ProviderId,
+  TermsPayload
+} from '@shared/types'
+import { parseLooseJson } from './loose-json'
+import { buildMindmap } from './mindmap'
+import type { ChatMessage } from './params'
+import { buildMessages } from './prompts'
+import { chat } from './provider'
+import { getResult, saveResult, type ResultKey } from './repo'
+import { estimateTokens, fitPassages, slicesOf } from './retrieve'
+import { bookTitleOf, chapterTextOf, chapterTitleOf } from './service'
+
+const ZERO: AiUsage = { inputTokens: 0, outputTokens: 0 }
+const MAX_OUTPUT = 2048
+const SLICE_SIZE = 1200
+
+type Term = TermsPayload['terms'][number]
+type SummaryTerm = ChapterSummaryPayload['terms'][number]
+type PartialSummary = { chapterTitle: string; overview: string; keyPoints: string[] }
+
+/** 每次真实发出去的调用 +1。界面上的「共发起 N 次请求」就是它，不能靠估算 */
+type CallContext = { providerId: ProviderId; model: string; signal: AbortSignal }
+
+type Structured<T> = {
+  raw: string
+  payload: T | null
+  usage: AiUsage | null
+  note: string | null
+}
+
+export type TaskProgress = { done: number; total: number; label: string; running: boolean }
+
+/**
+ * 跑一次要求 JSON 输出的结构化调用。
+ *
+ * 模型没吐合法 JSON 时不抛错：`payload` 为 null、`raw` 是原文，由界面按纯文本展示。
+ * 抛错会让用户失去「它到底说了什么」这个信息（硬规则 2）。
+ */
+async function askJson<T>(
+  call: CallContext,
+  messages: ChatMessage[],
+  validate: (value: unknown) => T | null
+): Promise<Structured<T>> {
+  const caps = PROVIDER_AI[call.providerId]
+  const json = caps.jsonMode && modelOf(call.providerId, call.model)?.jsonMode === true
+  const result = await chat({
+    providerId: call.providerId,
+    model: call.model,
+    input: { messages, maxTokens: MAX_OUTPUT, temperature: 0.2, json, stream: false },
+    signal: call.signal
+  })
+  const payload = validate(parseLooseJson(result.content))
+  return {
+    raw: result.content,
+    payload,
+    usage: result.usage,
+    note: json
+      ? null
+      : '当前模型不支持结构化输出，已改为提示词约束 + 本地解析。若下面是模型原文，说明这次没能解析成结构。'
+  }
+}
+
+function addUsage(left: AiUsage | null, right: AiUsage | null): AiUsage | null {
+  if (!left) return right
+  if (!right) return left
+  return {
+    inputTokens: left.inputTokens + right.inputTokens,
+    outputTokens: left.outputTokens + right.outputTokens
+  }
+}
+
+function composeNote(...parts: (string | null | undefined)[]): string | null {
+  const kept = parts.filter((part): part is string => typeof part === 'string' && part.trim() !== '')
+  return kept.length === 0 ? null : kept.join(' ')
+}
+
+/**
+ * 统一出口。
+ *
+ * `payload` 为 null 时必然给一句 note —— 不允许出现「没结构、没说明、没原文」的空结果。
+ */
+function toView<T>(
+  raw: string,
+  payload: T | null,
+  meta: { cached: boolean; usage: AiUsage | null; createdAt: number; note: string | null }
+): AiResultView<T> {
+  return {
+    payload,
+    text: payload ? null : raw.trim() === '' ? null : raw,
+    cached: meta.cached,
+    usage: meta.usage,
+    createdAt: meta.createdAt,
+    note: payload ? meta.note : (meta.note ?? '模型没有按要求返回 JSON，下面按纯文本展示。')
+  }
+}
+
+function budgetFor(providerId: ProviderId, model: string, query: string): number {
+  const caps = PROVIDER_AI[providerId]
+  const window = Math.min(caps.maxInputTokens, modelOf(providerId, model)?.maxContext ?? caps.maxInputTokens)
+  return Math.max(400, window - MAX_OUTPUT - 600 - estimateTokens(query))
+}
+
+/** 带正文的章节。目录里的分组节点 href 是空串，不能拿去当正文读 */
+function bodyChapters(db: Database.Database, bookId: string): { id: number; title: string }[] {
+  return db
+    .prepare(
+      `SELECT id, title FROM chapters WHERE book_id = ? AND href <> '' ORDER BY order_index, id`
+    )
+    .all(bookId) as { id: number; title: string }[]
+}
+
+function baseContext(db: Database.Database, bookId: string, chapterId: number | null) {
+  return {
+    bookTitle: bookTitleOf(db, bookId),
+    chapterTitle: chapterId === null ? null : chapterTitleOf(db, chapterId)
+  }
+}
+
+function summaryKey(bookId: string, chapterId: number, call: CallContext): ResultKey {
+  return {
+    bookId,
+    task: 'chapterSummary',
+    scopeKey: `chapter:${chapterId}`,
+    provider: call.providerId,
+    model: call.model
+  }
+}
+
+/**
+ * 读某一章已经存好的小结。
+ *
+ * 全书要点与关键词都靠它省钱：能复用的一律不重算，**用户不会为同一章付两次费**。
+ */
+function savedSummary(
+  db: Database.Database,
+  bookId: string,
+  chapter: { id: number; title: string },
+  call: CallContext
+): { chapterTitle: string; overview: string; keyPoints: string[] } | null {
+  const stored = getResult<ChapterSummaryPayload>(db, summaryKey(bookId, chapter.id, call))
+  if (!stored) return null
+  return { chapterTitle: chapter.title, overview: stored.payload.overview, keyPoints: stored.payload.keyPoints }
+}
+
+// ---------- 本章小结 ----------
+
+export async function runChapterSummary(
+  db: Database.Database,
+  input: { bookId: string; chapterId: number; providerId: ProviderId; model: string; signal: AbortSignal }
+): Promise<AiResultView<ChapterSummaryPayload>> {
+  const call: CallContext = {
+    providerId: input.providerId,
+    model: input.model,
+    signal: input.signal
+  }
+  const key = summaryKey(input.bookId, input.chapterId, call)
+  const cached = getResult<ChapterSummaryPayload>(db, key)
+  if (cached) {
+    return toView('', cached.payload, {
+      cached: true,
+      usage: { inputTokens: cached.inputTokens, outputTokens: cached.outputTokens },
+      createdAt: cached.createdAt,
+      note: null
+    })
+  }
+
+  const context = baseContext(db, input.bookId, input.chapterId)
+  const chapterText = chapterTextOf(db, input.chapterId)
+  if (chapterText.trim() === '') {
+    throw appError('AI_UNSUPPORTED', '这一章没有可用的正文，做不了小结')
+  }
+
+  const { kept, dropped } = fitPassages(slicesOf(chapterText, SLICE_SIZE), budgetFor(input.providerId, input.model, ''))
+  const notes: string[] = []
+  let usage: AiUsage | null = null
+
+  // 短章节：一次读完。只有真的超长时才走 map-reduce，别为一章 3 千字发好几次请求
+  if (dropped === 0) {
+    const only = await askJson<ChapterSummaryPayload>(
+      call,
+      buildMessages('chapterSummary', {
+        ...context,
+        chapterText: kept.map((slice) => slice.text).join('\n\n')
+      }),
+      asSummary
+    )
+    usage = only.usage
+    notes.push(only.note ?? '')
+    return finish(db, key, only.raw, only.payload, usage, composeNote(...notes))
+  }
+
+  const partials: PartialSummary[] = []
+  let failedRaw = ''
+  for (const slice of kept) {
+    if (input.signal.aborted) break
+    const part = await askJson<ChapterSummaryPayload>(
+      call,
+      buildMessages('chapterSummary', { ...context, chapterText: slice.text }),
+      asSummary
+    )
+    usage = addUsage(usage, part.usage)
+    notes.push(part.note ?? '')
+    if (part.payload) {
+      partials.push({
+        chapterTitle: `${context.chapterTitle ?? '本章'}（第 ${slice.index} 段）`,
+        overview: part.payload.overview,
+        keyPoints: part.payload.keyPoints
+      })
+    } else {
+      failedRaw = part.raw
+    }
+  }
+
+  if (input.signal.aborted) {
+    return toView<ChapterSummaryPayload>('', null, {
+      cached: false,
+      usage,
+      createdAt: Date.now(),
+      note: '已停下。分段小结没有全部完成，没有写入缓存，下次点「本章小结」会重新开始。'
+    })
+  }
+
+  if (partials.length === 0) {
+    return toView<ChapterSummaryPayload>(failedRaw, null, {
+      cached: false,
+      usage,
+      createdAt: Date.now(),
+      note: '这一章的分段小结都没能解析成结构，下面是模型最后一段输出。'
+    })
+  }
+
+  const reduced = await askJson<ChapterSummaryPayload>(
+    call,
+    buildMessages('chapterSummary', { ...context, summaries: partials }),
+    asSummary
+  )
+  usage = addUsage(usage, reduced.usage)
+  return finish(
+    db,
+    key,
+    reduced.raw,
+    reduced.payload,
+    usage,
+    composeNote(
+      `这一章较长，分 ${kept.length} 段读取后合成，共发起 ${kept.length + 1} 次请求。`,
+      notes.join(' '),
+      reduced.note
+    )
+  )
+}
+
+/** 有 payload 才落库：坏结果不该占住唯一键，否则用户再也拿不到好结果 */
+function finish<T>(
+  db: Database.Database,
+  key: ResultKey,
+  raw: string,
+  payload: T | null,
+  usage: AiUsage | null,
+  note: string | null
+): AiResultView<T> {
+  const now = Date.now()
+  if (payload) saveResult(db, key, payload, usage ?? ZERO, now)
+  return toView(raw, payload, { cached: false, usage, createdAt: now, note })
+}
+
+// ---------- 全书要点 ----------
+
+export async function runBookDigest(
+  db: Database.Database,
+  input: { bookId: string; providerId: ProviderId; model: string; signal: AbortSignal },
+  onProgress: (progress: TaskProgress) => void
+): Promise<AiResultView<BookDigestPayload>> {
+  const call: CallContext = { providerId: input.providerId, model: input.model, signal: input.signal }
+  const key: ResultKey = {
+    bookId: input.bookId,
+    task: 'bookDigest',
+    scopeKey: 'book',
+    provider: input.providerId,
+    model: input.model
+  }
+  const cached = getResult<BookDigestPayload>(db, key)
+  if (cached) {
+    return toView('', cached.payload, {
+      cached: true,
+      usage: { inputTokens: cached.inputTokens, outputTokens: cached.outputTokens },
+      createdAt: cached.createdAt,
+      note: null
+    })
+  }
+
+  const chapters = bodyChapters(db, input.bookId)
+  if (chapters.length === 0) throw appError('AI_UNSUPPORTED', '这本书还没有可用的章节正文')
+
+  const summaries: PartialSummary[] = []
+  const notes: string[] = []
+  let usage: AiUsage | null = null
+  let calls = 0
+  let reused = 0
+  let done = 0
+  onProgress({ done, total: chapters.length, label: '准备中', running: true })
+
+  for (const chapter of chapters) {
+    if (input.signal.aborted) break
+
+    const saved = savedSummary(db, input.bookId, chapter, call)
+    if (saved) {
+      summaries.push(saved)
+      reused += 1
+    } else {
+      const text = chapterTextOf(db, chapter.id)
+      const { kept } = fitPassages(slicesOf(text, SLICE_SIZE), budgetFor(input.providerId, input.model, text))
+      calls += 1
+      const part = await askJson<ChapterSummaryPayload>(
+        call,
+        buildMessages('bookDigest', {
+          ...baseContext(db, input.bookId, chapter.id),
+          chapterText: kept.map((slice) => slice.text).join('\n\n')
+        }),
+        asSummary
+      )
+      usage = addUsage(usage, part.usage)
+      notes.push(part.note ?? '')
+      if (part.payload) {
+        summaries.push({
+          chapterTitle: chapter.title,
+          overview: part.payload.overview,
+          keyPoints: part.payload.keyPoints
+        })
+        // 顺手存成章小结：用户之后点「本章小结」就是缓存命中，不会再花一次钱
+        saveResult(db, summaryKey(input.bookId, chapter.id, call), part.payload, part.usage ?? ZERO, Date.now())
+      }
+    }
+
+    done += 1
+    onProgress({ done, total: chapters.length, label: chapter.title, running: true })
+  }
+
+  onProgress({ done, total: chapters.length, label: '', running: false })
+
+  if (input.signal.aborted) {
+    return toView<BookDigestPayload>('', null, {
+      cached: false,
+      usage,
+      createdAt: Date.now(),
+      note: `已停下。已经做好的 ${summaries.length} 章小结都存着，下次点「全书要点」会跳过它们，不会重复花钱。`
+    })
+  }
+
+  if (summaries.length === 0) {
+    return toView<BookDigestPayload>('', null, {
+      cached: false,
+      usage,
+      createdAt: Date.now(),
+      note: '各章小结都没能生成，全书要点也就无从归纳。可以稍后再试。'
+    })
+  }
+
+  calls += 1
+  const reduced = await askJson<BookDigestPayload>(
+    call,
+    buildMessages('bookDigest', { ...baseContext(db, input.bookId, null), summaries }),
+    asDigest
+  )
+  usage = addUsage(usage, reduced.usage)
+
+  const now = Date.now()
+  if (reduced.payload) saveResult(db, key, reduced.payload, usage ?? ZERO, now)
+  return toView(
+    reduced.raw,
+    reduced.payload,
+    {
+      cached: false,
+      usage,
+      createdAt: now,
+      note: composeNote(
+        `逐章读取了 ${chapters.length} 章，本次共发起 ${calls} 次请求。`,
+        reused > 0 ? `其中 ${reused} 章直接用了已有小结，没有重复调用。` : '',
+        notes.join(' '),
+        reduced.note
+      )
+    }
+  )
+}
+
+// ---------- 关键词 ----------
+
+export async function runTerms(
+  db: Database.Database,
+  input: { bookId: string; providerId: ProviderId; model: string; signal: AbortSignal }
+): Promise<AiResultView<TermsPayload>> {
+  const call: CallContext = { providerId: input.providerId, model: input.model, signal: input.signal }
+  const key: ResultKey = {
+    bookId: input.bookId,
+    task: 'terms',
+    scopeKey: 'book',
+    provider: input.providerId,
+    model: input.model
+  }
+  const cached = getResult<TermsPayload>(db, key)
+  if (cached) {
+    return toView('', cached.payload, {
+      cached: true,
+      usage: { inputTokens: cached.inputTokens, outputTokens: cached.outputTokens },
+      createdAt: cached.createdAt,
+      note: null
+    })
+  }
+
+  const summaries: PartialSummary[] = []
+  for (const chapter of bodyChapters(db, input.bookId)) {
+    const saved = savedSummary(db, input.bookId, chapter, call)
+    if (saved) summaries.push(saved)
+  }
+
+  // 没有小结就不偷偷替用户开跑全书要点（硬规则 1），直接告诉他先做什么
+  if (summaries.length === 0) {
+    throw appError(
+      'AI_UNSUPPORTED',
+      '还没有任何一章的小结。关键词要有依据，先做一次「全书要点」或至少一章的「本章小结」。'
+    )
+  }
+
+  const outcome = await askJson<TermsPayload>(
+    call,
+    buildMessages('terms', { ...baseContext(db, input.bookId, null), summaries }),
+    asTerms
+  )
+  return finish(db, key, outcome.raw, outcome.payload, outcome.usage, outcome.note)
+}
+
+// ---------- 思维导图（不调模型） ----------
+
+export function runMindmap(
+  db: Database.Database,
+  input: { bookId: string; providerId: ProviderId; model: string }
+): AiResultView<MindmapNode> {
+  const call: CallContext = {
+    providerId: input.providerId,
+    model: input.model,
+    signal: new AbortController().signal
+  }
+  const key: ResultKey = {
+    bookId: input.bookId,
+    task: 'mindmap',
+    scopeKey: 'book',
+    provider: input.providerId,
+    model: input.model
+  }
+  const cached = getResult<MindmapNode>(db, key)
+  if (cached) {
+    return toView('', cached.payload, {
+      cached: true,
+      usage: { inputTokens: cached.inputTokens, outputTokens: cached.outputTokens },
+      createdAt: cached.createdAt,
+      note: null
+    })
+  }
+
+  const terms = getResult<TermsPayload>(db, {
+    bookId: input.bookId,
+    task: 'terms',
+    scopeKey: 'book',
+    provider: input.providerId,
+    model: input.model
+  })
+  if (!terms) {
+    throw appError('AI_UNSUPPORTED', '思维导图是把「关键词」按章节重新组织的。先生成一次关键词。')
+  }
+
+  const tree = buildMindmap(bookTitleOf(db, input.bookId), terms.payload.terms)
+  if (!tree) {
+    throw appError('AI_UNSUPPORTED', '这本书没有可用的关键词，先生成一次关键词。')
+  }
+
+  const now = Date.now()
+  saveResult(db, key, tree, ZERO, now)
+  return toView('', tree, {
+    cached: false,
+    usage: null,
+    createdAt: now,
+    note: '思维导图由「关键词」的结果组织而成，这一次没有调用模型，也没有产生费用。'
+  })
+}
+
+// ---------- 形状校验 ----------
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : null
+}
+
+function asText(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() !== '' ? value.trim() : null
+}
+
+/** 只留非空字符串。缺字段是模型的问题，不该让整条结果作废 */
+function asTextList(value: unknown): string[] | null {
+  if (!Array.isArray(value)) return null
+  return value
+    .filter((item): item is string => typeof item === 'string')
+    .map((item) => item.trim())
+    .filter((item) => item !== '')
+}
+
+function asTerm(value: unknown): SummaryTerm | null {
+  const row = asRecord(value)
+  if (!row) return null
+  const term = asText(row.term)
+  const gloss = asText(row.gloss)
+  return term && gloss ? { term, gloss } : null
+}
+
+export function asSummary(value: unknown): ChapterSummaryPayload | null {
+  const row = asRecord(value)
+  if (!row) return null
+  const overview = asText(row.overview)
+  const keyPoints = asTextList(row.keyPoints)
+  if (!overview || !keyPoints || keyPoints.length === 0) return null
+  const terms = Array.isArray(row.terms)
+    ? row.terms.map(asTerm).filter((item): item is SummaryTerm => item !== null)
+    : []
+  return { overview, keyPoints, terms }
+}
+
+export function asDigest(value: unknown): BookDigestPayload | null {
+  const row = asRecord(value)
+  if (!row) return null
+  const threads = asTextList(row.threads)
+  const args = asTextList(row.arguments)
+  const conclusion = asText(row.conclusion)
+  if (!threads || !args || !conclusion) return null
+  return { threads, arguments: args, conclusion }
+}
+
+export function asTerms(value: unknown): TermsPayload | null {
+  const row = asRecord(value)
+  if (!row || !Array.isArray(row.terms)) return null
+  const terms: Term[] = []
+  for (const item of row.terms) {
+    const entry = asRecord(item)
+    if (!entry) continue
+    const term = asText(entry.term)
+    const gloss = asText(entry.gloss)
+    if (!term || !gloss) continue
+    terms.push({ term, gloss, where: asText(entry.where) ?? '' })
+  }
+  return terms.length === 0 ? null : { terms }
+}

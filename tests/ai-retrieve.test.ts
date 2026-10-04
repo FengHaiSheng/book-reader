@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { estimateTokens, fitPassages, windowFromText } from '../electron/main/ai/retrieve'
+import { estimateTokens, fitPassages, slicesOf, windowFromText } from '../electron/main/ai/retrieve'
 
 describe('estimateTokens', () => {
   it('中文按 1 字 ≈ 1 token，拉丁按 4 字符 ≈ 1 token', () => {
@@ -47,5 +47,36 @@ describe('fitPassages', () => {
     expect(result.kept.length).toBeLessThan(6)
     expect(result.kept[0]!.index).toBe(1)
     expect(result.dropped).toBe(6 - result.kept.length)
+  })
+})
+
+describe('slicesOf', () => {
+  const text = Array.from({ length: 10 }, (_, i) => `第${i}段${'字'.repeat(50)}`).join('\n')
+
+  it('编号从 1 连续 —— 它不是引用编号，但沿用同一套契约省得两套心智', () => {
+    const slices = slicesOf(text, 120)
+    expect(slices.map((slice) => slice.index)).toEqual(slices.map((_, i) => i + 1))
+  })
+
+  it('切点落在段落边界上，不把一段劈成两半', () => {
+    for (const slice of slicesOf(text, 120)) {
+      expect(slice.text.startsWith('第')).toBe(true)
+      expect(slice.text.endsWith('字')).toBe(true)
+    }
+  })
+
+  it('单片不超过给定字符数', () => {
+    for (const slice of slicesOf(text, 120)) {
+      expect(slice.text.length).toBeLessThanOrEqual(120)
+    }
+  })
+
+  it('单段本身就超长时硬切，而不是整段塞进去', () => {
+    const slices = slicesOf('字'.repeat(250), 120)
+    expect(slices.map((slice) => slice.text.length)).toEqual([120, 120, 10])
+  })
+
+  it('空文本返回空数组', () => {
+    expect(slicesOf('', 120)).toEqual([])
   })
 })

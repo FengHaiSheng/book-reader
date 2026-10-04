@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { AiStatus, Citation } from '@shared/types'
 import { AiIndexBar } from './AiIndexBar'
 import { AiMessage, type Turn } from './AiMessage'
+import { AiTasks, type TaskKey } from './AiTasks'
 
 /** 划词浮条递给面板的东西。prefill 只填引用，send 立刻发出去 */
 export type AiSeed =
@@ -29,6 +30,10 @@ export function AiPanel({
   const [question, setQuestion] = useState('')
   const [excerpt, setExcerpt] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  /** 正文里的章节数。全书要点的成本提示要用它，从只读接口拿，不产生费用 */
+  const [chapterCount, setChapterCount] = useState(0)
+  /** 本章是否已有小结，决定「重新生成」要不要提醒会再花一次钱 */
+  const [hasSummary, setHasSummary] = useState(false)
 
   const streamRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
@@ -51,6 +56,14 @@ export function AiPanel({
     setHistoryLoaded(false)
     setError(null)
     refreshStatus()
+    setHasSummary(false)
+    void window.api.reader
+      .open(bookId)
+      .then((opened) => {
+        if (!alive || !opened) return
+        setChapterCount(opened.chapters.filter((chapter) => chapter.href !== '').length)
+      })
+      .catch(() => undefined)
 
     void window.api.ai
       .history(bookId, scopeKey)
@@ -246,6 +259,17 @@ export function AiPanel({
           还没有填这家的 API Key。到「设置 → 模型」里填一个再回来。
         </p>
       )}
+
+      <AiTasks
+        bookId={bookId}
+        chapterId={chapterId}
+        chapterCount={chapterCount}
+        hasSummary={hasSummary}
+        onError={setError}
+        onResult={(task: TaskKey) => {
+          if (task === 'summary') setHasSummary(true)
+        }}
+      />
 
       <div className="ai-panel__stream" ref={streamRef}>
         {turns.length === 0 ? (

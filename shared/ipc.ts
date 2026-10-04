@@ -38,7 +38,13 @@ export const CH = {
   aiCancelIndex: 'ai:cancelIndex',
   /** 主 → 渲染 的单向事件，不是 invoke */
   aiDelta: 'ai:delta',
-  aiProgress: 'ai:progress'
+  aiProgress: 'ai:progress',
+  // 结构化任务。思维导图不调模型，但同样走 ai:mindmap —— 复用同一套缓存与结果视图
+  aiSummary: 'ai:summary',
+  aiDigest: 'ai:digest',
+  aiTerms: 'ai:terms',
+  aiMindmap: 'ai:mindmap',
+  aiCancelDigest: 'ai:cancelDigest'
 } as const
 
 export type Channel = (typeof CH)[keyof typeof CH]
@@ -63,6 +69,11 @@ export const API_SHAPE = {
     'buildIndex',
     'cancelIndex',
     'onDelta',
-    'onProgress'
+    'onProgress',
+    'summary',
+    'digest',
+    'terms',
+    'mindmap',
+    'cancelDigest'
   ]
 } as const
