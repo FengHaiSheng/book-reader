@@ -1,3 +1,4 @@
+import type { AiCaps, CapabilityKey } from './ai'
 import type { AppError } from './errors'
 import type { HighlightColor } from './highlights'
 
@@ -222,4 +223,114 @@ export type NotesExportPreview = {
 export type NotesExportResult = {
   saved: boolean
   path: string | null
+}
+
+export type AiSettings = { providerId: ProviderId; model: string }
+
+export type AiMessageRole = 'user' | 'assistant'
+
+export type AiMessage = {
+  id: number
+  bookId: string
+  chapterId: number | null
+  scopeKey: string
+  role: AiMessageRole
+  content: string
+  tokens: number
+  createdAt: number
+}
+
+/** 回答里 [n] 上标指向的那一段原文 */
+export type Citation = {
+  index: number
+  chunkId: number
+  chapterId: number | null
+  chapterTitle: string | null
+  headingPath: string
+  /** 前 30 字，用于回跳时在章节正文里匹配 */
+  excerpt: string
+}
+
+/**
+ * 本次回答的降级说明。
+ *
+ * 存在的理由就是硬规则 2：能力不足必须在 UI 上明说，不能静默降级。
+ * 文案在主进程生成，界面只负责渲染成提示条——避免同一句降级说明散落在多个组件里。
+ *
+ * 只有划词问答这条路会用到它，三条都对应 `runChat` 里的一次真实判断。
+ * 结构化任务的降级走 `AiResultView.note`：那边一次返回一份结果，
+ * 再配一个 `degraded` 数组就得让界面同时读两个地方，反而容易漏。
+ */
+export type AiDegrade = {
+  kind: 'noEmbed' | 'contextTruncated' | 'blindIndex'
+  message: string
+}
+
+export type AiUsage = { inputTokens: number; outputTokens: number }
+
+export type AiChatResult = {
+  requestId: string
+  content: string
+  /** 服务商没返回用量时为 null，界面显示「用量未返回」，不编数字 */
+  usage: AiUsage | null
+  citations: Citation[]
+  degraded: AiDegrade[]
+}
+
+export type IndexState = { total: number; done: number; running: boolean }
+
+export type AiStatus = {
+  providerId: ProviderId
+  model: string
+  /** 是否已填 key */
+  configured: boolean
+  caps: AiCaps
+  /** 运行中被真实调用标成不可用的能力 */
+  unavailable: CapabilityKey[]
+  index: IndexState
+}
+
+export type AiDegradeEvent = { requestId: string; delta: string }
+
+export type AiProgressEvent = {
+  /** 'index' 是建索引，'digest' 是全书要点逐章 map */
+  kind: 'index' | 'digest'
+  bookId: string
+  done: number
+  total: number
+  label: string
+  running: boolean
+}
+
+export type ChapterSummaryPayload = {
+  overview: string
+  keyPoints: string[]
+  terms: { term: string; gloss: string }[]
+}
+
+export type BookDigestPayload = {
+  threads: string[]
+  arguments: string[]
+  conclusion: string
+}
+
+export type TermsPayload = { terms: { term: string; gloss: string; where: string }[] }
+
+export type MindmapNode = { label: string; children: MindmapNode[] }
+
+/**
+ * 结构化任务的结果视图。
+ *
+ * `payload` 为 null 表示模型没给出可用的 JSON——那时 `text` 放它的原文、`note` 说明原因，
+ * 界面按纯文本展示。**不出现「什么都没有」的空结果**是硬规则 2 的底线。
+ * `usage` 为 null 表示服务商没返回用量（或这次根本没调模型），界面显示「未返回」。
+ * `cached` 为 true 表示命中 ai_results 唯一键，这一次没有花钱。
+ */
+export type AiResultView<T> = {
+  payload: T | null
+  text: string | null
+  cached: boolean
+  usage: AiUsage | null
+  createdAt: number
+  note: string | null
 }
