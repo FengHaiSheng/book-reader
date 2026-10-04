@@ -4,6 +4,7 @@ import type { ChatModel } from '@shared/ai'
 import type {
   AiChatResult,
   AiDegradeEvent,
+  AiMessage,
   AiProgressEvent,
   AiStatus,
   BookSummary,
@@ -107,6 +108,10 @@ const api = {
       question?: string
     }): Promise<AiChatResult> => ipcRenderer.invoke(CH.aiChat, request),
     cancel: (requestId: string): Promise<void> => ipcRenderer.invoke(CH.aiCancel, requestId),
+    history: (bookId: string, scopeKey: string): Promise<AiMessage[]> =>
+      ipcRenderer.invoke(CH.aiHistory, bookId, scopeKey),
+    clear: (bookId: string, scopeKey: string): Promise<void> =>
+      ipcRenderer.invoke(CH.aiClear, bookId, scopeKey),
     indexState: (bookId: string): Promise<IndexState> =>
       ipcRenderer.invoke(CH.aiIndexState, bookId),
     buildIndex: (bookId: string): Promise<IndexState> =>

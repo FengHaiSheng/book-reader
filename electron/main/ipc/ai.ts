@@ -4,6 +4,8 @@ import { CH } from '@shared/ipc'
 import type { AiChatResult, AiDegradeEvent, AiProgressEvent, ProviderId } from '@shared/types'
 import { AiQueue } from '../ai/queue'
 import { buildIndex, cancelIndex, indexState } from '../ai/index-builder'
+import { appendMessage, clearScope, listMessages } from '../ai/repo'
+import { estimateTokens } from '../ai/retrieve'
 import { testConnection } from '../ai/provider'
 import {
   aiSettings,
@@ -52,7 +54,7 @@ export function registerAiIpc(): void {
     const sender = event.sender
 
     try {
-      return await queue.run(request.requestId, () =>
+      const result = await queue.run(request.requestId, () =>
         runChat(
           database,
           {
@@ -67,6 +69,37 @@ export function registerAiIpc(): void {
           }
         )
       )
+
+      // 落库放在这里而不是服务层：服务层要能被单测单独调，不该顺手写表。
+      // 用量按输出 token 记回答、按估算记提问（服务商不给我们算输入的那一份）。
+      const scopeKey = request.chapterId === null ? 'book' : `chapter:${request.chapterId}`
+      const now = Date.now()
+      appendMessage(
+        database,
+        {
+          bookId: request.bookId,
+          chapterId: request.chapterId,
+          scopeKey,
+          role: 'user',
+          content: (request.question ?? request.excerpt ?? '').trim(),
+          tokens: estimateTokens(request.question ?? request.excerpt ?? '')
+        },
+        now
+      )
+      appendMessage(
+        database,
+        {
+          bookId: request.bookId,
+          chapterId: request.chapterId,
+          scopeKey,
+          role: 'assistant',
+          content: result.content,
+          tokens: result.usage?.outputTokens ?? 0
+        },
+        now + 1
+      )
+
+      return result
     } catch (error) {
       throw toReadable(error, 'AI 没有回答成功')
     } finally {
@@ -79,6 +112,14 @@ export function registerAiIpc(): void {
     queue.cancel(requestId)
     inflight.get(requestId)?.abort()
     inflight.delete(requestId)
+  })
+
+  ipcMain.handle(CH.aiHistory, (_event, bookId: string, scopeKey: string) =>
+    listMessages(getDatabase(), bookId, scopeKey)
+  )
+
+  ipcMain.handle(CH.aiClear, (_event, bookId: string, scopeKey: string) => {
+    clearScope(getDatabase(), bookId, scopeKey)
   })
 
   ipcMain.handle(CH.aiIndexState, (_event, bookId: string) => indexState(getDatabase(), bookId))

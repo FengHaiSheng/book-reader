@@ -25,6 +25,7 @@ export function SelectionToolbar({
   onNote,
   onCopy,
   onAsk,
+  onExplain,
   onTranslate
 }: {
   selection: SelectionState
@@ -33,6 +34,8 @@ export function SelectionToolbar({
   onCopy: () => void
   /** 计划 05 接上。不传就不渲染按钮，避免出现点不动的空壳 */
   onAsk?: () => void
+  /** 计划 05 接上。与 onAsk / onTranslate 同样是可选：不传就不渲染 */
+  onExplain?: () => void
   onTranslate?: () => void
 }) {
   // 贴到正文最上沿时，浮条往上放会被 .reader__stage 的 overflow 裁掉，翻到下面去
@@ -68,6 +71,11 @@ export function SelectionToolbar({
           <button type="button" className="sel-toolbar__btn" onClick={onCopy}>
             复制
           </button>
+          {onExplain && (
+            <button type="button" className="sel-toolbar__btn" onClick={onExplain}>
+              解释
+            </button>
+          )}
           {onTranslate && (
             <button type="button" className="sel-toolbar__btn" onClick={onTranslate}>
               翻译
