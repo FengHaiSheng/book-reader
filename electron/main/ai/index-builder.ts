@@ -1,7 +1,9 @@
 import type Database from 'better-sqlite3'
 import { PROVIDER_AI } from '@shared/ai'
+import { toAppError } from '@shared/errors'
 import type { ProviderId } from '@shared/types'
-import { embed } from './provider'
+import { embed, type EmbedResult } from './provider'
+import { markUnavailable } from './repo'
 import { blobToVector, cosine, topKByVector, vectorToBlob } from './vector'
 
 export type IndexState = { total: number; done: number; running: boolean }
@@ -84,7 +86,15 @@ export async function buildIndex(
         .all(bookId) as { id: number; text: string; headingPath: string }[]
       if (pending.length === 0) break
 
-      const result = await embed(providerId, pending.map((row) => row.text))
+      let result: EmbedResult
+      try {
+        result = await embed(providerId, pending.map((row) => row.text))
+      } catch (error) {
+        const normalized = toAppError(error, '向量服务请求失败')
+        // 声明说能做、这个账号其实没开通 —— 记下来，下次打开面板就能看到降级说明
+        if (normalized.code === 'AI_UNSUPPORTED') markUnavailable(db, providerId, 'embed')
+        throw error
+      }
       if (result.vectors.length !== pending.length) {
         throw new Error('向量服务返回的条数与请求不一致，索引已中止，可以稍后继续')
       }

@@ -1,6 +1,6 @@
 import type Database from 'better-sqlite3'
 import { PROVIDER_AI, modelOf } from '@shared/ai'
-import { appError } from '@shared/errors'
+import { appError, toAppError } from '@shared/errors'
 import type {
   AiResultView,
   AiUsage,
@@ -14,14 +14,20 @@ import { parseLooseJson } from './loose-json'
 import { buildMindmap } from './mindmap'
 import type { ChatMessage } from './params'
 import { buildMessages } from './prompts'
-import { chat } from './provider'
-import { getResult, saveResult, type ResultKey } from './repo'
+import { chat, type ChatResult } from './provider'
+import { getResult, markUnavailable, saveResult, unavailableCaps, type ResultKey } from './repo'
+import { isJsonModeRejection } from './retry'
 import { estimateTokens, fitPassages, slicesOf } from './retrieve'
 import { bookTitleOf, chapterTextOf, chapterTitleOf } from './service'
 
 const ZERO: AiUsage = { inputTokens: 0, outputTokens: 0 }
 const MAX_OUTPUT = 2048
 const SLICE_SIZE = 1200
+
+const JSON_NOT_DECLARED = '当前模型不支持结构化输出，已改为提示词约束 + 本地解析。'
+const JSON_REJECTED =
+  '服务商不接受结构化输出参数（已记下，这家之后不再带该参数），本次改为提示词约束 + 本地解析。'
+const JSON_PARSE_HINT = '若下面是模型原文，说明这次没能解析成结构。'
 
 type Term = TermsPayload['terms'][number]
 type SummaryTerm = ChapterSummaryPayload['terms'][number]
@@ -44,28 +50,53 @@ export type TaskProgress = { done: number; total: number; label: string; running
  *
  * 模型没吐合法 JSON 时不抛错：`payload` 为 null、`raw` 是原文，由界面按纯文本展示。
  * 抛错会让用户失去「它到底说了什么」这个信息（硬规则 2）。
+ *
+ * 声明说支持、服务商却回 400 时，把「不支持」记进能力表并去掉参数重跑一次。
+ * **只重跑一次**：第二次再失败说明问题不在 `response_format` 上，继续试是白花钱。
  */
 async function askJson<T>(
+  db: Database.Database,
   call: CallContext,
   messages: ChatMessage[],
   validate: (value: unknown) => T | null
 ): Promise<Structured<T>> {
-  const caps = PROVIDER_AI[call.providerId]
-  const json = caps.jsonMode && modelOf(call.providerId, call.model)?.jsonMode === true
-  const result = await chat({
-    providerId: call.providerId,
-    model: call.model,
-    input: { messages, maxTokens: MAX_OUTPUT, temperature: 0.2, json, stream: false },
-    signal: call.signal
-  })
+  const declared =
+    PROVIDER_AI[call.providerId].jsonMode &&
+    modelOf(call.providerId, call.model)?.jsonMode === true
+  const wantedJson = declared && !unavailableCaps(db, call.providerId).includes('jsonMode')
+
+  const ask = (json: boolean): Promise<ChatResult> =>
+    chat({
+      providerId: call.providerId,
+      model: call.model,
+      input: { messages, maxTokens: MAX_OUTPUT, temperature: 0.2, json, stream: false },
+      signal: call.signal
+    })
+
+  let usedJson = wantedJson
+  let result: ChatResult
+  if (!wantedJson) {
+    result = await ask(false)
+  } else {
+    try {
+      result = await ask(true)
+    } catch (error) {
+      const normalized = toAppError(error, '结构化调用失败')
+      if (!isJsonModeRejection(normalized, wantedJson)) throw normalized
+      markUnavailable(db, call.providerId, 'jsonMode')
+      usedJson = false
+      result = await ask(false)
+    }
+  }
+
   const payload = validate(parseLooseJson(result.content))
   return {
     raw: result.content,
     payload,
     usage: result.usage,
-    note: json
+    note: usedJson
       ? null
-      : '当前模型不支持结构化输出，已改为提示词约束 + 本地解析。若下面是模型原文，说明这次没能解析成结构。'
+      : composeNote(declared ? JSON_REJECTED : JSON_NOT_DECLARED, JSON_PARSE_HINT)
   }
 }
 
@@ -186,6 +217,7 @@ export async function runChapterSummary(
   // 短章节：一次读完。只有真的超长时才走 map-reduce，别为一章 3 千字发好几次请求
   if (dropped === 0) {
     const only = await askJson<ChapterSummaryPayload>(
+      db,
       call,
       buildMessages('chapterSummary', {
         ...context,
@@ -203,6 +235,7 @@ export async function runChapterSummary(
   for (const slice of kept) {
     if (input.signal.aborted) break
     const part = await askJson<ChapterSummaryPayload>(
+      db,
       call,
       buildMessages('chapterSummary', { ...context, chapterText: slice.text }),
       asSummary
@@ -239,6 +272,7 @@ export async function runChapterSummary(
   }
 
   const reduced = await askJson<ChapterSummaryPayload>(
+    db,
     call,
     buildMessages('chapterSummary', { ...context, summaries: partials }),
     asSummary
@@ -252,6 +286,7 @@ export async function runChapterSummary(
     usage,
     composeNote(
       `这一章较长，分 ${kept.length} 段读取后合成，共发起 ${kept.length + 1} 次请求。`,
+      dropped > 0 ? `这一章超出当前模型的上下文上限，最后 ${dropped} 段没有送进去。` : '',
       notes.join(' '),
       reduced.note
     )
@@ -305,6 +340,8 @@ export async function runBookDigest(
   let usage: AiUsage | null = null
   let calls = 0
   let reused = 0
+  /** 有几章因为超出上下文上限只读了前半部分。这个数字必须出现在结果里 */
+  let clipped = 0
   let done = 0
   onProgress({ done, total: chapters.length, label: '准备中', running: true })
 
@@ -317,9 +354,14 @@ export async function runBookDigest(
       reused += 1
     } else {
       const text = chapterTextOf(db, chapter.id)
-      const { kept } = fitPassages(slicesOf(text, SLICE_SIZE), budgetFor(input.providerId, input.model, text))
+      const { kept, dropped } = fitPassages(
+        slicesOf(text, SLICE_SIZE),
+        budgetFor(input.providerId, input.model, text)
+      )
+      if (dropped > 0) clipped += 1
       calls += 1
       const part = await askJson<ChapterSummaryPayload>(
+        db,
         call,
         buildMessages('bookDigest', {
           ...baseContext(db, input.bookId, chapter.id),
@@ -366,6 +408,7 @@ export async function runBookDigest(
 
   calls += 1
   const reduced = await askJson<BookDigestPayload>(
+    db,
     call,
     buildMessages('bookDigest', { ...baseContext(db, input.bookId, null), summaries }),
     asDigest
@@ -384,6 +427,7 @@ export async function runBookDigest(
       note: composeNote(
         `逐章读取了 ${chapters.length} 章，本次共发起 ${calls} 次请求。`,
         reused > 0 ? `其中 ${reused} 章直接用了已有小结，没有重复调用。` : '',
+        clipped > 0 ? `有 ${clipped} 章因超出上下文上限只读了前半部分。` : '',
         notes.join(' '),
         reduced.note
       )
@@ -430,6 +474,7 @@ export async function runTerms(
   }
 
   const outcome = await askJson<TermsPayload>(
+    db,
     call,
     buildMessages('terms', { ...baseContext(db, input.bookId, null), summaries }),
     asTerms

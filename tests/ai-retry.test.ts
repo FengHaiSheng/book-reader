@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { RETRY_DELAY_MS, classifyError, shouldRetry } from '../electron/main/ai/retry'
+import {
+  RETRY_DELAY_MS,
+  classifyError,
+  isJsonModeRejection,
+  shouldRetry
+} from '../electron/main/ai/retry'
 
 describe('classifyError', () => {
   it('401 → 配置问题，指向设置页', () => {
@@ -56,5 +61,21 @@ describe('shouldRetry', () => {
 
   it('退避 800ms', () => {
     expect(RETRY_DELAY_MS).toBe(800)
+  })
+})
+
+describe('isJsonModeRejection', () => {
+  it('这次要求了 JSON、服务商回 400 —— 是真的不接受结构化输出', () => {
+    expect(isJsonModeRejection(classifyError(400, ''), true)).toBe(true)
+  })
+
+  it('这次本来就没要求 JSON —— 400 与结构化输出无关，不能记账', () => {
+    expect(isJsonModeRejection(classifyError(400, ''), false)).toBe(false)
+  })
+
+  it('网络 / 限流 / 鉴权都不是「不支持」', () => {
+    expect(isJsonModeRejection(classifyError(null, ''), true)).toBe(false)
+    expect(isJsonModeRejection(classifyError(429, ''), true)).toBe(false)
+    expect(isJsonModeRejection(classifyError(401, ''), true)).toBe(false)
   })
 })

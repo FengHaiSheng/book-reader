@@ -79,6 +79,17 @@ export function shouldRetry(error: AppError, attempt: number): boolean {
   return error.action === 'retry' && attempt < 1
 }
 
+/**
+ * 这次 400 是不是「服务商不接受结构化输出参数」造成的？
+ *
+ * 两个条件都要满足：① 这次请求里真的带了 `response_format`；② 错误被归进了「不支持」。
+ * 少一个都会误伤：模型名写错也是 400 / `AI_UNSUPPORTED`，把它记成「不支持结构化输出」
+ * 会让这家模型从此再也不带参数请求 —— 一次输入失误换来永久降级。
+ */
+export function isJsonModeRejection(error: AppError, requestedJson: boolean): boolean {
+  return requestedJson && error.code === 'AI_UNSUPPORTED'
+}
+
 export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
