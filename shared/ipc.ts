@@ -25,7 +25,18 @@ export const CH = {
   notesExportMarkdown: 'notes:exportMarkdown',
   shellOpenExternal: 'shell:openExternal',
   /** 主 → 渲染 的单向事件，不是 invoke */
-  libraryImportProgress: 'library:importProgress'
+  libraryImportProgress: 'library:importProgress',
+  aiStatus: 'ai:status',
+  aiModels: 'ai:models',
+  aiTest: 'ai:test',
+  aiChat: 'ai:chat',
+  aiCancel: 'ai:cancel',
+  aiIndexState: 'ai:indexState',
+  aiBuildIndex: 'ai:buildIndex',
+  aiCancelIndex: 'ai:cancelIndex',
+  /** 主 → 渲染 的单向事件，不是 invoke */
+  aiDelta: 'ai:delta',
+  aiProgress: 'ai:progress'
 } as const
 
 export type Channel = (typeof CH)[keyof typeof CH]
@@ -37,5 +48,17 @@ export const API_SHAPE = {
   library: ['pickAndImport', 'importPath', 'list', 'chapters', 'search', 'remove', 'onImportProgress'],
   reader: ['open', 'saveProgress'],
   notes: ['listChapter', 'listAll', 'create', 'update', 'remove', 'context', 'previewExport', 'exportMarkdown'],
-  shell: ['openExternal']
+  shell: ['openExternal'],
+  ai: [
+    'status',
+    'models',
+    'test',
+    'chat',
+    'cancel',
+    'indexState',
+    'buildIndex',
+    'cancelIndex',
+    'onDelta',
+    'onProgress'
+  ]
 } as const

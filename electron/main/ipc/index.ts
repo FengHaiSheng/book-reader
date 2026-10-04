@@ -1,3 +1,4 @@
+import { registerAiIpc } from './ai'
 import { registerLibraryIpc } from './library'
 import { registerNotesIpc } from './notes'
 import { registerReaderIpc } from './reader'
@@ -13,4 +14,5 @@ export function registerIpc(): void {
   registerReaderIpc()
   registerNotesIpc()
   registerShellIpc()
+  registerAiIpc()
 }

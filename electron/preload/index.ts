@@ -1,6 +1,11 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { CH } from '@shared/ipc'
+import type { ChatModel } from '@shared/ai'
 import type {
+  AiChatResult,
+  AiDegradeEvent,
+  AiProgressEvent,
+  AiStatus,
   BookSummary,
   ChapterRowView,
   Highlight,
@@ -10,11 +15,13 @@ import type {
   HighlightWithBook,
   ImportOutcome,
   ImportProgress,
+  IndexState,
   IpcResult,
   NotesExportOptions,
   NotesExportPreview,
   NotesExportResult,
   ProgressInput,
+  ProviderId,
   ReaderBook,
   ReadingPrefs,
   SearchHit
@@ -84,6 +91,38 @@ const api = {
       ids: number[] | null,
       options: NotesExportOptions
     ): Promise<NotesExportResult> => ipcRenderer.invoke(CH.notesExportMarkdown, ids, options)
+  },
+  ai: {
+    status: (bookId: string): Promise<AiStatus> => ipcRenderer.invoke(CH.aiStatus, bookId),
+    models: (providerId: ProviderId): Promise<ChatModel[]> =>
+      ipcRenderer.invoke(CH.aiModels, providerId),
+    test: (providerId: ProviderId, model: string): Promise<{ ok: true; model: string }> =>
+      ipcRenderer.invoke(CH.aiTest, providerId, model),
+    chat: (request: {
+      requestId: string
+      bookId: string
+      chapterId: number | null
+      task: 'ask' | 'explain' | 'translate'
+      excerpt?: string
+      question?: string
+    }): Promise<AiChatResult> => ipcRenderer.invoke(CH.aiChat, request),
+    cancel: (requestId: string): Promise<void> => ipcRenderer.invoke(CH.aiCancel, requestId),
+    indexState: (bookId: string): Promise<IndexState> =>
+      ipcRenderer.invoke(CH.aiIndexState, bookId),
+    buildIndex: (bookId: string): Promise<IndexState> =>
+      ipcRenderer.invoke(CH.aiBuildIndex, bookId),
+    cancelIndex: (bookId: string): Promise<void> => ipcRenderer.invoke(CH.aiCancelIndex, bookId),
+    /** 返回退订函数。contextBridge 支持跨边界传递函数，退订时直接调它。 */
+    onDelta: (listener: (event: AiDegradeEvent) => void): (() => void) => {
+      const handler = (_event: unknown, payload: AiDegradeEvent): void => listener(payload)
+      ipcRenderer.on(CH.aiDelta, handler)
+      return () => ipcRenderer.removeListener(CH.aiDelta, handler)
+    },
+    onProgress: (listener: (event: AiProgressEvent) => void): (() => void) => {
+      const handler = (_event: unknown, payload: AiProgressEvent): void => listener(payload)
+      ipcRenderer.on(CH.aiProgress, handler)
+      return () => ipcRenderer.removeListener(CH.aiProgress, handler)
+    }
   },
   shell: {
     openExternal: (url: string): Promise<void> =>
