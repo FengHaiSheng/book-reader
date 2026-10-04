@@ -99,7 +99,7 @@ const api = {
     ): Promise<NotesExportResult> => ipcRenderer.invoke(CH.notesExportMarkdown, ids, options)
   },
   ai: {
-    status: (bookId: string): Promise<AiStatus> => ipcRenderer.invoke(CH.aiStatus, bookId),
+    status: (bookId: string | null): Promise<AiStatus> => ipcRenderer.invoke(CH.aiStatus, bookId),
     models: (providerId: ProviderId): Promise<ChatModel[]> =>
       ipcRenderer.invoke(CH.aiModels, providerId),
     test: (providerId: ProviderId, model: string): Promise<{ ok: true; model: string }> =>

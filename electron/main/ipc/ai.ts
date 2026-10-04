@@ -39,7 +39,7 @@ type ChatRequest = Omit<ChatInput, 'chapterText' | 'scopeKey'> & {
 }
 
 export function registerAiIpc(): void {
-  ipcMain.handle(CH.aiStatus, (_event, bookId: string) => statusOf(getDatabase(), bookId))
+  ipcMain.handle(CH.aiStatus, (_event, bookId: string | null) => statusOf(getDatabase(), bookId))
 
   ipcMain.handle(CH.aiModels, (_event, providerId: ProviderId) => modelsFor(providerId))
 

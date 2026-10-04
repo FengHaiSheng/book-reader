@@ -242,3 +242,60 @@ export function secureFiles(): EpubFiles {
   )
   return files
 }
+
+/**
+ * 第一章特别长的书：用来触发「上下文预算不够」这条降级。
+ *
+ * 默认 36 段 × 300 字 ≈ 1.08 万汉字。kimi 的 moonshot-v1-8k 窗口只有 8000 token，
+ * 预算算下来只装得下前几段 —— 后面被丢掉的段数必须出现在结果说明里。
+ */
+export function aiBookFiles({ paragraphs = 36, charsPerParagraph = 300 } = {}): EpubFiles {
+  const sentence = '月色沉入河底，水面碎成一片。'
+
+  const paragraph = (index: number): string => {
+    const head = `第 ${index + 1} 段：`
+    const bodyLength = Math.max(1, charsPerParagraph - head.length)
+    const times = Math.ceil(bodyLength / sentence.length)
+    return `<p>${head}${sentence.repeat(times).slice(0, bodyLength)}</p>`
+  }
+
+  const long = Array.from({ length: paragraphs }, (_, index) => paragraph(index)).join('\n')
+
+  return {
+    mimetype: 'application/epub+zip',
+    'META-INF/container.xml': CONTAINER,
+    'OEBPS/content.opf': `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="2.0" unique-identifier="bookid">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>很长的一夜</dc:title>
+    <dc:creator>测试作者</dc:creator>
+    <dc:language>zh-CN</dc:language>
+    <dc:identifier id="bookid">urn:isbn:9787000000002</dc:identifier>
+  </metadata>
+  <manifest>
+    <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>
+    <item id="c1" href="ch1.xhtml" media-type="application/xhtml+xml"/>
+    <item id="c2" href="ch2.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine toc="ncx">
+    <itemref idref="c1"/>
+    <itemref idref="c2"/>
+  </spine>
+</package>`,
+    'OEBPS/toc.ncx': `<?xml version="1.0"?>
+<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
+  <navMap>
+    <navPoint id="n1"><navLabel><text>第一章 长夜</text></navLabel><content src="ch1.xhtml"/></navPoint>
+    <navPoint id="n2"><navLabel><text>第二章 天亮</text></navLabel><content src="ch2.xhtml"/></navPoint>
+  </navMap>
+</ncx>`,
+    'OEBPS/ch1.xhtml': `<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml"><head><title>第一章</title></head>
+<body><h1>第一章 长夜</h1>
+${long}</body></html>`,
+    'OEBPS/ch2.xhtml': `<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml"><head><title>第二章</title></head>
+<body><h1>第二章 天亮</h1>
+<p>天亮的时候河面起雾，他终于把那句话说出口。</p></body></html>`
+  }
+}
