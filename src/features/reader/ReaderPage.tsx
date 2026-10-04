@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { DEFAULT_HIGHLIGHT_COLOR, MAX_HIGHLIGHT_CHARS, type HighlightColor } from '@shared/highlights'
 import type { Highlight, ReadingPrefs, ReaderBook, ReadingTarget } from '@shared/types'
 import { chapterBlobUrl, prepareChapter } from './document'
-import { computeLayout, type ReaderLayout } from './layout'
+import { computeLayout, PAGE_PAD_Y, type ReaderLayout } from './layout'
 import { ChapterPaginator } from './paginator'
 import { buildReaderCss } from './theme'
 import { classifyLink } from './links'
@@ -699,7 +699,8 @@ export function ReaderPage({
           currentId={readable[chapterIndex]?.id ?? null}
           onSelect={goToChapterById}
         />
-        <div className="reader__stage" ref={stageRef}>
+        {/* 阅读区整块是纸，上留白由舞台给，正文块在纸面上上下居中 */}
+        <div className="reader__stage" ref={stageRef} style={{ paddingTop: PAGE_PAD_Y }}>
           {error && <p className="reader__status">{error}</p>}
           <div className="reader__frame">
             <iframe

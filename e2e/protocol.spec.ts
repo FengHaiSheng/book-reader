@@ -32,6 +32,8 @@ test('epub:// 只服务本书目录里的静态资源', async () => {
       css: await get(`epub://${id}/OEBPS/style.css`),
       image: await get(`epub://${id}/OEBPS/images/dot.jpg`),
       script: await get(`epub://${id}/OEBPS/evil.js`),
+      noextDoc: await get(`epub://${id}/OEBPS/plain`),
+      noextJunk: await get(`epub://${id}/mimetype`),
       otherBook: await get(`epub://11111111-2222-3333-4444-555555555555/OEBPS/ch1.xhtml`),
       badHost: await get(`epub://not-a-uuid/OEBPS/ch1.xhtml`),
       missing: await get(`epub://${id}/OEBPS/nope.xhtml`)
@@ -44,6 +46,10 @@ test('epub:// 只服务本书目录里的静态资源', async () => {
   expect(probe.image.status).toBe(200)
   // 书内脚本永远拿不到
   expect(probe.script.status).toBe(403)
+  // 没有扩展名的正文文档照样读得到（按内容认），同样没有扩展名的 mimetype 读不到
+  expect(probe.noextDoc.status).toBe(200)
+  expect(probe.noextDoc.type).toContain('xhtml')
+  expect(probe.noextJunk.status).toBe(403)
   // 换一个合法 uuid 也读不到这本书 —— 路径只由 bookId 决定
   expect(probe.otherBook.status).toBe(404)
   expect(probe.badHost.status).toBe(400)

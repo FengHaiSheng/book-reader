@@ -45,6 +45,9 @@ export function readerFontStack(font: ReadingPrefs['font']): string {
 export function buildReaderCss(layout: ReaderLayout, prefs: ReadingPrefs): string {
   const { bg, ink } = PAPER[prefs.theme]
   return `html {
+  /* 见 body 里的说明：书的样式表常给 html / body 垫外边距，必须压住 */
+  margin: 0 !important;
+  padding: 0 !important;
   height: ${layout.pageHeight}px;
   /* 翻页靠 body 的 translateX 驱动，滚动条本身不该出现 */
   overflow: hidden;
@@ -52,8 +55,12 @@ export function buildReaderCss(layout: ReaderLayout, prefs: ReadingPrefs): strin
   color: ${ink};
 }
 body {
-  margin: 0;
-  padding: 0;
+  /* 分栏容器的宽度必须正好是版心宽。书自带的样式（calibre 生成的 .calibreN 就是
+     类选择器）会把 body 左右各垫 5pt，容器就被挤窄，浏览器按更小的栏距排列，
+     而翻页步长仍按版心宽算 —— 每翻一页多走一个外边距，页码越大正文左边切得越多，
+     到第 3 页就切掉整个字。这里必须用 !important 压过书里的样式。 */
+  margin: 0 !important;
+  padding: 0 !important;
   height: ${layout.pageHeight}px;
   box-sizing: border-box;
   column-width: ${layout.columnWidth}px;

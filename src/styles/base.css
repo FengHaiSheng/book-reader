@@ -410,16 +410,16 @@ html[data-theme='dark'] .seg__b.is-on {
   flex: 1;
   min-width: 0;
   display: flex;
-  align-items: center;
+  /* 阅读区整块就是纸：正文四周的留白与纸同色，从工具栏下方一路通到窗口底，
+     所以这里不摆一张浮起的纸，也就不画纸边与投影。上方留白由 JSX 上的 PAGE_PAD_Y 给 */
+  align-items: flex-start;
   justify-content: center;
   overflow: hidden;
+  background: var(--paper);
 }
 
-/* 纸面：正文区四周的一圈，也是「三层表面」里的内容面 */
+/* 正文块。纸感由舞台底色给，这一层只负责裁掉窗口缩放时还没跟上的旧正文尺寸 */
 .reader__frame {
-  background: var(--paper);
-  border: 1px solid var(--line);
-  box-shadow: var(--shadow-sheet);
   overflow: hidden;
 }
 

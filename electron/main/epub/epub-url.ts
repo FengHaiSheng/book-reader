@@ -95,3 +95,24 @@ export function mimeFor(entry: string): string | null {
   if (dot < 0) return null
   return MIME[entry.slice(dot).toLowerCase()] ?? null
 }
+
+/** 有没有扩展名。`mimeFor` 返回 null 时要靠它区分「认不出」与「压根没有」。 */
+export function hasExtension(entry: string): boolean {
+  return entry.slice(entry.lastIndexOf('/') + 1).includes('.')
+}
+
+/**
+ * 无扩展名的 entry 认不了文件名，只能读出来看开头。
+ *
+ * 真存在这种书：转换工具产出的 epub 会把正文写成 `OEBPS/Text/chapter001`（OPF 里
+ * 照样声明 media-type="application/xhtml+xml"）。同一个 zip 里 `mimetype` 也没有
+ * 扩展名，但它不是文档——所以按内容而不是按名字放行，认不出的一律返回 null。
+ */
+export function sniffDocumentMime(bytes: Uint8Array): string | null {
+  const head = new TextDecoder('utf-8').decode(bytes.subarray(0, 1024))
+  const text = head.replace(/^\uFEFF/, '').trimStart()
+  if (text.startsWith('<?xml') || /^<!doctype\s+html\b/i.test(text) || /^<html[\s>]/i.test(text)) {
+    return 'application/xhtml+xml'
+  }
+  return null
+}

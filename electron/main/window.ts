@@ -21,7 +21,7 @@ export function createMainWindow(): BrowserWindow {
     minWidth: 840,
     minHeight: 600,
     show: false,
-    backgroundColor: '#E8E3DA',
+    backgroundColor: '#EEE9E1',
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),

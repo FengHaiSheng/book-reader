@@ -128,6 +128,28 @@ export class ChapterPaginator {
     this.settle(Math.floor(contentX / this.step) * this.step)
   }
 
+  /**
+   * 定位点所在的矩形，用来算它落在第几栏。
+   *
+   * 折叠 Range 正好压在分栏边界上时，Chromium 把它报在「两栏之间」：量到的 left 比本栏
+   * 左沿还小一个栏间距，按它算页码就会倒退一页 —— 这正是「读到第 2 页、重开却回到第 1 页」
+   * 的根因。把 Range 往右扩一个字再量，量到的才是这个字真正画在哪一栏；取两者较大的
+   * left，保证只会算到后一栏，不会反过来往回错。
+   */
+  private anchorRect(range: Range): DOMRect {
+    const collapsed = range.getBoundingClientRect()
+    const node = range.startContainer
+    // 跨 realm：iframe 里的节点不能用 instanceof 判，只能看 nodeType
+    if (node.nodeType !== 3) return collapsed
+    const text = node as Text
+    // 已经到文本末尾，右边没有字可扩，只能认折叠 Range 的结果
+    if (range.startOffset >= text.data.length) return collapsed
+    const widened = range.cloneRange()
+    widened.setEnd(text, range.startOffset + 1)
+    const box = widened.getBoundingClientRect()
+    return box.left > collapsed.left ? box : collapsed
+  }
+
   /** 把定位点移到 CFI 所在页；CFI 坏掉或找不到节点时返回 false，由调用方兜底 */
   goToCfi(cfi: string): boolean {
     const parts = localParts(cfi)
@@ -138,7 +160,7 @@ export class ChapterPaginator {
     } catch {
       return false
     }
-    this.settleAt(this.contentLeftOf(range.getBoundingClientRect()))
+    this.settleAt(this.contentLeftOf(this.anchorRect(range)))
     return true
   }
 

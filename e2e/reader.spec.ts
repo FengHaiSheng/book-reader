@@ -2,7 +2,14 @@ import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from '@playwright/test'
-import { longBookFiles, novelFiles, secureFiles, writeEpub } from '../fixtures/make-epub'
+import {
+  bodyMarginFiles,
+  longBookFiles,
+  novelFiles,
+  oneParagraphFiles,
+  secureFiles,
+  writeEpub
+} from '../fixtures/make-epub'
 import { launchAppWithUserData } from './helpers'
 
 test('打开一本书返回目录与空进度，存进去的进度能读回来，删书连进度一起清', async () => {
@@ -170,6 +177,103 @@ test('目录换章、翻到章尾进下一章，进度在重启后仍在', async
   await win.getByRole('button', { name: '打开' }).click()
   await expect(win.locator('.reader__chapter')).toHaveText('第一章 河边')
   await expect(win.locator('.reader__page')).toHaveText(`2 / ${total}`)
+
+  await app.close()
+})
+
+/**
+ * 恢复进度要按「这个字真正画在哪一栏」算。
+ *
+ * 页首那个字落在分栏边界上时，Chromium 把折叠 Range 报在两栏之间 —— 量到的 left
+ * 比本栏左沿还小一个栏间距，页码就会倒退一页。这里逐页验：存进度、重新打开，
+ * 页码不跳。用 `oneParagraphFiles()` 正是为了让第 2 页起都从段落中间起排。
+ */
+test('每页存进度再打开都回到原页，段落中间起排的页也不例外', async () => {
+  const userDataDir = mkdtempSync(join(tmpdir(), 'book-read-restore-'))
+  const epubPath = join(userDataDir, 'one-paragraph.epub')
+  await writeEpub(epubPath, oneParagraphFiles())
+
+  const app = await launchAppWithUserData(userDataDir)
+  const win = await app.firstWindow()
+  await win.evaluate((file) => (window as any).api.library.importPath(file), epubPath)
+  await win.reload()
+  await win.getByRole('button', { name: '打开' }).click()
+  await expect(win.locator('.reader__chapter')).toHaveText('第一章 河边')
+  await waitForChapterLoaded(win)
+
+  const total = await readPageCount(win)
+  // 页数太少就没有「段落中间起排」的页，这个测试也就什么也没证明
+  expect(total).toBeGreaterThan(2)
+
+  for (let page = 1; page <= total; page += 1) {
+    if (page > 1) await win.getByRole('button', { name: '下一页' }).click()
+    await expect(win.locator('.reader__page')).toHaveText(`${page} / ${total}`)
+
+    // 「返回书架」会立刻落库，不必等 600ms 的防抖
+    await win.getByRole('button', { name: '返回书架' }).click()
+    await win.getByRole('button', { name: '打开' }).click()
+    await expect(win.locator('.reader__chapter')).toHaveText('第一章 河边')
+    await waitForChapterLoaded(win)
+    await expect(win.locator('.reader__page')).toHaveText(`${page} / ${total}`)
+  }
+
+  await app.close()
+})
+
+/**
+ * 当前页里最靠左那行文字的位置，相对 iframe 左沿 —— 被裁掉就是负值。
+ *
+ * 只算横向落在可视区里的行，所以量到的是「这一页画出来的最左沿」，
+ * 而不是被移到可视区外的那几栏。
+ */
+async function leftmostTextLeft(win: import('playwright').Page): Promise<number> {
+  return win.evaluate(() => {
+    const iframe = document.querySelector('iframe.reader__view') as HTMLIFrameElement
+    const doc = iframe.contentDocument as Document
+    const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT)
+    let left = Infinity
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      if (!(node.textContent ?? '').trim()) continue
+      const range = doc.createRange()
+      range.selectNodeContents(node)
+      for (const rect of Array.from(range.getClientRects())) {
+        if (rect.width < 1 || rect.right < 0 || rect.left > iframe.clientWidth) continue
+        left = Math.min(left, rect.left)
+      }
+    }
+    return left === Infinity ? 0 : left
+  })
+}
+
+/**
+ * 书自带样式给 body 垫外边距时（calibre 转出来的 epub 几乎都这样），分栏容器不能被挤窄。
+ *
+ * 书里的规则是类选择器，优先级压过阅读器注入的 `body { margin: 0 }`。容器一窄，
+ * 浏览器就按更小的栏距排栏，而翻页步长仍按版心宽算 —— 每翻一页多走一个外边距，
+ * 页码越大正文左边被切得越多，第 3 页起就切掉整个字。
+ */
+test('书自带 body 外边距时，每页正文左边都不被切掉', async () => {
+  const userDataDir = mkdtempSync(join(tmpdir(), 'book-read-body-margin-'))
+  const epubPath = join(userDataDir, 'body-margin.epub')
+  await writeEpub(epubPath, bodyMarginFiles())
+
+  const app = await launchAppWithUserData(userDataDir)
+  const win = await app.firstWindow()
+  await win.evaluate((file) => (window as any).api.library.importPath(file), epubPath)
+  await win.reload()
+  await win.getByRole('button', { name: '打开' }).click()
+  await expect(win.locator('.reader__chapter')).toHaveText('第一章 河边')
+  await waitForChapterLoaded(win)
+
+  const total = await readPageCount(win)
+  // 只有一两页就攒不出位移，这个测试也就什么也没证明
+  expect(total).toBeGreaterThan(2)
+
+  for (let page = 1; page <= Math.min(total, 4); page += 1) {
+    if (page > 1) await win.getByRole('button', { name: '下一页' }).click()
+    await expect(win.locator('.reader__page')).toHaveText(`${page} / ${total}`)
+    expect(await leftmostTextLeft(win)).toBeGreaterThanOrEqual(-0.5)
+  }
 
   await app.close()
 })

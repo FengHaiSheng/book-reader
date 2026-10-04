@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { isBookId, mimeFor, normalizeEntry, parseEpubUrl } from '../electron/main/epub/epub-url'
+import {
+  hasExtension,
+  isBookId,
+  mimeFor,
+  normalizeEntry,
+  parseEpubUrl,
+  sniffDocumentMime
+} from '../electron/main/epub/epub-url'
 
 const ID = '7c1f0e4a-9b2d-4f6e-8a31-5d0c2b7e9f10'
 
@@ -61,6 +68,35 @@ describe('mimeFor', () => {
     expect(mimeFor('OEBPS/content.opf')).toBeNull()
     expect(mimeFor('OEBPS/toc.ncx')).toBeNull()
     expect(mimeFor('OEBPS/noext')).toBeNull()
+  })
+})
+
+describe('hasExtension', () => {
+  it('看文件名而不是目录名', () => {
+    expect(hasExtension('OEBPS.v2/ch1.xhtml')).toBe(true)
+    expect(hasExtension('OEBPS.v2/ch1')).toBe(false)
+    expect(hasExtension('mimetype')).toBe(false)
+  })
+})
+
+describe('sniffDocumentMime', () => {
+  const bytes = (text: string): Uint8Array => new TextEncoder().encode(text)
+
+  it('无扩展名的正文文档按 XHTML 放行', () => {
+    expect(sniffDocumentMime(bytes('<?xml version="1.0" encoding="utf-8"?><html/>'))).toBe(
+      'application/xhtml+xml'
+    )
+    expect(sniffDocumentMime(bytes('<!DOCTYPE html>\n<html><body>hi</body></html>'))).toBe(
+      'application/xhtml+xml'
+    )
+    expect(sniffDocumentMime(bytes('\uFEFF  <html xmlns="http://www.w3.org/1999/xhtml">'))).toBe(
+      'application/xhtml+xml'
+    )
+  })
+
+  it('不是文档就返回 null —— 同样没有扩展名的 mimetype 靠这条挡住', () => {
+    expect(sniffDocumentMime(bytes('application/epub+zip'))).toBeNull()
+    expect(sniffDocumentMime(bytes(''))).toBeNull()
   })
 })
 

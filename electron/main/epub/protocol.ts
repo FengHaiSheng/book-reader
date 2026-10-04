@@ -2,7 +2,7 @@ import { join } from 'node:path'
 import { protocol } from 'electron'
 import { CHAPTER_CSP } from '@shared/csp'
 import { bookDir } from '../library/paths'
-import { EPUB_SCHEME, mimeFor, parseEpubUrl } from './epub-url'
+import { EPUB_SCHEME, hasExtension, mimeFor, parseEpubUrl, sniffDocumentMime } from './epub-url'
 import { readEntries } from './zip'
 
 /**
@@ -29,13 +29,18 @@ export function handleEpubProtocol(): void {
     const target = parseEpubUrl(request.url)
     if (!target) return new Response(null, { status: 400 })
 
-    const mime = mimeFor(target.entry)
-    if (!mime) return new Response(null, { status: 403 })
+    // 有扩展名的一律走白名单，认不出就拒绝：书内的 .js 靠这条挡住
+    const known = mimeFor(target.entry)
+    if (!known && hasExtension(target.entry)) return new Response(null, { status: 403 })
 
     try {
       const files = await readEntries(join(bookDir(target.bookId), 'book.epub'), [target.entry])
       const buffer = files.get(target.entry)
       if (!buffer) return new Response(null, { status: 404 })
+
+      // 无扩展名的（转换工具产出的 epub 会把正文写成 OEBPS/Text/chapter001）只能读出来认
+      const mime = known ?? sniffDocumentMime(buffer)
+      if (!mime) return new Response(null, { status: 403 })
 
       const headers: Record<string, string> = {
         'Content-Type': mime,

@@ -144,6 +144,8 @@ export function scriptedFiles(): EpubFiles {
   files['OEBPS/evil.js'] = 'window.__pwned = true'
   files['OEBPS/style.css'] = 'body { --from-book: 1; }'
   files['OEBPS/images/dot.jpg'] = Buffer.from([0xff, 0xd8, 0xff, 0xd9, 0xff, 0xd9])
+  // 转换工具产出的 epub 会把正文写成没有扩展名的 entry，协议层得靠内容认出来
+  files['OEBPS/plain'] = '<?xml version="1.0" encoding="utf-8"?><html><body><p>没有扩展名的正文</p></body></html>'
   return files
 }
 
@@ -170,6 +172,43 @@ ${paragraphs}</body></html>`
 <body><h1>第二章 夏夜</h1>
 <p>蝉声一直响到后半夜，月光把瓦片照得发白。</p></body></html>`
 
+  return files
+}
+
+/**
+ * 页首落在段落中间的书：整章只有一个超长段落，第 2 页起必然从段落中间起排。
+ *
+ * 与 `longBookFiles()` 的差别就在这里 —— 那本段落等长，栏高又正好是行高的整数倍，
+ * 于是每页都从段落开头起排，正好绕开了「页首那个字的折叠 Range 落在分栏边界上」
+ * 这个坑。要验证「存进度再打开不跳页」，得用这一本。
+ */
+export function oneParagraphFiles(): EpubFiles {
+  const files = novelFiles()
+  const sentence = '河面上浮着一层薄薄的雾，像是有人把整条河搬进了梦里。'
+  files['OEBPS/ch1.xhtml'] = `<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml"><head><title>第一章 河边</title></head>
+<body><h1>第一章 河边</h1>
+<p>${sentence.repeat(120)}</p></body></html>`
+  return files
+}
+
+/**
+ * 书自带样式给 body 垫外边距的书 —— calibre 转出来的 epub 几乎都长这样。
+ *
+ * 书里的规则写成类选择器（calibre 生成的就是 `.calibreN`），优先级压过阅读器注入的
+ * `body { margin: 0 }`，于是分栏容器被挤窄；而翻页步长仍按版心宽算，每翻一页就多走
+ * 一个外边距，页码越大正文左边切得越多，第 3 页起会切掉整个字。
+ */
+export function bodyMarginFiles(): EpubFiles {
+  const files = oneParagraphFiles()
+  files['OEBPS/content.opf'] = (files['OEBPS/content.opf'] as string).replace(
+    '<item id="c2"',
+    '<item id="css" href="style.css" media-type="text/css"/>\n    <item id="c2"'
+  )
+  files['OEBPS/style.css'] = `.calibre2 { margin: 0 5pt; }`
+  files['OEBPS/ch1.xhtml'] = (files['OEBPS/ch1.xhtml'] as string)
+    .replace('</head>', '<link rel="stylesheet" type="text/css" href="style.css"/></head>')
+    .replace('<body>', '<body class="calibre2">')
   return files
 }
 

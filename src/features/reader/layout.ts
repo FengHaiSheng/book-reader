@@ -3,6 +3,9 @@ import type { ReadingPrefs } from '@shared/types'
 /**
  * 纸面留白。这一圈是**屏幕空间**的留白，不参与分栏 —— 也就是说 iframe（正文区）
  * 的尺寸就是纯文字区域，视觉上的页边距由外面的纸面提供。
+ *
+ * 纵向同样是上下各一份：纸面比正文多出下方的那一份，正好被窗口底边裁掉，
+ * 所以看起来是「纸一路通到窗口底部」，而正文在纸面上依然是上下居中的。
  */
 export const PAGE_PAD_X = 48
 export const PAGE_PAD_Y = 40
