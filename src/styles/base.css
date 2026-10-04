@@ -1264,3 +1264,393 @@ html[data-theme='dark'] .seg__b.is-on {
   font-size: 11.5px;
   color: var(--ink-muted);
 }
+
+/* ---- AI 面板 ---- */
+.ai-panel {
+  flex: 0 0 360px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--panel);
+  border-left: 1px solid var(--line);
+}
+
+.ai-panel__head {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  padding: var(--s2) var(--s3);
+  border-bottom: 1px solid var(--line);
+}
+
+.ai-panel__title {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ai-panel__model {
+  font-size: 12px;
+  color: var(--ink-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ai-panel__spacer {
+  flex: 1;
+}
+
+.ai-panel__stream {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--s3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+}
+
+.ai-panel__empty,
+.ai-panel__note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink-muted);
+  line-height: 1.6;
+}
+
+.ai-panel__foot {
+  border-top: 1px solid var(--line);
+  padding: var(--s3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+}
+
+.ai-panel__quote {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s2);
+  padding: 6px 8px;
+  background: var(--paper);
+  border-left: 2px solid var(--accent-link);
+  border-radius: var(--r-sm);
+  font-size: 12px;
+  color: var(--ink-muted);
+  line-height: 1.5;
+}
+
+.ai-panel__input {
+  width: 100%;
+  resize: none;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--paper-raised);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.ai-panel__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+}
+
+.ai-panel__hint {
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+
+/* ---- 消息 ---- */
+.ai-msg {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.ai-msg--user {
+  align-items: flex-end;
+}
+
+.ai-msg__quote {
+  margin: 0;
+  padding: 6px 8px;
+  max-width: 100%;
+  background: var(--paper);
+  border-left: 2px solid var(--accent-link);
+  border-radius: var(--r-sm);
+  color: var(--ink-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.ai-msg__say {
+  margin: 0;
+  padding: 6px 10px;
+  max-width: 90%;
+  background: var(--active);
+  border-radius: var(--r-md);
+}
+
+.ai-msg--assistant {
+  align-items: stretch;
+}
+
+.ai-msg__body {
+  white-space: pre-wrap;
+}
+
+.ai-msg__p {
+  margin: 0 0 var(--s2);
+}
+
+.ai-msg__list {
+  margin: 0 0 var(--s2);
+  padding-left: 1.4em;
+}
+
+.ai-msg__caret {
+  display: inline-block;
+  width: 6px;
+  height: 14px;
+  margin-left: 2px;
+  vertical-align: -2px;
+  background: var(--accent-mark);
+  animation: ai-blink 1s steps(2, start) infinite;
+}
+
+@keyframes ai-blink {
+  to {
+    visibility: hidden;
+  }
+}
+
+.ai-msg__meta,
+.ai-msg__status {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+
+.ai-msg--failed .ai-msg__body {
+  color: var(--ink-muted);
+}
+
+.ai-msg__status--error {
+  color: var(--accent-mark);
+}
+
+.ai-cite {
+  min-width: 16px;
+  height: 16px;
+  padding: 0 3px;
+  margin: 0 1px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: var(--active);
+  color: var(--accent-link);
+  font-size: 11px;
+  line-height: 16px;
+  vertical-align: 2px;
+  cursor: pointer;
+}
+
+.ai-cite:hover {
+  background: var(--accent-link);
+  color: var(--paper);
+}
+
+/* ---- 降级与提示 ---- */
+.ai-degrade {
+  margin: 0;
+  padding: 6px 8px;
+  background: color-mix(in srgb, var(--hl-yellow) 60%, transparent);
+  border-radius: var(--r-sm);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.ai-notice {
+  margin: 0;
+  padding: var(--s2) var(--s3);
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--ink-muted);
+}
+
+.ai-notice--strong {
+  color: var(--ink);
+}
+
+.ai-notice--error {
+  color: var(--accent-mark);
+}
+
+.ai-index-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  padding: var(--s2) var(--s3);
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--ink-muted);
+}
+
+.ai-index-bar--confirm {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.ai-index-bar__actions {
+  display: flex;
+  gap: var(--s2);
+}
+
+.btn--quiet {
+  background: transparent;
+  border-color: transparent;
+  color: var(--ink-muted);
+}
+
+.btn--quiet:hover:not(:disabled) {
+  background: var(--active);
+  color: var(--ink);
+}
+
+/* ---- 结构化任务 ---- */
+.ai-tasks {
+  display: flex;
+  flex-direction: column;
+  border-bottom: 1px solid var(--line);
+}
+
+.ai-task {
+  padding: var(--s2) var(--s3);
+  border-top: 1px solid var(--line);
+}
+
+.ai-task:first-child {
+  border-top: 0;
+}
+
+.ai-task__head {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+}
+
+.ai-task__name {
+  font-size: 13px;
+}
+
+.ai-task__badge {
+  padding: 0 6px;
+  border-radius: var(--r-sm);
+  background: var(--active);
+  font-size: 11px;
+  color: var(--ink-muted);
+}
+
+.ai-task__hint,
+.ai-task__meta {
+  margin: var(--s1) 0 0;
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+
+.ai-task__label {
+  margin: var(--s2) 0 var(--s1);
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+
+.ai-task__text {
+  margin: 0 0 var(--s2);
+  white-space: pre-wrap;
+}
+
+.ai-task__confirm {
+  margin-top: var(--s2);
+}
+
+.ai-task__confirm p {
+  margin: 0 0 var(--s2);
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--ink-muted);
+}
+
+.ai-task__result {
+  margin-top: var(--s2);
+}
+
+.ai-terms {
+  margin: 0;
+  padding-left: 1.2em;
+}
+
+.ai-terms__where {
+  color: var(--ink-muted);
+}
+
+.ai-mindmap {
+  margin: 0;
+  padding-left: 1.2em;
+}
+
+.ai-mindmap ul {
+  margin: 0;
+  padding-left: 1.2em;
+}
+
+.settings__caps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+}
+
+.caps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  overflow: hidden;
+}
+
+.caps__row {
+  display: grid;
+  grid-template-columns: 88px 132px 1fr;
+  gap: var(--s3);
+  align-items: baseline;
+  padding: var(--s3) var(--s4);
+  background: var(--paper);
+}
+
+.caps__row + .caps__row {
+  border-top: 1px solid var(--line);
+}
+
+.caps__name {
+  font-weight: 500;
+}
+
+.caps__state {
+  font-size: 13px;
+  color: var(--ink-muted);
+}
+
+.caps__state--on {
+  color: var(--accent-link);
+}
+
+.caps__fallback {
+  font-size: 13px;
+  color: var(--ink-muted);
+}

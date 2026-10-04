@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { DEFAULT_HIGHLIGHT_COLOR, MAX_HIGHLIGHT_CHARS, type HighlightColor } from '@shared/highlights'
-import type { Highlight, ReadingPrefs, ReaderBook, ReadingTarget } from '@shared/types'
+import type { Citation, Highlight, ReadingPrefs, ReaderBook, ReadingTarget } from '@shared/types'
 import { chapterBlobUrl, prepareChapter } from './document'
 import { computeLayout, PAGE_PAD_Y, type ReaderLayout } from './layout'
 import { ChapterPaginator } from './paginator'
@@ -12,10 +12,17 @@ import { HighlightPopover, POPOVER_MAX_HEIGHT } from './HighlightPopover'
 import { SelectionToolbar, type SelectionState } from './SelectionToolbar'
 import { TocPanel } from './TocPanel'
 import { TypographyPanel } from './TypographyPanel'
+import { AiPanel, type AiSeed } from '../ai/AiPanel'
 
 /** macOS 上是原生红绿灯占着左上角，标题栏内容要让位 */
 const IS_MAC = navigator.userAgent.includes('Mac')
 const BAR_PAD_LEFT = IS_MAC ? 78 : 12
+
+/** 引用回跳失败时的口径：说清「没定位到」，不假装成功 */
+const CITATION_MISS = '没能在这章正文里定位到这段原文（正文与检索用的文本对不上）。'
+
+/** 引用指向的章节没了。书被重新导入过就会这样 */
+const CITATION_NO_CHAPTER = '这条引用对应的章节现在不在书里了，书可能被重新导入过。'
 
 /**
  * 章节文档的 base：`epub://<bookId>/<本章所在目录>/`。
@@ -55,12 +62,17 @@ export function ReaderPage({
   const [annotError, setAnnotError] = useState<string | null>(null)
   /** 当前环境不支持 CSS Custom Highlight API 时，界面上要明说，而不是静静地不画 */
   const [canHighlight, setCanHighlight] = useState(true)
+  const [aiOpen, setAiOpen] = useState(false)
+  const [aiSeed, setAiSeed] = useState<AiSeed | null>(null)
+  const [citationNote, setCitationNote] = useState<string | null>(null)
 
   const stageRef = useRef<HTMLDivElement | null>(null)
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
   const paginatorRef = useRef<ChapterPaginator | null>(null)
-  /** 新文档载入后要跳到的位置：恢复进度用 cfi，书内锚点用 fragment，往回翻章用 edge */
-  const pendingRef = useRef<{ cfi?: string; fragment?: string; edge?: 'end' } | null>(null)
+  /** 新文档载入后要跳到的位置：进度用 cfi、书内锚点用 fragment、往回翻章用 edge、引用回跳用 excerpt */
+  const pendingRef = useRef<{ cfi?: string; fragment?: string; edge?: 'end'; excerpt?: string } | null>(
+    null
+  )
 
   /**
    * 版式只在这里算。`windowWidth` 与 `size` 分开传：断点说的是窗口宽度，
@@ -268,6 +280,9 @@ export function ReaderPage({
     } else if (pending.fragment) {
       // 锚点找不到就停在章首：链接至少把用户带到了对的那一章
       paginator.goToElement(pending.fragment)
+    } else if (pending.excerpt) {
+      // 引用回跳：跨章时摘录要等新文档就位才能匹配，失败也必须明说
+      setCitationNote(paginator.goToExcerpt(pending.excerpt) ? null : CITATION_MISS)
     }
     setPage(paginator.page + 1)
     setPageCount(paginator.pages)
@@ -308,6 +323,43 @@ export function ReaderPage({
     },
     [readable, chapterIndex]
   )
+
+  /**
+   * 点引用上标：跳到那一章的原文处，并把那段原文闪一下。
+   *
+   * 三种结果都要如实呈现：定位成功（闪烁）、跳到章了但没匹配上（提示条）、
+   * 章节都不在了（提示条）。没有第四种「什么都不发生」。
+   */
+  const goToCitation = useCallback(
+    (citation: Citation) => {
+      setCitationNote(null)
+      const index =
+        citation.chapterId === null
+          ? -1
+          : readable.findIndex((item) => item.id === citation.chapterId)
+
+      if (index >= 0 && index !== chapterIndex) {
+        // 跨章：摘录挂上，等新文档就位后由 ⑤ 号 effect 去定位
+        pendingRef.current = { excerpt: citation.excerpt }
+        setChapterIndex(index)
+        return
+      }
+      if (index < 0 && citation.chapterId !== null) {
+        setCitationNote(CITATION_NO_CHAPTER)
+        return
+      }
+      // 就在本章，或引用没带章节号：只在本章里找，不动文档
+      const found = paginatorRef.current?.goToExcerpt(citation.excerpt) ?? false
+      if (!found) setCitationNote(CITATION_MISS)
+    },
+    [readable, chapterIndex]
+  )
+
+  useEffect(() => {
+    if (!citationNote) return
+    const timer = window.setTimeout(() => setCitationNote(null), 6000)
+    return () => window.clearTimeout(timer)
+  }, [citationNote])
 
   /** 处理书内的一次链接点击：内链自己跳，外链交系统，其余忽略 */
   const openLink = useCallback(
@@ -527,6 +579,29 @@ export function ReaderPage({
     iframeRef.current?.contentWindow?.getSelection()?.removeAllRanges()
   }, [selection])
 
+  /**
+   * 浮条上的三个 AI 动作。
+   *
+   * 「问 AI」只把原文放进引用槽、把焦点给输入框，**不发请求**——点击它的时候
+   * 用户还没说想问什么，替他猜一个问题就是在花他的钱（硬规则 1）。
+   * 「解释」「翻译」按一下就发：那一下本身就是完整的显式指令。
+   */
+  const askFromSelection = useCallback(
+    (task: 'ask' | 'explain' | 'translate') => {
+      if (!selection) return
+      setAiSeed(
+        task === 'ask'
+          ? { kind: 'prefill', task: 'ask', text: selection.text }
+          : { kind: 'send', task, text: selection.text }
+      )
+      setAiOpen(true)
+      setSelection(null)
+      // 选区不清掉，下一次 selectionchange 会把浮条又唤醒
+      iframeRef.current?.contentWindow?.getSelection()?.removeAllRanges()
+    },
+    [selection]
+  )
+
   const changeActiveColor = useCallback(
     async (color: HighlightColor) => {
       if (!active) return
@@ -673,6 +748,14 @@ export function ReaderPage({
         <button type="button" className="btn" onClick={() => turn(1)}>
           下一页
         </button>
+        <button
+          type="button"
+          className={`btn${aiOpen ? ' btn--on' : ''}`}
+          aria-pressed={aiOpen}
+          onClick={() => setAiOpen((open) => !open)}
+        >
+          AI
+        </button>
         <button type="button" className="btn" onClick={() => setPanelOpen((open) => !open)}>
           排版
         </button>
@@ -681,6 +764,11 @@ export function ReaderPage({
         <p className="reader__degrade" role="status">
           窗口宽度只够 {layout.charsPerLine} 字／行，已按上限显示
           {layout.fontSizeClamped && `；字号已从 ${prefs?.fontSize} 降到 ${layout.fontSize} 显示`}
+        </p>
+      )}
+      {citationNote && (
+        <p className="reader__degrade" role="status">
+          {citationNote}
         </p>
       )}
       {!canHighlight && docVersion > 0 && (
@@ -718,6 +806,9 @@ export function ReaderPage({
               onMark={(color) => void markSelection(color, false)}
               onNote={() => void markSelection(DEFAULT_HIGHLIGHT_COLOR, true)}
               onCopy={copySelection}
+              onExplain={() => askFromSelection('explain')}
+              onTranslate={() => askFromSelection('translate')}
+              onAsk={() => askFromSelection('ask')}
             />
           )}
           {active && (
@@ -732,6 +823,16 @@ export function ReaderPage({
             />
           )}
         </div>
+        {aiOpen && (
+          <AiPanel
+            bookId={bookId}
+            chapterId={chapter?.id ?? null}
+            seed={aiSeed}
+            onSeedConsumed={() => setAiSeed(null)}
+            onCitation={goToCitation}
+            onClose={() => setAiOpen(false)}
+          />
+        )}
         {panelOpen && prefs && layout && (
           <TypographyPanel
             prefs={prefs}
