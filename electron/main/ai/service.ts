@@ -12,6 +12,7 @@ import type {
   ProviderId
 } from '@shared/types'
 import { searchChunks } from '../library/repo'
+import { getKey } from '../secrets'
 import { getAll } from '../store/settings'
 import { excerptOf, usedCitations } from './citations'
 import { isRunning, indexState } from './index-builder'
@@ -226,19 +227,10 @@ function providerIdLabel(providerId: ProviderId): string {
 }
 
 function hasKey(providerId: ProviderId): boolean {
-  // 延迟 require：provider.ts 依赖 electron 的 safeStorage，服务层不该在
-  // 纯单测环境里被它牵连
-  return getKeySafe(providerId) !== null
-}
-
-function getKeySafe(providerId: ProviderId): string | null {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const secrets = require('../secrets') as { getKey: (id: string) => string | null }
-    return secrets.getKey(providerId)
-  } catch {
-    return null
-  }
+  // 静态导入而非延迟 require：打包后 require('../secrets') 的相对路径会被落到
+  // out/main 下，运行时解析不到，statusOf 就永远报「没配 key」。secrets 只在主进程
+  // 被加载，单测不引入 service.ts，因此这里不必为纯单测环境做隔离。
+  return getKey(providerId) !== null
 }
 
 export function bookTitleOf(db: Database.Database, bookId: string): string {
