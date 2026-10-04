@@ -35,6 +35,15 @@ export function highlightRegistryName(color: HighlightColor): string {
   return `hl-${color}`
 }
 
+/**
+ * 引用回跳时临时标出原文用的注册名。
+ *
+ * 刻意不放进 `HIGHLIGHT_COLORS`：那个数组是「本章标注」的四色，
+ * `clearHighlights` 会整组清掉再重画；把闪烁混进去，每次重画标注都会顺手抹掉它。
+ * 两者的生命周期不同，名字就分开。
+ */
+export const CITATION_FLASH_NAME = 'cite-flash'
+
 export function isHighlightColor(value: unknown): value is HighlightColor {
   return typeof value === 'string' && (HIGHLIGHT_COLORS as readonly string[]).includes(value)
 }

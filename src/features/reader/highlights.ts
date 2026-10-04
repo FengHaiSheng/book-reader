@@ -1,4 +1,9 @@
-import { HIGHLIGHT_COLORS, highlightRegistryName, type HighlightColor } from '@shared/highlights'
+import {
+  CITATION_FLASH_NAME,
+  HIGHLIGHT_COLORS,
+  highlightRegistryName,
+  type HighlightColor
+} from '@shared/highlights'
 import type { Highlight } from '@shared/types'
 import { containsPoint, rangeFromSpan } from './cfi'
 
@@ -78,4 +83,24 @@ export function highlightAt(
     if (item && containsPoint(doc, item, node, offset)) return item
   }
   return null
+}
+
+/** 闪烁持续时长。够看清位置，又不至于赖着不走 */
+export const CITATION_FLASH_MS = 2000
+
+/**
+ * 把一段范围临时标出来，过一会儿自动消失。
+ *
+ * 同样不碰 DOM，理由与 `paintHighlights` 一致（spec §3.4）。
+ * 返回一个「立刻取消」的函数：换位置时要先取消上一次，否则上一处会一直闪到超时。
+ */
+export function flashRange(win: Window, range: Range, ms = CITATION_FLASH_MS): () => void {
+  const api = apiOf(win)
+  if (!api) return () => undefined
+  api.registry.set(CITATION_FLASH_NAME, new api.Ctor(range))
+  const timer = win.setTimeout(() => api.registry.delete(CITATION_FLASH_NAME), ms)
+  return () => {
+    win.clearTimeout(timer)
+    api.registry.delete(CITATION_FLASH_NAME)
+  }
 }

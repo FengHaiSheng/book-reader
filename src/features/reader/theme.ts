@@ -1,5 +1,5 @@
 import type { ReadingPrefs } from '@shared/types'
-import { HIGHLIGHT_COLORS, highlightRegistryName } from '@shared/highlights'
+import { CITATION_FLASH_NAME, HIGHLIGHT_COLORS, highlightRegistryName } from '@shared/highlights'
 import { COLUMN_GAP, type ReaderLayout } from './layout'
 
 /** 与 tokens.css 保持一致的两套字体栈。iframe 里拿不到父文档的 CSS 变量，所以这里写死字面量 */
@@ -30,6 +30,23 @@ function highlightRules(theme: ReadingPrefs['theme']): string {
   color: inherit;
 }`
   ).join('\n')
+}
+
+/**
+ * 引用回跳的闪烁底色。与 `--accent` 同色系，但注入的章节文档里没有 Design Tokens，
+ * 只能写字面量。
+ */
+const CITATION_FLASH_BG: Record<ReadingPrefs['theme'], string> = {
+  light: '#e8c979',
+  dark: '#6a5527'
+}
+
+/** 闪烁只有一种底色，与四色标注分开写，免得有人以为它也在 `HIGHLIGHT_COLORS` 里 */
+function citationFlashRule(theme: ReadingPrefs['theme']): string {
+  return `::highlight(${CITATION_FLASH_NAME}) {
+  background-color: ${CITATION_FLASH_BG[theme]};
+  color: inherit;
+}`
 }
 
 export function readerFontStack(font: ReadingPrefs['font']): string {
@@ -86,5 +103,6 @@ a {
 ::selection {
   background: color-mix(in srgb, ${ink} 18%, transparent);
 }
-${highlightRules(prefs.theme)}`
+${highlightRules(prefs.theme)}
+${citationFlashRule(prefs.theme)}`
 }

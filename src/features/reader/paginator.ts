@@ -1,6 +1,8 @@
 import { toRange } from 'foliate-js/epubcfi.js'
 import type { ReaderLayout } from './layout'
 import { localParts, pointCfi } from './cfi'
+import { flashRange } from './highlights'
+import { rangeFromExcerpt } from './locate'
 
 /** 取页首位置时探的坐标：正文区左上角往里缩一点，保证落在第一行文字里 */
 const PROBE_X = 2
@@ -23,6 +25,8 @@ const PROBE_Y = 2
 export class ChapterPaginator {
   private pagination: ReaderLayout
   private offset = 0
+  /** 上一次闪烁的取消函数。同一章里连点两条引用时，先把上一条收掉 */
+  private cancelFlash: (() => void) | null = null
 
   constructor(
     private readonly doc: Document,
@@ -171,6 +175,24 @@ export class ChapterPaginator {
     const range = this.doc.createRange()
     range.selectNode(element)
     this.settleAt(this.contentLeftOf(range.getBoundingClientRect()))
+    return true
+  }
+
+  /**
+   * 按一段原文定位，并把那段原文闪一下。
+   *
+   * 找不到返回 false，由调用方决定怎么告知用户 —— 这里不抛错、也不退化成章首：
+   * 「以为定位成功了」比「知道没定位到」糟得多。
+   */
+  goToExcerpt(excerpt: string): boolean {
+    const range = rangeFromExcerpt(this.doc, excerpt)
+    if (!range) return false
+    const win = this.doc.defaultView
+    if (!win) return false
+
+    this.settleAt(this.contentLeftOf(range.getBoundingClientRect()))
+    this.cancelFlash?.()
+    this.cancelFlash = flashRange(win, range)
     return true
   }
 
