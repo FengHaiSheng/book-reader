@@ -1,5 +1,7 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import type {
+  AiEstimate,
+  AiEstimateRequest,
   AiResultView,
   BookDigestPayload,
   ChapterSummaryPayload,
@@ -27,10 +29,49 @@ const TASK_CONFIRM: Record<TaskKey, string> = {
   mindmap: '不调用模型：它是把「关键词」的结果按章节重新组织的。'
 }
 
+/**
+ * 预估数字的展示口径。`calls === 0` 表示这次根本不调模型（缓存命中或前置缺失），
+ * 那种情况没有数字可给，只有 note 里的说明。
+ */
+export function estimateLine(estimate: AiEstimate): string {
+  if (estimate.calls === 0) return ''
+  const input = `输入约 ${formatTokens(estimate.inputTokens)} token`
+  const output = `单次最多 ${formatTokens(estimate.maxOutputTokens)} token 输出`
+  if (estimate.calls === 1) return `预估${input} / ${output}`
+  return (
+    `预估${input}（共 ${estimate.calls} 次请求）/ ${output}` +
+    `，输出合计最多 ${formatTokens(estimate.maxOutputTokens * estimate.calls)} token`
+  )
+}
+
+function formatTokens(value: number): string {
+  return value.toLocaleString('en-US')
+}
+
+/** TaskKey → 预估请求。四个任务的 kind 都是 'task'，只有 task 字段不同 */
+function estimateRequestOf(
+  task: TaskKey,
+  bookId: string,
+  chapterId: number | null
+): AiEstimateRequest {
+  return {
+    kind: 'task',
+    bookId,
+    chapterId,
+    task:
+      task === 'summary'
+        ? 'chapterSummary'
+        : task === 'digest'
+          ? 'bookDigest'
+          : task === 'terms'
+            ? 'terms'
+            : 'mindmap'
+  }
+}
+
 export function AiTasks({
   bookId,
   chapterId,
-  chapterCount,
   hasSummary,
   onError,
   onResult
@@ -38,8 +79,6 @@ export function AiTasks({
   bookId: string
   /** null 表示还没有打开具体某一章，「本章小结」据此禁用 */
   chapterId: number | null
-  /** 正文里有多少章。全书要点的成本提示要用它 */
-  chapterCount: number
   /** 本章是否已有小结 —— 决定「本章小结」是不是「查看已有小结」 */
   hasSummary: boolean
   onError: (message: string | null) => void
@@ -49,6 +88,39 @@ export function AiTasks({
   const [results, setResults] = useState<Partial<Record<TaskKey, AiResultView<unknown>>>>({})
   const [running, setRunning] = useState<TaskKey | null>(null)
   const [confirming, setConfirming] = useState<TaskKey | null>(null)
+  /** 确认框里的预估。null 且 estimating 为真表示还在算 */
+  const [estimate, setEstimate] = useState<AiEstimate | null>(null)
+  const [estimating, setEstimating] = useState(false)
+  const [estimateError, setEstimateError] = useState<string | null>(null)
+  /** 连点会发出多个预估请求，只认最后一个的结果 */
+  const estimateSeq = useRef(0)
+
+  /**
+   * 打开确认框，同时去问这次要花多少。
+   *
+   * 预估失败**不拦着开始**：拿不到数字也要让用户能继续，只是照实说「算不出来」。
+   */
+  const confirm = (task: TaskKey): void => {
+    setConfirming(task)
+    setEstimate(null)
+    setEstimateError(null)
+    setEstimating(true)
+    const seq = estimateSeq.current + 1
+    estimateSeq.current = seq
+    void window.api.ai
+      .estimate(estimateRequestOf(task, bookId, chapterId))
+      .then((value) => {
+        if (estimateSeq.current !== seq) return
+        setEstimate(value)
+      })
+      .catch((e) => {
+        if (estimateSeq.current !== seq) return
+        setEstimateError(e instanceof Error ? e.message : '暂时算不出这次要花多少 token')
+      })
+      .finally(() => {
+        if (estimateSeq.current === seq) setEstimating(false)
+      })
+  }
 
   const run = async (task: TaskKey): Promise<void> => {
     setConfirming(null)
@@ -96,7 +168,7 @@ export function AiTasks({
                   type="button"
                   className="btn"
                   disabled={disabled}
-                  onClick={() => (result ? void run(task) : setConfirming(task))}
+                  onClick={() => (result ? void run(task) : confirm(task))}
                 >
                   {running === task ? '生成中…' : result ? '重新生成' : '生成'}
                 </button>
@@ -111,13 +183,24 @@ export function AiTasks({
               <div className="ai-task__confirm">
                 <p>
                   {TASK_CONFIRM[task]}
-                  {task === 'digest' && chapterCount > 0
-                    ? `本书正文共 ${chapterCount} 章，最多发起 ${chapterCount + 1} 次请求。`
-                    : ''}
                   {task === 'summary' && hasSummary
                     ? '这一章已有小结，重新生成会再发一次请求。'
                     : ''}
                 </p>
+                {estimating ? (
+                  <p className="ai-task__hint">正在估算这次要花多少 token…</p>
+                ) : estimateError ? (
+                  <p className="ai-task__hint">暂时无法预估：{estimateError}</p>
+                ) : (
+                  estimate && (
+                    <>
+                      {estimateLine(estimate) !== '' && (
+                        <p>{estimateLine(estimate)}</p>
+                      )}
+                      {estimate.note && <p className="ai-task__hint">{estimate.note}</p>}
+                    </>
+                  )
+                )}
                 <div className="ai-index-bar__actions">
                   <button type="button" className="btn btn--accent" onClick={() => void run(task)}>
                     开始

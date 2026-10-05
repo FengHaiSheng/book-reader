@@ -1,9 +1,11 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { CH } from '@shared/ipc'
 import type { ChatModel } from '@shared/ai'
 import type {
   AiChatResult,
   AiDegradeEvent,
+  AiEstimate,
+  AiEstimateRequest,
   AiMessage,
   AiProgressEvent,
   AiResultView,
@@ -18,9 +20,10 @@ import type {
   HighlightPatch,
   HighlightWithBook,
   ImportOutcome,
-  ImportProgress,
+  ImportProgressEvent,
   IndexState,
   IpcResult,
+  LibraryStats,
   MindmapNode,
   NotesExportOptions,
   NotesExportPreview,
@@ -30,6 +33,7 @@ import type {
   ReaderBook,
   ReadingPrefs,
   SearchHit,
+  Tag,
   TermsPayload
 } from '@shared/types'
 
@@ -58,17 +62,36 @@ const api = {
   library: {
     pickAndImport: async (): Promise<ImportOutcome[] | null> =>
       unwrap(await ipcRenderer.invoke(CH.libraryPickAndImport)),
+    pickFolder: async (): Promise<ImportOutcome[] | null> =>
+      unwrap(await ipcRenderer.invoke(CH.libraryPickFolder)),
     importPath: async (filePath: string): Promise<ImportOutcome> =>
       unwrap(await ipcRenderer.invoke(CH.libraryImportPath, filePath)),
-    list: (): Promise<BookSummary[]> => ipcRenderer.invoke(CH.libraryList),
+    importPaths: async (paths: string[]): Promise<ImportOutcome[]> =>
+      unwrap(await ipcRenderer.invoke(CH.libraryImportPaths, paths)),
+    /**
+     * 拖进来的 File 对象里没有路径，只有 Electron 的 webUtils 能拿。
+     * 它必须跑在 preload，所以这里开一个小口子——只做这一件事，
+     * 不把 webUtils 整个暴露出去。
+     */
+    pathForFile: (file: File): string => webUtils.getPathForFile(file),
+    list: (tagId?: number | null): Promise<BookSummary[]> =>
+      ipcRenderer.invoke(CH.libraryList, tagId ?? null),
+    stats: (): Promise<LibraryStats> => ipcRenderer.invoke(CH.libraryStats),
     chapters: (bookId: string): Promise<ChapterRowView[]> =>
       ipcRenderer.invoke(CH.libraryChapters, bookId),
     search: (bookId: string, query: string, limit?: number): Promise<SearchHit[]> =>
       ipcRenderer.invoke(CH.librarySearch, bookId, query, limit),
     remove: (bookId: string): Promise<void> => ipcRenderer.invoke(CH.libraryRemove, bookId),
+    tagsList: (): Promise<Tag[]> => ipcRenderer.invoke(CH.libraryTagsList),
+    tagCreate: (name: string): Promise<Tag> => ipcRenderer.invoke(CH.libraryTagCreate, name),
+    tagRename: (id: number, name: string): Promise<Tag> =>
+      ipcRenderer.invoke(CH.libraryTagRename, id, name),
+    tagDelete: (id: number): Promise<void> => ipcRenderer.invoke(CH.libraryTagDelete, id),
+    tagAssign: (bookId: string, tagId: number, on: boolean): Promise<void> =>
+      ipcRenderer.invoke(CH.libraryTagAssign, bookId, tagId, on),
     /** 返回取消订阅函数，供 React 的 useEffect 清理 */
-    onImportProgress: (listener: (progress: ImportProgress) => void): (() => void) => {
-      const handler = (_event: Electron.IpcRendererEvent, progress: ImportProgress): void =>
+    onImportProgress: (listener: (progress: ImportProgressEvent) => void): (() => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, progress: ImportProgressEvent): void =>
         listener(progress)
       ipcRenderer.on(CH.libraryImportProgress, handler)
       return () => ipcRenderer.removeListener(CH.libraryImportProgress, handler)
@@ -113,6 +136,9 @@ const api = {
       question?: string
     }): Promise<AiChatResult> => ipcRenderer.invoke(CH.aiChat, request),
     cancel: (requestId: string): Promise<void> => ipcRenderer.invoke(CH.aiCancel, requestId),
+    /** 花钱之前的 token 预估。不调模型，也不消耗 token */
+    estimate: (request: AiEstimateRequest): Promise<AiEstimate> =>
+      ipcRenderer.invoke(CH.aiEstimate, request),
     history: (bookId: string, scopeKey: string): Promise<AiMessage[]> =>
       ipcRenderer.invoke(CH.aiHistory, bookId, scopeKey),
     clear: (bookId: string, scopeKey: string): Promise<void> =>

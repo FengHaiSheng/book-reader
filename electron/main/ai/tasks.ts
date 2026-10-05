@@ -2,6 +2,8 @@ import type Database from 'better-sqlite3'
 import { PROVIDER_AI, modelOf } from '@shared/ai'
 import { appError, toAppError } from '@shared/errors'
 import type {
+  AiEstimate,
+  AiEstimateRequest,
   AiResultView,
   AiUsage,
   BookDigestPayload,
@@ -17,12 +19,18 @@ import { buildMessages } from './prompts'
 import { chat, type ChatResult } from './provider'
 import { getResult, markUnavailable, saveResult, unavailableCaps, type ResultKey } from './repo'
 import { isJsonModeRejection } from './retry'
-import { estimateTokens, fitPassages, slicesOf } from './retrieve'
-import { bookTitleOf, chapterTextOf, chapterTitleOf } from './service'
+import { estimateTokens, fitPassages, messagesTokens, slicesOf } from './retrieve'
+import { aiSettings, bookTitleOf, chapterTextOf, chapterTitleOf } from './service'
 
 const ZERO: AiUsage = { inputTokens: 0, outputTokens: 0 }
 const MAX_OUTPUT = 2048
 const SLICE_SIZE = 1200
+
+/**
+ * 合成（reduce）那一步的输入是模型上一轮的输出，事先算不准，只能按固定假设填一份占位小结。
+ * 这是**假设不是实测**，所以带它的预估必须在 note 里说明。
+ */
+const EST_SUMMARY_TOKENS = 240
 
 const JSON_NOT_DECLARED = '当前模型不支持结构化输出，已改为提示词约束 + 本地解析。'
 const JSON_REJECTED =
@@ -156,7 +164,10 @@ function baseContext(db: Database.Database, bookId: string, chapterId: number | 
   }
 }
 
-function summaryKey(bookId: string, chapterId: number, call: CallContext): ResultKey {
+/** 结果缓存的键只看服务商与模型：换模型就等于换一份结果，signal 与键无关 */
+type CacheCall = { providerId: ProviderId; model: string }
+
+function summaryKey(bookId: string, chapterId: number, call: CacheCall): ResultKey {
   return {
     bookId,
     task: 'chapterSummary',
@@ -164,6 +175,14 @@ function summaryKey(bookId: string, chapterId: number, call: CallContext): Resul
     provider: call.providerId,
     model: call.model
   }
+}
+
+function termsKey(bookId: string, call: CacheCall): ResultKey {
+  return { bookId, task: 'terms', scopeKey: 'book', provider: call.providerId, model: call.model }
+}
+
+function mindmapKey(bookId: string, call: CacheCall): ResultKey {
+  return { bookId, task: 'mindmap', scopeKey: 'book', provider: call.providerId, model: call.model }
 }
 
 /**
@@ -175,7 +194,7 @@ function savedSummary(
   db: Database.Database,
   bookId: string,
   chapter: { id: number; title: string },
-  call: CallContext
+  call: CacheCall
 ): { chapterTitle: string; overview: string; keyPoints: string[] } | null {
   const stored = getResult<ChapterSummaryPayload>(db, summaryKey(bookId, chapter.id, call))
   if (!stored) return null
@@ -356,7 +375,10 @@ export async function runBookDigest(
       const text = chapterTextOf(db, chapter.id)
       const { kept, dropped } = fitPassages(
         slicesOf(text, SLICE_SIZE),
-        budgetFor(input.providerId, input.model, text)
+        // budgetFor 的第三个参数是「正文之外还要占预算的查询内容」。这一章本身就由
+        // fitPassages 装进预算，再把它当 query 扣一遍就是重复计算：长章节的预算会被
+        // 自己的长度吃掉，直接掉到 400 的下限，结果只剩前半章。与 runChapterSummary 同口径。
+        budgetFor(input.providerId, input.model, '')
       )
       if (dropped > 0) clipped += 1
       calls += 1
@@ -493,13 +515,7 @@ export function runMindmap(
     model: input.model,
     signal: new AbortController().signal
   }
-  const key: ResultKey = {
-    bookId: input.bookId,
-    task: 'mindmap',
-    scopeKey: 'book',
-    provider: input.providerId,
-    model: input.model
-  }
+  const key = mindmapKey(input.bookId, call)
   const cached = getResult<MindmapNode>(db, key)
   if (cached) {
     return toView('', cached.payload, {
@@ -534,6 +550,210 @@ export function runMindmap(
     createdAt: now,
     note: '思维导图由「关键词」的结果组织而成，这一次没有调用模型，也没有产生费用。'
   })
+}
+
+// ---------- 花钱之前的预估 ----------
+
+/**
+ * 结构化任务的开跑前预估。
+ *
+ * 口径与 `run*` 系列严格对齐：同一套 `slicesOf` / `fitPassages` / `budgetFor` / `buildMessages`，
+ * 同一套缓存判定。哪里算不准（合成那一步的输入取决于模型输出）就按假设填一份占位小结，
+ * 并把「这是假设」写进 note——不编一个看起来精确的数字。
+ *
+ * **不调任何模型**：全程只读库，所以预估本身不产生费用。
+ */
+export type TaskEstimateRequest = Extract<AiEstimateRequest, { kind: 'task' }>
+
+export function estimateTask(db: Database.Database, request: TaskEstimateRequest): AiEstimate {
+  const { providerId, model } = aiSettings(db)
+  const call: CacheCall = { providerId, model }
+  const maxOutput = Math.min(MAX_OUTPUT, PROVIDER_AI[providerId].maxOutputTokens)
+
+  switch (request.task) {
+    case 'chapterSummary':
+      return estimateChapterSummary(db, request, call, maxOutput)
+    case 'bookDigest':
+      return estimateBookDigest(db, request, call, maxOutput)
+    case 'terms':
+      return estimateTerms(db, request, call, maxOutput)
+    case 'mindmap':
+      return estimateMindmap(db, request, call)
+  }
+}
+
+/**
+ * 合成那一步的占位小结：内容是假设的，只用来撑起提示词骨架的长度。
+ *
+ * 用等长中文占位——`estimateTokens` 对中文按 1 字 1 token 计，重复 EST_SUMMARY_TOKENS 次
+ * 就等于假设值，而且渲染仍走 `buildMessages`，与真实请求同一条路径。
+ */
+function placeholderSummary(chapterTitle: string): PartialSummary {
+  return { chapterTitle, overview: '约'.repeat(EST_SUMMARY_TOKENS), keyPoints: [] }
+}
+
+function estimateChapterSummary(
+  db: Database.Database,
+  request: TaskEstimateRequest,
+  call: CacheCall,
+  maxOutput: number
+): AiEstimate {
+  if (request.chapterId === null) {
+    return zeroEstimate('还没有选中具体某一章，先翻到正文里的某一章再做本章小结。')
+  }
+  if (getResult(db, summaryKey(request.bookId, request.chapterId, call))) {
+    return zeroEstimate('这一章已有小结，会直接读缓存，不发起请求、不产生费用。')
+  }
+
+  const context = baseContext(db, request.bookId, request.chapterId)
+  const chapterText = chapterTextOf(db, request.chapterId)
+  if (chapterText.trim() === '') {
+    return zeroEstimate('这一章没有可用的正文，做不了小结。')
+  }
+
+  const { kept, dropped } = fitPassages(
+    slicesOf(chapterText, SLICE_SIZE),
+    budgetFor(call.providerId, call.model, '')
+  )
+
+  if (dropped === 0) {
+    const messages = buildMessages('chapterSummary', {
+      ...context,
+      chapterText: kept.map((slice) => slice.text).join('\n\n')
+    })
+    return {
+      inputTokens: messagesTokens(messages),
+      maxOutputTokens: maxOutput,
+      calls: 1,
+      note: null
+    }
+  }
+
+  // 长章节走 map-reduce：map 每段一次（输入可精确算），再合成一次（输入取决于模型输出）
+  const mapTokens = kept.reduce(
+    (sum, slice) =>
+      sum +
+      messagesTokens(buildMessages('chapterSummary', { ...context, chapterText: slice.text })),
+    0
+  )
+  const reduceTokens = messagesTokens(
+    buildMessages('chapterSummary', {
+      ...context,
+      summaries: kept.map((slice) => placeholderSummary(`${context.chapterTitle ?? '本章'}（第 ${slice.index} 段）`))
+    })
+  )
+  return {
+    inputTokens: mapTokens + reduceTokens,
+    maxOutputTokens: maxOutput,
+    calls: kept.length + 1,
+    note: `这一章较长，要分 ${kept.length} 段读取再合成，共 ${kept.length + 1} 次请求。合成那一次的输入来自前一步的输出，只能按约 ${EST_SUMMARY_TOKENS} token/份估算。`
+  }
+}
+
+function estimateBookDigest(
+  db: Database.Database,
+  request: TaskEstimateRequest,
+  call: CacheCall,
+  maxOutput: number
+): AiEstimate {
+  const chapters = bodyChapters(db, request.bookId)
+  if (chapters.length === 0) return zeroEstimate('这本书还没有可用的章节正文。')
+
+  const summaries: PartialSummary[] = []
+  let inputTokens = 0
+  let newCalls = 0
+  let reused = 0
+  let clipped = 0
+
+  for (const chapter of chapters) {
+    const saved = savedSummary(db, request.bookId, chapter, call)
+    if (saved) {
+      summaries.push(saved)
+      reused += 1
+      continue
+    }
+
+    const text = chapterTextOf(db, chapter.id)
+    // 与 runBookDigest 同一口径：正文交给 fitPassages，不再当 query 重复扣一次
+    const { kept, dropped } = fitPassages(
+      slicesOf(text, SLICE_SIZE),
+      budgetFor(call.providerId, call.model, '')
+    )
+    if (dropped > 0) clipped += 1
+    newCalls += 1
+    inputTokens += messagesTokens(
+      buildMessages('bookDigest', {
+        ...baseContext(db, request.bookId, chapter.id),
+        chapterText: kept.map((slice) => slice.text).join('\n\n')
+      })
+    )
+    summaries.push(placeholderSummary(chapter.title))
+  }
+
+  // 最后那次归纳：已有小结的章用真实内容（可精确算），新生成的章只能用占位
+  inputTokens += messagesTokens(
+    buildMessages('bookDigest', { ...baseContext(db, request.bookId, null), summaries })
+  )
+
+  const parts = [
+    newCalls === 0
+      ? '每一章都已有小结，只会做最后一次归纳，共 1 次请求。'
+      : `逐章读取 ${chapters.length} 章，其中 ${reused} 章直接复用已有小结，本次共发起 ${newCalls + 1} 次请求。`,
+    newCalls > 0
+      ? `本次要新生成 ${newCalls} 章的小结，归纳那一次的输入按约 ${EST_SUMMARY_TOKENS} token/章估算。`
+      : '',
+    clipped > 0 ? `有 ${clipped} 章因超出上下文上限只读了前半部分。` : ''
+  ]
+  return {
+    inputTokens,
+    maxOutputTokens: maxOutput,
+    calls: newCalls + 1,
+    note: parts.filter((part) => part !== '').join(' ')
+  }
+}
+
+function estimateTerms(
+  db: Database.Database,
+  request: TaskEstimateRequest,
+  call: CacheCall,
+  maxOutput: number
+): AiEstimate {
+  if (getResult(db, termsKey(request.bookId, call))) {
+    return zeroEstimate('关键词已经有结果，会直接读缓存，不发起请求、不产生费用。')
+  }
+
+  const summaries: PartialSummary[] = []
+  for (const chapter of bodyChapters(db, request.bookId)) {
+    const saved = savedSummary(db, request.bookId, chapter, call)
+    if (saved) summaries.push(saved)
+  }
+  if (summaries.length === 0) {
+    return zeroEstimate('还没有任何一章的小结。关键词要有依据，先做一次「全书要点」或至少一章的「本章小结」。')
+  }
+
+  // 输入全部来自库里已有的小结，这一条是精确值，不需要假设
+  const messages = buildMessages('terms', { ...baseContext(db, request.bookId, null), summaries })
+  return {
+    inputTokens: messagesTokens(messages),
+    maxOutputTokens: maxOutput,
+    calls: 1,
+    note: `用的是已存的 ${summaries.length} 章小结，不需要重新读正文。`
+  }
+}
+
+function estimateMindmap(db: Database.Database, request: TaskEstimateRequest, call: CacheCall): AiEstimate {
+  if (getResult(db, mindmapKey(request.bookId, call))) {
+    return zeroEstimate('思维导图已经有结果，会直接读缓存。')
+  }
+  if (!getResult(db, termsKey(request.bookId, call))) {
+    return zeroEstimate('思维导图是把「关键词」按章节重新组织的，先生成一次关键词。')
+  }
+  return zeroEstimate('思维导图不调用模型，是把已有「关键词」按章节重新组织的，不产生费用。')
+}
+
+/** calls 为 0 的预估：不发起任何请求，界面据此不显示 token 数字 */
+function zeroEstimate(note: string): AiEstimate {
+  return { inputTokens: 0, maxOutputTokens: 0, calls: 0, note }
 }
 
 // ---------- 形状校验 ----------

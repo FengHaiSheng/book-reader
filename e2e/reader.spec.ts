@@ -78,6 +78,15 @@ async function waitForChapterLoaded(win: import('playwright').Page): Promise<voi
   })
 }
 
+/**
+ * 从书架打开第一本书。书架默认是网格视图，没有「打开」按钮——切到列表再点，
+ * 这样与旧用例的交互路径保持一致（网格卡片本身也能点开，这里只是让断言少变）。
+ */
+async function openFirstBook(win: import('playwright').Page): Promise<void> {
+  await win.getByRole('button', { name: '列表' }).click()
+  await win.getByRole('button', { name: '打开' }).click()
+}
+
 test('打开一本书：正文渲染出来、能翻页、到边界停在原地', async () => {
   const userDataDir = mkdtempSync(join(tmpdir(), 'book-read-page-'))
   const epubPath = join(userDataDir, 'long.epub')
@@ -89,7 +98,7 @@ test('打开一本书：正文渲染出来、能翻页、到边界停在原地',
   // 这里走的是 API 导入，绕过了界面上的导入按钮，书架不会自己刷新 —— 重载一次让列表读到新书
   await win.reload()
 
-  await win.getByRole('button', { name: '打开' }).click()
+  await openFirstBook(win)
   await expect(win.locator('.reader')).toBeVisible()
   await expect(win.locator('.reader__chapter')).toHaveText('第一章 河边')
 
@@ -132,7 +141,7 @@ test('目录换章、翻到章尾进下一章，进度在重启后仍在', async
   let win = await app.firstWindow()
   await win.evaluate((file) => (window as any).api.library.importPath(file), epubPath)
   await win.reload()
-  await win.getByRole('button', { name: '打开' }).click()
+  await openFirstBook(win)
   await expect(win.locator('.reader__chapter')).toHaveText('第一章 河边')
   await waitForChapterLoaded(win)
 
@@ -174,7 +183,7 @@ test('目录换章、翻到章尾进下一章，进度在重启后仍在', async
   await app.close()
   app = await launchAppWithUserData(userDataDir)
   win = await app.firstWindow()
-  await win.getByRole('button', { name: '打开' }).click()
+  await openFirstBook(win)
   await expect(win.locator('.reader__chapter')).toHaveText('第一章 河边')
   await expect(win.locator('.reader__page')).toHaveText(`2 / ${total}`)
 
@@ -197,7 +206,7 @@ test('每页存进度再打开都回到原页，段落中间起排的页也不�
   const win = await app.firstWindow()
   await win.evaluate((file) => (window as any).api.library.importPath(file), epubPath)
   await win.reload()
-  await win.getByRole('button', { name: '打开' }).click()
+  await openFirstBook(win)
   await expect(win.locator('.reader__chapter')).toHaveText('第一章 河边')
   await waitForChapterLoaded(win)
 
@@ -211,7 +220,7 @@ test('每页存进度再打开都回到原页，段落中间起排的页也不�
 
     // 「返回书架」会立刻落库，不必等 600ms 的防抖
     await win.getByRole('button', { name: '返回书架' }).click()
-    await win.getByRole('button', { name: '打开' }).click()
+    await openFirstBook(win)
     await expect(win.locator('.reader__chapter')).toHaveText('第一章 河边')
     await waitForChapterLoaded(win)
     await expect(win.locator('.reader__page')).toHaveText(`${page} / ${total}`)
@@ -261,7 +270,7 @@ test('书自带 body 外边距时，每页正文左边都不被切掉', async ()
   const win = await app.firstWindow()
   await win.evaluate((file) => (window as any).api.library.importPath(file), epubPath)
   await win.reload()
-  await win.getByRole('button', { name: '打开' }).click()
+  await openFirstBook(win)
   await expect(win.locator('.reader__chapter')).toHaveText('第一章 河边')
   await waitForChapterLoaded(win)
 
@@ -315,7 +324,7 @@ test('书内脚本一律不执行，书内图片与样式照常生效', async ()
   await win.evaluate((file) => (window as any).api.library.importPath(file), epubPath)
   await win.reload()
 
-  await win.getByRole('button', { name: '打开' }).click()
+  await openFirstBook(win)
   await expect(win.locator('.reader__chapter')).toHaveText('第一章 河边')
 
   // 图片解码完成是异步的，先等到 complete 再一次性取样
@@ -351,7 +360,7 @@ test('窗口变窄时排版降级，界面明说而不是静默处理', async ()
   const win = await app.firstWindow()
   await win.evaluate((file) => (window as any).api.library.importPath(file), epubPath)
   await win.reload()
-  await win.getByRole('button', { name: '打开' }).click()
+  await openFirstBook(win)
   await expect(win.locator('.reader__chapter')).toHaveText('第一章 河边')
   await waitForChapterLoaded(win)
 
@@ -381,7 +390,7 @@ test('Aa 面板改字号立刻生效，重进应用后仍然是新值', async ()
   let win = await app.firstWindow()
   await win.evaluate((file) => (window as any).api.library.importPath(file), epubPath)
   await win.reload()
-  await win.getByRole('button', { name: '打开' }).click()
+  await openFirstBook(win)
   await expect(win.locator('.reader__chapter')).toHaveText('第一章 河边')
 
   // 默认字号 19，面板没打开时没有滑块可拖
@@ -403,7 +412,7 @@ test('Aa 面板改字号立刻生效，重进应用后仍然是新值', async ()
   // 重启：偏好存在 settings 表里，与书无关
   app = await launchAppWithUserData(userDataDir)
   win = await app.firstWindow()
-  await win.getByRole('button', { name: '打开' }).click()
+  await openFirstBook(win)
   await expect(win.locator('.reader__chapter')).toHaveText('第一章 河边')
   await expect.poll(async () => (await readChapterDom(win)).bodyFontSize).toBe('20px')
 

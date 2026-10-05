@@ -18,6 +18,22 @@ export function estimateTokens(text: string): number {
 }
 
 /**
+ * 每条消息的固定开销：role 标记、分隔符都在请求体里真实存在，只按 content 求和会低估。
+ * 和 `estimateTokens` 一样，只要一个保守不超的估计。
+ */
+const MESSAGE_OVERHEAD = 4
+
+/**
+ * 把构造好的 messages 折成一个输入 token 数。
+ *
+ * 预估必须走 `buildMessages` 的产物再求和，不能直接拿正文估——系统提示、`[n]` 编号、
+ * 「参考资料」这类骨架都在 messages 里，少算它们预估就不等于要发出去的东西。
+ */
+export function messagesTokens(messages: readonly { content: string }[]): number {
+  return messages.reduce((sum, message) => sum + estimateTokens(message.content) + MESSAGE_OVERHEAD, 0)
+}
+
+/**
  * 以 needle 所在段为中心开窗。
  *
  * 这是「就这段话问」场景的主力：bigram 关键词召回在中文短句上偶尔会空手而归，

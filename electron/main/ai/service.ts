@@ -5,6 +5,7 @@ import { PROVIDERS } from '@shared/types'
 import type {
   AiChatResult,
   AiDegrade,
+  AiEstimate,
   AiStatus,
   AiUsage,
   Citation,
@@ -16,6 +17,7 @@ import { getKey } from '../secrets'
 import { getAll } from '../store/settings'
 import { excerptOf, usedCitations } from './citations'
 import { indexState, isRunning, searchByVector } from './index-builder'
+import type { ChatMessage } from './params'
 import { buildMessages } from './prompts'
 import { chat, embed } from './provider'
 import { markUnavailable, unavailableCaps } from './repo'
@@ -23,10 +25,17 @@ import {
   estimateTokens,
   fitPassages,
   fuseRanks,
+  messagesTokens,
   toPassages,
   windowFromText,
   type Passage
 } from './retrieve'
+
+/** 单次对话的输出上限。界面上的「最多 N 输出」用它，不能各写各的 */
+export const CHAT_MAX_OUTPUT = 2048
+
+/** 预算里给输出与提示词骨架留的余量，不能全喂给参考资料 */
+const CHAT_BUDGET_RESERVE = 1200
 
 export const DEFAULT_AI_MODEL: Record<ProviderId, string> = {
   deepseek: 'deepseek-chat',
@@ -83,6 +92,14 @@ export type ChatInput = {
   scopeKey: string
 }
 
+/**
+ * 一次对话所需的全部上下文，**不含 requestId**。
+ *
+ * 预估发生在用户点「发送」之前，那时还没有 requestId，也不该为预估伪造一个。
+ * 把 requestId 留在 `ChatInput`，让它只属于真正的调用。
+ */
+export type ChatContext = Omit<ChatInput, 'requestId'>
+
 export type ChatHooks = {
   onDelta: (text: string) => void
   signal: AbortSignal
@@ -121,8 +138,7 @@ export async function runChat(
     })
   }
 
-  const query = (input.question ?? input.excerpt ?? '').trim()
-  const keywordHits = query === '' ? [] : searchChunks(db, input.bookId, query, 12)
+  const query = chatQuery(input)
 
   // 建过索引的书才走向量：query 向量是一次付费调用，索引为空就没有可比的对象。
   // 这部分 token 不计入展示用量——用量只统计对话本身（AiUsage 的语义）。
@@ -149,12 +165,79 @@ export async function runChat(
     }
   }
 
+  const plan = planChat(db, input, { providerId, model, vectorRanked })
+
+  if (plan.dropped > 0) {
+    degraded.push({
+      kind: 'contextTruncated',
+      message: `上下文窗口不够，本次只送入了本书 ${plan.numbered.length} 段原文，回答范围受限。`
+    })
+  }
+
+  const result = await chat({
+    providerId,
+    model,
+    input: { messages: plan.messages, maxTokens: CHAT_MAX_OUTPUT, temperature: 0.3, stream: caps.stream },
+    onDelta: (delta) => hooks.onDelta(delta.text),
+    signal: hooks.signal
+  })
+
+  const citations: Citation[] = plan.numbered.map((source) => ({
+    index: source.passage.index,
+    chunkId: source.chunkId,
+    chapterId: source.chapterId,
+    chapterTitle: chapterTitleOf(db, source.chapterId),
+    headingPath: source.headingPath,
+    excerpt: excerptOf(source.passage.text)
+  }))
+
+  return {
+    requestId: input.requestId,
+    content: result.content,
+    usage: normalizeUsage(result.usage),
+    // 只保留回答里真的引用到的：幻觉编号在这里被丢掉
+    citations: usedCitations(result.content, citations),
+    degraded
+  }
+}
+
+/** 检索 + 截断 + 提示词构造的结果。`runChat` 用它发请求，预估用它算 token */
+type ChatPlan = {
+  messages: ChatMessage[]
+  /** 编号后的片段。runChat 拿它做引用映射 */
+  numbered: Source[]
+  /** 因为预算被丢掉的段数，对应 contextTruncated 降级文案 */
+  dropped: number
+}
+
+function chatQuery(input: ChatContext): string {
+  return (input.question ?? input.excerpt ?? '').trim()
+}
+
+/**
+ * 「先检索、再截断、最后才建 messages」这一段。
+ *
+ * `runChat` 与 `estimateChat` 共用**同一个**计划：预估要是另写一套，两个数字迟早对不上，
+ * 那预估就是在骗人。
+ *
+ * `vectorRanked` 传空数组就退化成纯关键词路——预估走的就是这一条，因为拿一个 query
+ * 向量必须真的调一次 embedding，而预估绝不能花钱。
+ */
+function planChat(
+  db: Database.Database,
+  input: ChatContext,
+  call: { providerId: ProviderId; model: string; vectorRanked: readonly number[] }
+): ChatPlan {
+  const caps = PROVIDER_AI[call.providerId]
+  const query = chatQuery(input)
+  const keywordHits = query === '' ? [] : searchChunks(db, input.bookId, query, 12)
+
   // 两路名次融合（RRF）后再取回正文：融合后的顺序就是优先级。关键词那路覆盖全部段落，
   // 所以融合只可能补进向量召回的新段，不会丢掉原有的。
   const fusedIds =
-    vectorRanked.length === 0
+    call.vectorRanked.length === 0
       ? []
-      : fuseRanks([keywordHits.map((hit) => hit.chunkId), vectorRanked]).map((rank) => rank.chunkId)
+      : fuseRanks([keywordHits.map((hit) => hit.chunkId), call.vectorRanked]).map((rank) => rank.chunkId)
   const hits = fusedIds.length === 0 ? keywordHits : chunksByIds(db, fusedIds)
 
   const sources: Source[] = toPassages(hits).map((passage, index) => {
@@ -181,24 +264,16 @@ export async function runChat(
   }
 
   // 编号在截断之后才定：被丢掉的段不能占用编号，否则回答里的 [3] 会指向空
-  const budget = Math.min(caps.maxInputTokens, modelInfo.maxContext) - 1200 - estimateTokens(query)
+  const maxContext = modelOf(call.providerId, call.model)?.maxContext ?? caps.maxInputTokens
+  const budget = Math.min(caps.maxInputTokens, maxContext) - CHAT_BUDGET_RESERVE - estimateTokens(query)
   const { kept, dropped } = fitPassages(
     sources.map((source) => source.passage),
     Math.max(200, budget)
   )
-  const keptSources = sources.slice(0, kept.length)
-  const numbered = keptSources.map((source, index) => ({
+  const numbered = sources.slice(0, kept.length).map((source, index) => ({
     ...source,
-    passage: { ...source.passage, index: index + 1 },
-    chunkId: source.chunkId
+    passage: { ...source.passage, index: index + 1 }
   }))
-
-  if (dropped > 0) {
-    degraded.push({
-      kind: 'contextTruncated',
-      message: `上下文窗口不够，本次只送入了本书 ${numbered.length} 段原文，回答范围受限。`
-    })
-  }
 
   const messages = buildMessages(input.task, {
     bookTitle: bookTitleOf(db, input.bookId),
@@ -208,31 +283,46 @@ export async function runChat(
     passages: numbered.map((source) => source.passage)
   })
 
-  const result = await chat({
-    providerId,
-    model,
-    input: { messages, maxTokens: 2048, temperature: 0.3, stream: caps.stream },
-    onDelta: (delta) => hooks.onDelta(delta.text),
-    signal: hooks.signal
-  })
+  return { messages, numbered, dropped }
+}
 
-  const citations: Citation[] = numbered.map((source) => ({
-    index: source.passage.index,
-    chunkId: source.chunkId,
-    chapterId: source.chapterId,
-    chapterTitle: chapterTitleOf(db, source.chapterId),
-    headingPath: source.headingPath,
-    excerpt: excerptOf(source.passage.text)
-  }))
-
-  return {
-    requestId: input.requestId,
-    content: result.content,
-    usage: normalizeUsage(result.usage),
-    // 只保留回答里真的引用到的：幻觉编号在这里被丢掉
-    citations: usedCitations(result.content, citations),
-    degraded
+/**
+ * 花钱之前的预估。只读库、只做检索与截断，**不调任何模型**，因此它本身不产生费用。
+ */
+export function estimateChat(db: Database.Database, input: ChatContext): AiEstimate {
+  const { providerId, model } = aiSettings(db)
+  if (!modelOf(providerId, model)) {
+    // 真发也是这个错，预估照实说，别给一个发不出去的数字
+    throw appError('AI_UNSUPPORTED', '当前模型不在内置清单里，请到设置里重新选择')
   }
+
+  const plan = planChat(db, input, { providerId, model, vectorRanked: [] })
+  return {
+    inputTokens: messagesTokens(plan.messages),
+    maxOutputTokens: Math.min(CHAT_MAX_OUTPUT, PROVIDER_AI[providerId].maxOutputTokens),
+    calls: 1,
+    note: chatEstimateNote(db, providerId, input.bookId)
+  }
+}
+
+/**
+ * 明说预估里少算了什么。
+ *
+ * 预估不走向量（那要真调一次 embedding 才拿得到 query 向量），所以索引建过的书
+ * 必须把这件事讲清楚，不能让用户以为这个数字就是全部。
+ */
+function chatEstimateNote(db: Database.Database, providerId: ProviderId, bookId: string): string {
+  const caps = PROVIDER_AI[providerId]
+  if (!caps.embed) {
+    return `${providerIdLabel(providerId)} 不提供向量检索，这里按关键词检索 + 当前章节窗口估算。`
+  }
+  if (unavailableCaps(db, providerId).includes('embed')) {
+    return '向量检索已被标记为不可用，这里按关键词检索估算。'
+  }
+  if (indexState(db, bookId).done === 0) {
+    return '这本书还没有建立向量索引，按关键词检索估算。'
+  }
+  return '只按关键词检索算；实际还会做一次向量召回并融合，输入可能略高，那次向量化的 token 不计入这个数字。'
 }
 
 export function statusOf(db: Database.Database, bookId: string | null): AiStatus {

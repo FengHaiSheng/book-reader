@@ -54,3 +54,18 @@ function isAppError(e: unknown): e is AppError {
     typeof (e as { message?: unknown }).message === 'string'
   )
 }
+
+/**
+ * 把跨 IPC 抛回来的错误整理成一句话，直接能显示给用户。
+ *
+ * Electron 会给每个 reject 的 invoke 套一层
+ * `Error invoking remote method 'library:tagCreate': Error: 真正的话`，
+ * 主进程 `toAppError` 已经把 detail 与 code 归拢干净了，剩下这层前缀由这里剥掉。
+ * 正则不匹配就原样返回，不做二次猜测——猜错比留个前缀更难查。
+ */
+export function readableError(error: unknown, fallback = '操作没有成功'): string {
+  const raw = error instanceof Error ? error.message : error == null ? '' : String(error)
+  const matched = /^Error invoking remote method '[^']*':\s*(?:Error:\s*)?([\s\S]*)$/.exec(raw)
+  const text = (matched?.[1] ?? raw).trim()
+  return text || fallback
+}

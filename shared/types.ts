@@ -42,8 +42,26 @@ export type BookSummary = {
   status: BookStatus
   chapterCount: number
   totalChars: number
+  /** 阅读进度，0–1；没有进度时为 0 */
+  percent: number
+  /** epub 文件字节数 */
+  fileSize: number
   addedAt: number
   lastOpenedAt: number | null
+  /** 按标签名排序；没打标签就是空数组，不是 undefined */
+  tags: BookTag[]
+}
+
+/** 书架的排序口径。recent 用「上次阅读，没有就加入时间」 */
+export type LibrarySort = 'recent' | 'title' | 'added'
+
+/** 侧栏「本地书库」的汇总。bytes 是全部 epub 文件大小之和 */
+export type LibraryStats = {
+  total: number
+  unread: number
+  reading: number
+  finished: number
+  bytes: number
 }
 
 export type ChapterRowView = {
@@ -277,6 +295,39 @@ export type AiChatResult = {
   degraded: AiDegrade[]
 }
 
+/**
+ * 花钱之前的 token 预估。
+ *
+ * 它是**估算不是计费值**：界面上一律写成「约」，绝不能当成真实用量。
+ * `inputTokens` 只统计这次要送进模型的内容；`calls` 为 0 表示不调模型、不产生费用。
+ * `note` 如实说明估不到的部分（不含向量召回、按假设估、缺前置等）——
+ * 估不准就要说原因，不能编一个数字（硬规则 2）。
+ */
+export type AiEstimate = {
+  inputTokens: number
+  /** 单次请求的输出上限（max_tokens）。多步任务取单次的值，总量要乘 calls */
+  maxOutputTokens: number
+  /** 真实会发起的调用次数 */
+  calls: number
+  note: string | null
+}
+
+export type AiEstimateRequest =
+  | {
+      kind: 'chat'
+      bookId: string
+      chapterId: number | null
+      task: 'ask' | 'explain' | 'translate'
+      excerpt?: string
+      question?: string
+    }
+  | {
+      kind: 'task'
+      bookId: string
+      chapterId: number | null
+      task: 'chapterSummary' | 'bookDigest' | 'terms' | 'mindmap'
+    }
+
 export type IndexState = { total: number; done: number; running: boolean }
 
 export type AiStatus = {
@@ -333,4 +384,21 @@ export type AiResultView<T> = {
   usage: AiUsage | null
   createdAt: number
   note: string | null
+}
+
+/** 书上的标签，够渲染一行 chip 用 */
+export type BookTag = {
+  id: number
+  name: string
+  color: HighlightColor
+}
+
+/** 侧栏用的标签：比 BookTag 多一个计数 */
+export type Tag = BookTag & { bookCount: number }
+
+/** 主进程推给渲染进程的导入进度：多本一起导入时要能说出「第几本」 */
+export type ImportProgressEvent = ImportProgress & {
+  fileIndex: number
+  fileCount: number
+  fileName: string
 }

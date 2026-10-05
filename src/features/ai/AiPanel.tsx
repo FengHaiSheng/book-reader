@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { AiStatus, Citation } from '@shared/types'
+import type { AiEstimate, AiStatus, Citation } from '@shared/types'
 import { AiIndexBar } from './AiIndexBar'
 import { AiMessage, type Turn } from './AiMessage'
-import { AiTasks, type TaskKey } from './AiTasks'
+import { AiTasks, estimateLine, type TaskKey } from './AiTasks'
 
 /** 划词浮条递给面板的东西。prefill 只填引用，send 立刻发出去 */
 export type AiSeed =
@@ -30,8 +30,9 @@ export function AiPanel({
   const [question, setQuestion] = useState('')
   const [excerpt, setExcerpt] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  /** 正文里的章节数。全书要点的成本提示要用它，从只读接口拿，不产生费用 */
-  const [chapterCount, setChapterCount] = useState(0)
+  /** 发送前的预估。null 表示「当前没什么可发的」，不是「算不出来」 */
+  const [estimate, setEstimate] = useState<AiEstimate | null>(null)
+  const [estimateError, setEstimateError] = useState<string | null>(null)
   /** 本章是否已有小结，决定「重新生成」要不要提醒会再花一次钱 */
   const [hasSummary, setHasSummary] = useState(false)
 
@@ -39,6 +40,8 @@ export function AiPanel({
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
   /** 已经发出去、还没结束的 requestId。换章与卸载时要逐个叫停 */
   const inflightRef = useRef<Set<string>>(new Set())
+  /** 打字会连发多次预估，只认最后一次的结果 */
+  const estimateSeq = useRef(0)
 
   const scopeKey = chapterId === null ? 'book' : `chapter:${chapterId}`
 
@@ -57,13 +60,9 @@ export function AiPanel({
     setError(null)
     refreshStatus()
     setHasSummary(false)
-    void window.api.reader
-      .open(bookId)
-      .then((opened) => {
-        if (!alive || !opened) return
-        setChapterCount(opened.chapters.filter((chapter) => chapter.href !== '').length)
-      })
-      .catch(() => undefined)
+    // 这次调用只为一个副作用：openBook 内部会更新「最近打开」时间。
+    // 章节数曾经也从这里取（给成本提示用），现在成本改由 ai:estimate 直接算，不再需要。
+    void window.api.reader.open(bookId).catch(() => undefined)
 
     void window.api.ai
       .history(bookId, scopeKey)
@@ -202,6 +201,48 @@ export function AiPanel({
 
   const canSend = (question.trim() !== '' || excerpt !== null) && status?.configured !== false
 
+  /**
+   * 发送前的 token 预估。
+   *
+   * 只在真的「有东西可发」时才问，并且停 350ms 再问——否则每敲一个字就是一次 IPC。
+   * 预估本身只读库、不调模型，所以它不会花掉任何 token（硬规则 1）。
+   */
+  useEffect(() => {
+    const text = question.trim()
+    const ready = status?.configured === true && !busy && (text.length >= 2 || excerpt !== null)
+    if (!ready) {
+      // 让在途的结果作废，免得它回来时把一个过期的数字显示出来
+      estimateSeq.current += 1
+      setEstimate(null)
+      setEstimateError(null)
+      return
+    }
+    const seq = estimateSeq.current + 1
+    estimateSeq.current = seq
+    const timer = setTimeout(() => {
+      void window.api.ai
+        .estimate({
+          kind: 'chat',
+          bookId,
+          chapterId,
+          task: text === '' ? 'explain' : 'ask',
+          ...(excerpt ? { excerpt } : {}),
+          ...(text ? { question: text } : {})
+        })
+        .then((value) => {
+          if (estimateSeq.current !== seq) return
+          setEstimate(value)
+          setEstimateError(null)
+        })
+        .catch((e) => {
+          if (estimateSeq.current !== seq) return
+          setEstimate(null)
+          setEstimateError(e instanceof Error ? e.message : '暂时无法预估这次要花多少 token')
+        })
+    }, 350)
+    return () => clearTimeout(timer)
+  }, [bookId, chapterId, question, excerpt, status?.configured, busy])
+
   const submit = (event: React.FormEvent): void => {
     event.preventDefault()
     if (!canSend) return
@@ -263,7 +304,6 @@ export function AiPanel({
       <AiTasks
         bookId={bookId}
         chapterId={chapterId}
-        chapterCount={chapterCount}
         hasSummary={hasSummary}
         onError={setError}
         onResult={(task: TaskKey) => {
@@ -334,6 +374,18 @@ export function AiPanel({
           )}
           {turns.length > 0 && !busy && <span className="ai-panel__hint">已中断的回答不会续跑</span>}
         </div>
+        {/* 预估放在发送按钮下面而不是塞进行里：它常常有两行文案，挤在一起会顶坏按钮 */}
+        {estimateError !== null && (
+          <p className="ai-panel__note" role="status">
+            暂时无法预估：{estimateError}
+          </p>
+        )}
+        {estimate !== null && (
+          <p className="ai-panel__note">
+            {estimateLine(estimate)}
+            {estimate.note ? `（${estimate.note}）` : ''}
+          </p>
+        )}
       </form>
     </aside>
   )

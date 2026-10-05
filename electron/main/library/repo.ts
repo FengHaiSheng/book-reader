@@ -1,5 +1,12 @@
 import type Database from 'better-sqlite3'
-import type { BookSummary, ChapterRowView, ImportOutcome, SearchHit } from '@shared/types'
+import type {
+  BookSummary,
+  ChapterRowView,
+  ImportOutcome,
+  LibraryStats,
+  SearchHit
+} from '@shared/types'
+import { tagsByBook } from './tags'
 import { toIndexText, toMatchQuery } from '../epub/bigram'
 import type { ChapterRow, ChunkDraft } from '../epub/types'
 
@@ -28,16 +35,39 @@ export function findByHash(db: Database.Database, hash: string): { id: string; t
   return row ?? null
 }
 
-export function listBooks(db: Database.Database): BookSummary[] {
-  return db
+/** listBooks 的中间形态：先按行取回，再把标签一次贴上去 */
+type BookRow = Omit<BookSummary, 'tags'>
+
+export function listBooks(db: Database.Database, tagId: number | null = null): BookSummary[] {
+  const rows = db
     .prepare(
       `SELECT id, title, author, cover_path AS coverPath, status,
               chapter_count AS chapterCount, total_chars AS totalChars,
+              file_size AS fileSize,
+              COALESCE((SELECT percent FROM reading_progress p WHERE p.book_id = books.id), 0) AS percent,
               added_at AS addedAt, last_opened_at AS lastOpenedAt
        FROM books
+       WHERE ? IS NULL OR id IN (SELECT book_id FROM book_tags WHERE tag_id = ?)
        ORDER BY COALESCE(last_opened_at, added_at) DESC`
     )
-    .all() as BookSummary[]
+    .all(tagId, tagId) as BookRow[]
+
+  const tags = tagsByBook(db)
+  return rows.map((row) => ({ ...row, tags: tags.get(row.id) ?? [] }))
+}
+
+/** 侧栏「本地书库」的汇总。空表时 SUM 为 null，必须 COALESCE 回 0。 */
+export function libraryStats(db: Database.Database): LibraryStats {
+  return db
+    .prepare(
+      `SELECT COUNT(*) AS total,
+              COALESCE(SUM(CASE WHEN status = 'unread' THEN 1 ELSE 0 END), 0) AS unread,
+              COALESCE(SUM(CASE WHEN status = 'reading' THEN 1 ELSE 0 END), 0) AS reading,
+              COALESCE(SUM(CASE WHEN status = 'finished' THEN 1 ELSE 0 END), 0) AS finished,
+              COALESCE(SUM(file_size), 0) AS bytes
+       FROM books`
+    )
+    .get() as LibraryStats
 }
 
 export function listChapters(db: Database.Database, bookId: string): ChapterRowView[] {

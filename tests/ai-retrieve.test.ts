@@ -3,6 +3,7 @@ import {
   estimateTokens,
   fitPassages,
   fuseRanks,
+  messagesTokens,
   slicesOf,
   windowFromText
 } from '../electron/main/ai/retrieve'
@@ -15,6 +16,19 @@ describe('estimateTokens', () => {
 
   it('空串为 0', () => {
     expect(estimateTokens('')).toBe(0)
+  })
+})
+
+describe('messagesTokens', () => {
+  it('每条消息都要算上角色等固定开销', () => {
+    // 正文是空的，只剩每条消息的固定开销
+    expect(messagesTokens([{ content: '' }])).toBe(4)
+    expect(messagesTokens([{ content: '月亮' }])).toBe(2 + 4)
+  })
+
+  it('多条累加，空列表为 0', () => {
+    expect(messagesTokens([])).toBe(0)
+    expect(messagesTokens([{ content: '月亮' }, { content: 'abcdefgh' }])).toBe(4 + 2 + 4 + 2)
   })
 })
 

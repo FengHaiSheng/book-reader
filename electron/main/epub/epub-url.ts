@@ -4,7 +4,9 @@
  * 纯函数、不依赖 electron，因此能在 vitest 里直接跑——协议层最需要被测试的就是这里的判断。
  */
 
-export const EPUB_SCHEME = 'epub'
+import { EPUB_SCHEME } from '@shared/epub'
+
+export { EPUB_SCHEME }
 
 /** 导入时用的是 randomUUID()，这里只认这一种形状 */
 const BOOK_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
@@ -114,5 +116,26 @@ export function sniffDocumentMime(bytes: Uint8Array): string | null {
   if (text.startsWith('<?xml') || /^<!doctype\s+html\b/i.test(text) || /^<html[\s>]/i.test(text)) {
     return 'application/xhtml+xml'
   }
+  return null
+}
+
+function startsWithAscii(bytes: Uint8Array, offset: number, text: string): boolean {
+  if (bytes.length < offset + text.length) return false
+  for (let i = 0; i < text.length; i++) {
+    if (bytes[offset + i] !== text.charCodeAt(i)) return false
+  }
+  return true
+}
+
+/**
+ * 按文件头认图片格式。封面的扩展名来自 epub 内部（`.jfif`、`.jpe` 这类 JPEG 别名很常见），
+ * 按扩展名查白名单会漏，所以用真实的文件头来定 MIME。认不出的返回 null。
+ */
+export function sniffImageMime(bytes: Uint8Array): string | null {
+  if (startsWithAscii(bytes, 0, '\xFF\xD8\xFF')) return 'image/jpeg'
+  if (startsWithAscii(bytes, 0, '\x89PNG')) return 'image/png'
+  if (startsWithAscii(bytes, 0, 'GIF8')) return 'image/gif'
+  if (startsWithAscii(bytes, 0, 'BM')) return 'image/bmp'
+  if (startsWithAscii(bytes, 0, 'RIFF') && startsWithAscii(bytes, 8, 'WEBP')) return 'image/webp'
   return null
 }

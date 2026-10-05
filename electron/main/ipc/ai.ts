@@ -1,7 +1,14 @@
 import { ipcMain, type WebContents } from 'electron'
 import { modelsFor } from '@shared/ai'
 import { CH } from '@shared/ipc'
-import type { AiChatResult, AiDegradeEvent, AiProgressEvent, ProviderId } from '@shared/types'
+import type {
+  AiChatResult,
+  AiDegradeEvent,
+  AiEstimate,
+  AiEstimateRequest,
+  AiProgressEvent,
+  ProviderId
+} from '@shared/types'
 import { AiQueue } from '../ai/queue'
 import { buildIndex, cancelIndex, indexState } from '../ai/index-builder'
 import { appendMessage, clearScope, listMessages } from '../ai/repo'
@@ -10,12 +17,14 @@ import { testConnection } from '../ai/provider'
 import {
   aiSettings,
   chapterTextOf,
+  estimateChat,
   runChat,
   statusOf,
   toReadable,
-  type ChatInput
+  type ChatContext
 } from '../ai/service'
 import {
+  estimateTask,
   runBookDigest,
   runChapterSummary,
   runMindmap,
@@ -33,9 +42,25 @@ const inflight = new Map<string, AbortController>()
 /** 全书要点是长任务：它按 bookId 停，而不是按 requestId */
 const digestInflight = new Map<string, AbortController>()
 
-type ChatRequest = Omit<ChatInput, 'chapterText' | 'scopeKey'> & {
-  /** 章节级会话；传 null 表示这本书的全局会话 */
-  chapterId: number | null
+/** 渲染进程能给的对话参数：`requestId` 只有真正发送时才存在，派生值由主进程补 */
+type ChatRequest = Omit<ChatContext, 'chapterText' | 'scopeKey'> & { requestId: string }
+
+/**
+ * `chapterText` / `scopeKey` 是渲染进程看不见的派生值：正文要从库里拼、会话键要看章节。
+ *
+ * `ai:chat` 与 `ai:estimate` 都必须经由这里，否则两条路径的口径会悄悄分叉，
+ * 预估算的就不是真实会发出去的东西了。
+ */
+function toChatContext(request: Omit<ChatContext, 'chapterText' | 'scopeKey'>): ChatContext {
+  return {
+    ...request,
+    chapterText: request.chapterId === null ? '' : chapterTextOf(getDatabase(), request.chapterId),
+    scopeKey: scopeKeyOf(request.chapterId)
+  }
+}
+
+function scopeKeyOf(chapterId: number | null): string {
+  return chapterId === null ? 'book' : `chapter:${chapterId}`
 }
 
 export function registerAiIpc(): void {
@@ -67,12 +92,7 @@ export function registerAiIpc(): void {
       const result = await queue.run(request.requestId, () =>
         runChat(
           database,
-          {
-            ...request,
-            chapterText:
-              request.chapterId === null ? '' : chapterTextOf(database, request.chapterId),
-            scopeKey: request.chapterId === null ? 'book' : `chapter:${request.chapterId}`
-          },
+          { requestId: request.requestId, ...toChatContext(request) },
           {
             signal: controller.signal,
             onDelta: (text) => emitDelta(sender, { requestId: request.requestId, delta: text })
@@ -82,7 +102,7 @@ export function registerAiIpc(): void {
 
       // 落库放在这里而不是服务层：服务层要能被单测单独调，不该顺手写表。
       // 用量按输出 token 记回答、按估算记提问（服务商不给我们算输入的那一份）。
-      const scopeKey = request.chapterId === null ? 'book' : `chapter:${request.chapterId}`
+      const scopeKey = scopeKeyOf(request.chapterId)
       const now = Date.now()
       appendMessage(
         database,
@@ -130,6 +150,34 @@ export function registerAiIpc(): void {
 
   ipcMain.handle(CH.aiClear, (_event, bookId: string, scopeKey: string) => {
     clearScope(getDatabase(), bookId, scopeKey)
+  })
+
+  /**
+   * 花钱之前的预估。
+   *
+   * **刻意不进 queue**：预估本身不调模型、不花钱，让它排在 AI 队列后面只会把
+   * 「点发送前的预览」拖成几秒的等待。它只读库、做检索与截断，是同步的纯计算。
+   */
+  ipcMain.handle(CH.aiEstimate, (_event, request: AiEstimateRequest): AiEstimate => {
+    const database = getDatabase()
+    try {
+      if (request.kind === 'chat') {
+        // 预估没有 requestId，也没必要伪造一个：ChatContext 本来就不含它
+        return estimateChat(
+          database,
+          toChatContext({
+            bookId: request.bookId,
+            chapterId: request.chapterId,
+            task: request.task,
+            excerpt: request.excerpt,
+            question: request.question
+          })
+        )
+      }
+      return estimateTask(database, request)
+    } catch (error) {
+      throw toReadable(error, '暂时算不出这次要花多少 token')
+    }
   })
 
   ipcMain.handle(CH.aiIndexState, (_event, bookId: string) => indexState(getDatabase(), bookId))

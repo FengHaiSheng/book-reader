@@ -23,12 +23,21 @@ const CONTAINER = `<?xml version="1.0"?>
   <rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles>
 </container>`
 
-/** 正常中文小说：EPUB2 + NCX，两章，封面是假字节。 */
+/**
+ * 两张合法的小 PNG（8×12 纯色）。novel 与 cover 各用一张，保证两本书内容不同、
+ * 封面都能被浏览器解码——否则 BookCover 会在 onError 后退化成素面，封面断言就落不到元素上。
+ */
+const NOVEL_COVER = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAgAAAAMCAIAAADQ/GvKAAAAEklEQVR4nGPItjLCihhGJdARAFcNUKHg/FojAAAAAElFTkSuQmCC',
+  'base64'
+)
+
+/** 正常中文小说：EPUB2 + NCX，两章，封面是一张可解码的小 PNG（见文件末尾说明）。 */
 export function novelFiles(): EpubFiles {
   return {
     mimetype: 'application/epub+zip',
     'META-INF/container.xml': CONTAINER,
-    'OEBPS/cover.jpg': Buffer.from('fake-jpeg-bytes'),
+    'OEBPS/cover.jpg': NOVEL_COVER,
     'OEBPS/content.opf': `<?xml version="1.0" encoding="UTF-8"?>
 <package xmlns="http://www.idpf.org/2007/opf" version="2.0" unique-identifier="bookid">
   <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
@@ -298,4 +307,40 @@ ${long}</body></html>`,
 <body><h1>第二章 天亮</h1>
 <p>天亮的时候河面起雾，他终于把那句话说出口。</p></body></html>`
   }
+}
+
+/**
+ * 一张 8×12 的纯色 PNG。刻意手写字节而不是引入图片资源：
+ * 它是合法 PNG，浏览器能解出 naturalWidth，用来验「封面真的渲染出来了」。
+ */
+const PNG_8x12 = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAgAAAAMCAIAAADQ/GvKAAAAEklEQVR4nGOw8orDihhGJdARAJ8LVMGJI33fAAAAAElFTkSuQmCC',
+  'base64'
+)
+
+/** 封面能解码的书：网格视图要靠它验真实装帧 */
+export function coverBookFiles(): EpubFiles {
+  const files = novelFiles()
+  files['OEBPS/cover.jpg'] = PNG_8x12
+  return files
+}
+
+/**
+ * 封面后缀是 `.jfif` 的书 —— JPEG 的另一种写法，很多电子书转换工具就这么命名。
+ *
+ * 导入后封面文件叫 `cover.jfif`，而协议层的 MIME 白名单里没有这个后缀：若只按扩展名
+ * 判断就会 404，书架的 `<img>` onError 后退化成空白素面（用户真实遇到的 bug）。
+ * 这里用真正的 JPEG 文件头（FF D8 FF …），验证协议层能按内容认出来。
+ */
+export function jfifCoverFiles(): EpubFiles {
+  const files = novelFiles()
+  delete files['OEBPS/cover.jpg']
+  files['OEBPS/cover.jfif'] = Buffer.from([
+    0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x00, 0xff, 0xd9
+  ])
+  files['OEBPS/content.opf'] = (files['OEBPS/content.opf'] as string).replace(
+    'href="cover.jpg"',
+    'href="cover.jfif"'
+  )
+  return files
 }

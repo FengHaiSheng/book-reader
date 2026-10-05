@@ -125,3 +125,49 @@ test('本章小结：先说成本、生成后重算走缓存、一次都没多�
 
   await app.close()
 })
+
+test('花钱之前就能看到预估：对话与任务确认框都给数字，且预估自己不花钱', async () => {
+  const userDataDir = mkdtempSync(join(tmpdir(), 'book-read-ai-est-'))
+  const epubPath = join(userDataDir, 'novel.epub')
+  await writeEpub(epubPath, novelFiles())
+
+  const app = await launchAppWithUserData(userDataDir)
+  await installAiStub(app, {
+    payload: { overview: '这一章写河边的月色与一次重逢。', keyPoints: ['月色'], terms: [] }
+  })
+  const win = await app.firstWindow()
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.setSize(1200, 800))
+
+  await win.evaluate(async (file) => {
+    await (window as any).api.secrets.set('deepseek', 'sk-stub-key')
+    await (window as any).api.library.importPath(file)
+  }, epubPath)
+
+  await win.reload()
+  await win.locator('.book-list__open').first().click()
+  await expect(win.locator('.reader__chapter')).toHaveText('第一章 河边')
+  await win.locator('iframe.reader__view').waitFor()
+
+  await win.getByRole('button', { name: 'AI', exact: true }).click()
+  await expect(win.locator('.ai-panel__empty')).toBeVisible()
+
+  // 对话：输入问题后，发送按钮下方出现输入 tokens 与输出上限
+  await win.locator('.ai-panel__input').fill('这本书讲了什么')
+  const line = win.locator('.ai-panel__note').filter({ hasText: '预估输入约' })
+  await expect(line).toBeVisible()
+  await expect(line).toContainText('单次最多')
+  await expect(line).toContainText('token 输出')
+
+  // 任务确认框：同样在点击「开始」之前就把数字说清楚
+  const card = win.locator('.ai-task').filter({ hasText: '本章小结' })
+  await card.getByRole('button', { name: '生成' }).click()
+  await expect(card.locator('.ai-task__confirm')).toContainText('预估输入约')
+  await expect(card.locator('.ai-task__confirm')).toContainText('token 输出')
+
+  // 预估是纯本地计算：既没有对话，也没有为了向量去调 embedding
+  const calls = await aiCallCount(app)
+  expect(calls.chat).toBe(0)
+  expect(calls.embed).toBe(0)
+
+  await app.close()
+})

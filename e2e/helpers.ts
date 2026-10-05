@@ -42,7 +42,7 @@ export async function installAiStub(
   options: AiStubOptions = {}
 ): Promise<void> {
   await app.evaluate((_electron, opts: AiStubOptions) => {
-    const state = { chat: 0, embed: 0 }
+    const state = { chat: 0, embed: 0, prompts: [] as string[] }
     const scope = globalThis as unknown as {
       __aiStub: typeof state
       fetch: typeof fetch
@@ -77,6 +77,13 @@ export async function installAiStub(
 
       if (url.endsWith('/chat/completions')) {
         state.chat += 1
+        // 记下实际发出去的提示词：有些 bug 不看请求体是发现不了的
+        // （比如「正文被截断逻辑挤成空串」——请求次数、返回结果都照常）
+        state.prompts.push(
+          ((body.messages ?? []) as { content?: string }[])
+            .map((message) => message.content ?? '')
+            .join('\n')
+        )
         if (opts.rejectJsonMode && body.response_format) {
           return reply({ error: { message: 'response_format is not supported' } }, 400)
         }
@@ -117,5 +124,17 @@ export async function aiCallCount(
         chat: 0,
         embed: 0
       }
+  )
+}
+
+/**
+ * 每次对话请求实际发出去的提示词全文（按发生顺序）。
+ *
+ * 用来断言「正文真的被送进模型了」这类只有看请求体才能发现的问题：
+ * 请求次数与返回内容都可能完全正常，只有提示词里是空的。
+ */
+export async function aiPrompts(app: ElectronApplication): Promise<string[]> {
+  return app.evaluate(
+    () => (globalThis as unknown as { __aiStub?: { prompts?: string[] } }).__aiStub?.prompts ?? []
   )
 }

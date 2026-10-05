@@ -5,7 +5,8 @@ import {
   mimeFor,
   normalizeEntry,
   parseEpubUrl,
-  sniffDocumentMime
+  sniffDocumentMime,
+  sniffImageMime
 } from '../electron/main/epub/epub-url'
 
 const ID = '7c1f0e4a-9b2d-4f6e-8a31-5d0c2b7e9f10'
@@ -97,6 +98,26 @@ describe('sniffDocumentMime', () => {
   it('不是文档就返回 null —— 同样没有扩展名的 mimetype 靠这条挡住', () => {
     expect(sniffDocumentMime(bytes('application/epub+zip'))).toBeNull()
     expect(sniffDocumentMime(bytes(''))).toBeNull()
+  })
+})
+
+describe('sniffImageMime', () => {
+  const bytes = (...values: number[]): Uint8Array => Uint8Array.from(values)
+
+  it('按文件头认图片，扩展名靠不住时也能认出来', () => {
+    // cover.jfif 的真实内容就是 JPEG：FF D8 FF …
+    expect(sniffImageMime(bytes(0xff, 0xd8, 0xff, 0xe2, 0x0c))).toBe('image/jpeg')
+    expect(sniffImageMime(bytes(0x89, 0x50, 0x4e, 0x47, 0x0d))).toBe('image/png')
+    expect(sniffImageMime(bytes(0x47, 0x49, 0x46, 0x38, 0x39))).toBe('image/gif')
+    expect(sniffImageMime(bytes(0x42, 0x4d, 0x36))).toBe('image/bmp')
+    expect(
+      sniffImageMime(bytes(0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50))
+    ).toBe('image/webp')
+  })
+
+  it('不是图片就返回 null —— 冒充 cover.js 的文件靠这条挡在协议外', () => {
+    expect(sniffImageMime(bytes())).toBeNull()
+    expect(sniffImageMime(new TextEncoder().encode('alert(1)'))).toBeNull()
   })
 })
 
