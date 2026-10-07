@@ -54,7 +54,9 @@ export const CH = {
   aiDigest: 'ai:digest',
   aiTerms: 'ai:terms',
   aiMindmap: 'ai:mindmap',
-  aiCancelDigest: 'ai:cancelDigest'
+  aiCancelDigest: 'ai:cancelDigest',
+  /** 打开面板时回填已有结果。只读 ai_results，不发起任何模型调用 */
+  aiCachedResults: 'ai:cachedResults'
 } as const
 
 export type Channel = (typeof CH)[keyof typeof CH]
@@ -102,6 +104,7 @@ export const API_SHAPE = {
     'digest',
     'terms',
     'mindmap',
-    'cancelDigest'
+    'cancelDigest',
+    'cachedResults'
   ]
 } as const

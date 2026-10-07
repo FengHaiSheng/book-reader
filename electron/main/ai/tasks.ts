@@ -7,6 +7,7 @@ import type {
   AiResultView,
   AiUsage,
   BookDigestPayload,
+  CachedTaskResults,
   ChapterSummaryPayload,
   MindmapNode,
   ProviderId,
@@ -17,7 +18,14 @@ import { buildMindmap } from './mindmap'
 import type { ChatMessage } from './params'
 import { buildMessages } from './prompts'
 import { chat, type ChatResult } from './provider'
-import { getResult, markUnavailable, saveResult, unavailableCaps, type ResultKey } from './repo'
+import {
+  getResult,
+  markUnavailable,
+  saveResult,
+  unavailableCaps,
+  type ResultKey,
+  type StoredResult
+} from './repo'
 import { isJsonModeRejection } from './retry'
 import { estimateTokens, fitPassages, messagesTokens, slicesOf } from './retrieve'
 import { aiSettings, bookTitleOf, chapterTextOf, chapterTitleOf } from './service'
@@ -177,6 +185,10 @@ function summaryKey(bookId: string, chapterId: number, call: CacheCall): ResultK
   }
 }
 
+function digestKey(bookId: string, call: CacheCall): ResultKey {
+  return { bookId, task: 'bookDigest', scopeKey: 'book', provider: call.providerId, model: call.model }
+}
+
 function termsKey(bookId: string, call: CacheCall): ResultKey {
   return { bookId, task: 'terms', scopeKey: 'book', provider: call.providerId, model: call.model }
 }
@@ -334,13 +346,7 @@ export async function runBookDigest(
   onProgress: (progress: TaskProgress) => void
 ): Promise<AiResultView<BookDigestPayload>> {
   const call: CallContext = { providerId: input.providerId, model: input.model, signal: input.signal }
-  const key: ResultKey = {
-    bookId: input.bookId,
-    task: 'bookDigest',
-    scopeKey: 'book',
-    provider: input.providerId,
-    model: input.model
-  }
+  const key = digestKey(input.bookId, call)
   const cached = getResult<BookDigestPayload>(db, key)
   if (cached) {
     return toView('', cached.payload, {
@@ -550,6 +556,50 @@ export function runMindmap(
     createdAt: now,
     note: '思维导图由「关键词」的结果组织而成，这一次没有调用模型，也没有产生费用。'
   })
+}
+
+// ---------- 打开面板时回填 ----------
+
+/**
+ * 面板打开时把已有的结果读回来。
+ *
+ * 全程只读 `ai_results`，**一次模型都不调**（硬规则 1）：打开面板本身不该产生任何花费。
+ * 所以这里不能复用 `run*` 系列——它们未命中缓存时会真的开跑。
+ *
+ * 命中缓存的四项都带 `cached: true`，界面据此显示「来自缓存」。
+ */
+export function cachedTaskResults(
+  db: Database.Database,
+  input: { bookId: string; chapterId: number | null }
+): CachedTaskResults {
+  const { providerId, model } = aiSettings(db)
+  const call: CacheCall = { providerId, model }
+  const view = <T>(stored: StoredResult<T> | null): AiResultView<T> | undefined =>
+    stored === null
+      ? undefined
+      : toView('', stored.payload, {
+          cached: true,
+          usage: { inputTokens: stored.inputTokens, outputTokens: stored.outputTokens },
+          createdAt: stored.createdAt,
+          note: null
+        })
+
+  const result: CachedTaskResults = {}
+  // 小结是按章存的，没有具体章节就没有可回填的小结
+  const summary =
+    input.chapterId === null
+      ? undefined
+      : view(getResult<ChapterSummaryPayload>(db, summaryKey(input.bookId, input.chapterId, call)))
+  if (summary) result.summary = summary
+
+  const digest = view(getResult<BookDigestPayload>(db, digestKey(input.bookId, call)))
+  if (digest) result.digest = digest
+  const terms = view(getResult<TermsPayload>(db, termsKey(input.bookId, call)))
+  if (terms) result.terms = terms
+  const mindmap = view(getResult<MindmapNode>(db, mindmapKey(input.bookId, call)))
+  if (mindmap) result.mindmap = mindmap
+
+  return result
 }
 
 // ---------- 花钱之前的预估 ----------

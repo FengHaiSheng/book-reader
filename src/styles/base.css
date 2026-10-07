@@ -1527,6 +1527,12 @@ html[data-theme='dark'] .seg__b.is-on {
 .ai-tasks {
   display: flex;
   flex-direction: column;
+  /* 结果可能很长（全书要点/关键词/导图），必须自己滚：给个上限，别把对话区挤成 0，
+     也别撑破面板 —— 设计约定「滚动在面板内发生」。 */
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: 50%;
+  overflow-y: auto;
   border-bottom: 1px solid var(--line);
 }
 

@@ -1,9 +1,10 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type {
   AiEstimate,
   AiEstimateRequest,
   AiResultView,
   BookDigestPayload,
+  CachedTaskResults,
   ChapterSummaryPayload,
   MindmapNode,
   TermsPayload
@@ -85,7 +86,10 @@ export function AiTasks({
   /** 每次拿到结果后通知父组件。父组件用它记住「本章已有小结」这类跨任务状态 */
   onResult?: (task: TaskKey, result: AiResultView<unknown>) => void
 }) {
+  /** 本次会话里真的生成出来的结果。它决定了「重新生成」可不可以直接跑 */
   const [results, setResults] = useState<Partial<Record<TaskKey, AiResultView<unknown>>>>({})
+  /** 打开面板时从库里回填的已有结果。只读缓存，不花钱 */
+  const [restored, setRestored] = useState<CachedTaskResults>({})
   const [running, setRunning] = useState<TaskKey | null>(null)
   const [confirming, setConfirming] = useState<TaskKey | null>(null)
   /** 确认框里的预估。null 且 estimating 为真表示还在算 */
@@ -94,6 +98,36 @@ export function AiTasks({
   const [estimateError, setEstimateError] = useState<string | null>(null)
   /** 连点会发出多个预估请求，只认最后一个的结果 */
   const estimateSeq = useRef(0)
+  /** 换书/换章会重新回填，只认最后一次的结果 */
+  const restoreSeq = useRef(0)
+  // onResult 是父组件每次渲染新建的内联函数，放进依赖会让回填 effect 转个不停；
+  // 用 ref 拿最新的那个，effect 只依赖书与章。
+  const onResultRef = useRef(onResult)
+  onResultRef.current = onResult
+
+  /**
+   * 打开面板（或换书/换章）时把库里已有的结果读回来。
+   *
+   * 这一路**只读缓存、不调模型**（硬规则 1）：打开面板本身不该花任何 token。
+   * 换章时同时清掉上一次的会话结果，免得把上一章的小结显示成这一章的。
+   */
+  useEffect(() => {
+    const seq = restoreSeq.current + 1
+    restoreSeq.current = seq
+    setResults({})
+    setRestored({})
+    void window.api.ai
+      .cachedResults(bookId, chapterId)
+      .then((value) => {
+        if (restoreSeq.current !== seq) return
+        setRestored(value)
+        // 让「本章已有小结」这类跨任务判断在打开面板时就是准的
+        if (value.summary) onResultRef.current?.('summary', value.summary)
+      })
+      .catch(() => {
+        // 回填失败不拦着用户：结果区空着，生成按钮照常可用
+      })
+  }, [bookId, chapterId])
 
   /**
    * 打开确认框，同时去问这次要花多少。
@@ -147,7 +181,9 @@ export function AiTasks({
   return (
     <section className="ai-tasks" aria-label="本书分析">
       {(Object.keys(TASK_LABELS) as TaskKey[]).map((task) => {
-        const result = results[task]
+        /** 本次会话生成的优先。回填的只是「上次存下的」，所以按钮仍走一次确认框 */
+        const session = results[task]
+        const result = session ?? restored[task]
         const disabled = running !== null || (task === 'summary' && chapterId === null)
         return (
           <div className="ai-task" key={task}>
@@ -168,7 +204,9 @@ export function AiTasks({
                   type="button"
                   className="btn"
                   disabled={disabled}
-                  onClick={() => (result ? void run(task) : confirm(task))}
+                  // 只有「这次亲手生成过」才允许跳过确认框直接重跑：
+                  // 回填来的结果点一下可能真的再花一次钱，成本必须先摆出来（硬规则 1）
+                  onClick={() => (session ? void run(task) : confirm(task))}
                 >
                   {running === task ? '生成中…' : result ? '重新生成' : '生成'}
                 </button>

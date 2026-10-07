@@ -12,6 +12,7 @@ import type {
   AiStatus,
   BookDigestPayload,
   BookSummary,
+  CachedTaskResults,
   ChapterRowView,
   ChapterSummaryPayload,
   Highlight,
@@ -168,7 +169,10 @@ const api = {
     mindmap: (bookId: string): Promise<AiResultView<MindmapNode>> =>
       ipcRenderer.invoke(CH.aiMindmap, bookId),
     cancelDigest: (bookId: string): Promise<void> =>
-      ipcRenderer.invoke(CH.aiCancelDigest, bookId)
+      ipcRenderer.invoke(CH.aiCancelDigest, bookId),
+    /** 打开面板时回填已有结果。只读缓存，不调模型、不花钱 */
+    cachedResults: (bookId: string, chapterId: number | null): Promise<CachedTaskResults> =>
+      ipcRenderer.invoke(CH.aiCachedResults, bookId, chapterId)
   },
   shell: {
     openExternal: (url: string): Promise<void> =>

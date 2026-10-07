@@ -21,7 +21,7 @@ test('这家不提供向量检索 —— 面板明说降级，不静默', async 
   }, epubPath)
 
   await win.reload()
-  await win.locator('.book-list__open').first().click()
+  await win.locator('.book-card').first().click()
   await expect(win.locator('.reader__chapter')).toHaveText('第一章 河边')
   await win.locator('iframe.reader__view').waitFor()
 
@@ -72,7 +72,7 @@ test('模型其实不支持结构化输出 —— 结果里说明改用了提示
   }, epubPath)
 
   await win.reload()
-  await win.locator('.book-list__open').first().click()
+  await win.locator('.book-card').first().click()
   await expect(win.locator('.reader__chapter')).toHaveText('第一章 河边')
   await win.locator('iframe.reader__view').waitFor()
 
@@ -108,7 +108,7 @@ test('正文超出上下文上限 —— 结果里说明有段落没有送进去
   }, epubPath)
 
   await win.reload()
-  await win.locator('.book-list__open').first().click()
+  await win.locator('.book-card').first().click()
   await expect(win.locator('.reader__chapter')).toHaveText('第一章 长夜')
   await win.locator('iframe.reader__view').waitFor()
 
@@ -154,7 +154,7 @@ test('全书要点：长章节的正文真的进了提示词，不会被自己�
   }, epubPath)
 
   await win.reload()
-  await win.locator('.book-list__open').first().click()
+  await win.locator('.book-card').first().click()
   await expect(win.locator('.reader__chapter')).toHaveText('第一章 长夜')
   await win.locator('iframe.reader__view').waitFor()
 

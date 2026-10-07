@@ -24,6 +24,7 @@ import {
   type ChatContext
 } from '../ai/service'
 import {
+  cachedTaskResults,
   estimateTask,
   runBookDigest,
   runChapterSummary,
@@ -264,6 +265,11 @@ export function registerAiIpc(): void {
   ipcMain.handle(CH.aiCancelDigest, (_event, bookId: string) => {
     digestInflight.get(bookId)?.abort()
   })
+
+  // 只读缓存：打开面板不该产生任何花费，所以这一条不进队列、也不碰模型
+  ipcMain.handle(CH.aiCachedResults, (_event, bookId: string, chapterId: number | null) =>
+    cachedTaskResults(getDatabase(), { bookId, chapterId })
+  )
 }
 
 function emitDelta(sender: WebContents, payload: AiDegradeEvent): void {

@@ -386,6 +386,18 @@ export type AiResultView<T> = {
   note: string | null
 }
 
+/**
+ * 打开面板时从 ai_results 读回来的已有结果。
+ *
+ * 只读缓存、**不发起任何模型调用**（硬规则 1）：没有的键就是 undefined，界面据此显示「生成」。
+ */
+export type CachedTaskResults = {
+  summary?: AiResultView<ChapterSummaryPayload>
+  digest?: AiResultView<BookDigestPayload>
+  terms?: AiResultView<TermsPayload>
+  mindmap?: AiResultView<MindmapNode>
+}
+
 /** 书上的标签，够渲染一行 chip 用 */
 export type BookTag = {
   id: number

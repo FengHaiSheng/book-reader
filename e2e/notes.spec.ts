@@ -28,7 +28,7 @@ test('跨书汇总、类型筛选、右栏上下文、回到原文', async () =>
   // 把它顶到第一位，再 reload 拿到新顺序，这样点第一本就是《河边的月亮》。
   await win.evaluate((id) => (window as any).api.reader.open(id), novelId)
   await win.reload()
-  await win.locator('.book-list__open').first().click()
+  await win.locator('.book-card').first().click()
   await expect(win.locator('.reader__chapter')).toHaveText('第一章 河边')
   await win.locator('iframe.reader__view').waitFor()
   // 章节文档是异步加工装进 iframe 的，等它在位再选区，否则选到的是初始空白文档
