@@ -1,6 +1,6 @@
 import type Database from 'better-sqlite3'
 import { PROMPT_VERSION, type CapabilityKey } from '@shared/ai'
-import type { AiMessage, AiMessageRole, AiUsage, ProviderId } from '@shared/types'
+import type { AiMessage, AiMessageRole, AiUsage, Citation, ProviderId } from '@shared/types'
 
 export type ResultKey = {
   bookId: string
@@ -78,14 +78,27 @@ export function listMessages(
   bookId: string,
   scopeKey: string
 ): AiMessage[] {
-  return db
+  const rows = db
     .prepare(
       `SELECT id, book_id AS bookId, chapter_id AS chapterId, scope_key AS scopeKey,
-              role, content, tokens, created_at AS createdAt
+              role, content, tokens, citations, created_at AS createdAt
        FROM ai_messages WHERE book_id = ? AND scope_key = ?
        ORDER BY id`
     )
-    .all(bookId, scopeKey) as AiMessage[]
+    .all(bookId, scopeKey) as (Omit<AiMessage, 'citations'> & { citations: string | null })[]
+
+  return rows.map((row) => ({ ...row, citations: parseCitations(row.citations) }))
+}
+
+/** 落库的引用是 JSON 串。解析失败就当没有引用，绝不因为一条脏数据让整段历史读不出来 */
+function parseCitations(raw: string | null): Citation[] {
+  if (!raw) return []
+  try {
+    const parsed = JSON.parse(raw) as unknown
+    return Array.isArray(parsed) ? (parsed as Citation[]) : []
+  } catch {
+    return []
+  }
 }
 
 export function appendMessage(
@@ -97,13 +110,16 @@ export function appendMessage(
     role: AiMessageRole
     content: string
     tokens: number
+    /** 只有助手回答带引用；用户消息传空数组 */
+    citations?: Citation[]
   },
   now: number
 ): AiMessage {
+  const citations = message.citations ?? []
   const info = db
     .prepare(
-      `INSERT INTO ai_messages (book_id, chapter_id, scope_key, role, content, tokens, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO ai_messages (book_id, chapter_id, scope_key, role, content, tokens, citations, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       message.bookId,
@@ -112,11 +128,13 @@ export function appendMessage(
       message.role,
       message.content,
       message.tokens,
+      citations.length > 0 ? JSON.stringify(citations) : null,
       now
     )
   return {
     id: Number(info.lastInsertRowid),
     ...message,
+    citations,
     tokens: message.tokens,
     createdAt: now
   }

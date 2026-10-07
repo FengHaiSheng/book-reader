@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { DEFAULT_HIGHLIGHT_COLOR, MAX_HIGHLIGHT_CHARS, type HighlightColor } from '@shared/highlights'
+import { DEFAULT_PREFS } from '@shared/types'
 import type { Citation, Highlight, ReadingPrefs, ReaderBook, ReadingTarget } from '@shared/types'
 import { chapterBlobUrl, prepareChapter } from './document'
 import { computeLayout, PAGE_PAD_Y, type ReaderLayout } from './layout'
@@ -828,6 +829,8 @@ export function ReaderPage({
             bookId={bookId}
             chapterId={chapter?.id ?? null}
             seed={aiSeed}
+            panelWidth={prefs?.aiPanelWidth ?? DEFAULT_PREFS.aiPanelWidth}
+            onPanelWidth={(width) => applyPrefs({ aiPanelWidth: width })}
             onSeedConsumed={() => setAiSeed(null)}
             onCitation={goToCitation}
             onClose={() => setAiOpen(false)}

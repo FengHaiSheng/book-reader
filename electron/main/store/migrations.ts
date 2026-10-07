@@ -126,5 +126,12 @@ export const migrations: Migration[] = [
         );
       `)
     }
+  },
+  {
+    version: 3,
+    up: (db) => {
+      // 回答里 [n] 的落库映射。历史读回来后上标仍可点回原文（旧行是 NULL，退化为普通文字）
+      db.exec(`ALTER TABLE ai_messages ADD COLUMN citations TEXT;`)
+    }
   }
 ]

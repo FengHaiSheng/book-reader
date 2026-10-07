@@ -22,6 +22,8 @@ export type ReadingPrefs = {
   charsPerLine: number
   lineHeight: number
   theme: 'light' | 'dark'
+  /** AI 面板宽度（px）。拖左边缘改它，和阅读偏好一样落库，下次开面板还是这个宽度 */
+  aiPanelWidth: number
 }
 
 export const DEFAULT_PREFS: ReadingPrefs = {
@@ -29,7 +31,8 @@ export const DEFAULT_PREFS: ReadingPrefs = {
   fontSize: 19,
   charsPerLine: 34,
   lineHeight: 1.85,
-  theme: 'light'
+  theme: 'light',
+  aiPanelWidth: 360
 }
 
 export type BookStatus = 'unread' | 'reading' | 'finished'
@@ -107,7 +110,8 @@ export type IpcResult<T> = { ok: true; value: T } | { ok: false; error: AppError
 export const PREFS_LIMITS = {
   fontSize: [15, 24],
   charsPerLine: [24, 48],
-  lineHeight: [1.5, 2.2]
+  lineHeight: [1.5, 2.2],
+  aiPanelWidth: [320, 720]
 } as const
 
 /** 把任意输入夹进合法范围；类型不对或不是有限数就回落默认值。渲染进程与主进程都调它。 */
@@ -121,7 +125,12 @@ export function clampPrefs(input: Partial<ReadingPrefs>): ReadingPrefs {
       DEFAULT_PREFS.charsPerLine
     ),
     lineHeight: clampNumber(input.lineHeight, PREFS_LIMITS.lineHeight, DEFAULT_PREFS.lineHeight),
-    theme: input.theme === 'dark' ? 'dark' : DEFAULT_PREFS.theme
+    theme: input.theme === 'dark' ? 'dark' : DEFAULT_PREFS.theme,
+    aiPanelWidth: clampNumber(
+      input.aiPanelWidth,
+      PREFS_LIMITS.aiPanelWidth,
+      DEFAULT_PREFS.aiPanelWidth
+    )
   }
 }
 
@@ -255,6 +264,8 @@ export type AiMessage = {
   role: AiMessageRole
   content: string
   tokens: number
+  /** 回答里 [n] 的落库映射。用户消息为空；旧数据显示为空数组，上标退化为普通文字 */
+  citations: Citation[]
   createdAt: number
 }
 

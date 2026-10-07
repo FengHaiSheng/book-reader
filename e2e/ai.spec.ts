@@ -82,6 +82,17 @@ test('划词解释：流式上屏、引用可点回原文、用量与历史都�
     )
     .toBe(2)
 
+  // 引用一并落库：历史读回来后 [n] 才能继续点回原文
+  const stored = await win.evaluate(
+    async (arg: { bookId: string; scopeKey: string }) =>
+      (await (window as any).api.ai.history(arg.bookId, arg.scopeKey)) as {
+        role: string
+        citations: unknown[]
+      }[],
+    { bookId, scopeKey: `chapter:${chapterId}` }
+  )
+  expect(stored[1]!.citations.length).toBeGreaterThan(0)
+
   await app.close()
 })
 
@@ -223,8 +234,10 @@ test('重开面板：结果从库里回填、回填不花钱，长结果在面�
   expect(box.streamHeight).toBeGreaterThan(0)
 
   // 收起再打开：结果必须还在，且这一下不能触发任何模型调用
-  await win.getByRole('button', { name: '收起' }).click()
+  await win.getByRole('button', { name: '收起', exact: true }).click()
   await win.getByRole('button', { name: 'AI', exact: true }).click()
+  // 回填来的结果默认折叠（给对话区留高度），展开后才看得到正文
+  await card.getByRole('button', { name: '查看结果（来自缓存）' }).click()
   await expect(card.locator('.ai-task__text')).toBeVisible()
   await expect(card.locator('.ai-task__badge')).toHaveText('来自缓存')
   expect((await aiCallCount(app)).chat).toBe(1)

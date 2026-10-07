@@ -43,7 +43,16 @@ export function AiMessage({
   if (turn.state === 'queued') {
     return (
       <div className="ai-msg ai-msg--assistant">
-        <p className="ai-msg__status">排队中：前面还有一段在生成，轮到它就会开始。</p>
+        {/* 首字之前的等待反馈：给个动的指示，别让用户以为卡住了。
+            文案不说「前面还有一段在生成」——队列前面常常是空的，那是在编事实 */}
+        <p className="ai-msg__status" role="status">
+          正在生成
+          <span className="ai-msg__dots" aria-hidden="true">
+            <i />
+            <i />
+            <i />
+          </span>
+        </p>
       </div>
     )
   }

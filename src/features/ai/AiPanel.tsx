@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { AiEstimate, AiStatus, Citation } from '@shared/types'
+import { PREFS_LIMITS, type AiEstimate, type AiStatus, type Citation } from '@shared/types'
 import { AiIndexBar } from './AiIndexBar'
 import { AiMessage, type Turn } from './AiMessage'
 import { AiTasks, estimateLine, type TaskKey } from './AiTasks'
@@ -13,6 +13,8 @@ export function AiPanel({
   bookId,
   chapterId,
   seed,
+  panelWidth,
+  onPanelWidth,
   onSeedConsumed,
   onCitation,
   onClose
@@ -20,6 +22,9 @@ export function AiPanel({
   bookId: string
   chapterId: number | null
   seed: AiSeed | null
+  /** 面板宽度（px），由偏好来。拖左边缘改它 */
+  panelWidth: number
+  onPanelWidth: (width: number) => void
   onSeedConsumed: () => void
   onCitation?: (citation: Citation) => void
   onClose: () => void
@@ -74,9 +79,9 @@ export function AiPanel({
             role: message.role,
             text: message.content,
             state: 'done' as const,
-            // 历史里没有引用映射与用量：上标退化为普通文字，用量显示「未返回」
+            // 历史里没有用量：显示「未返回」。引用已经落库，[n] 照常可以点回原文
             usage: null,
-            citations: [],
+            citations: message.citations,
             degraded: []
           }))
         )
@@ -273,10 +278,44 @@ export function AiPanel({
     }
   }
 
+  /**
+   * 拖左边缘改宽度。
+   *
+   * 拖动期间只改界面：applyPrefs 是乐观更新 + 防抖落库，所以跟手，且不会每移动
+   * 一像素就发一次 IPC。区间在这里先夹一次，免得松手前把面板拖出边界。
+   */
+  const startResize = (event: React.MouseEvent): void => {
+    event.preventDefault()
+    const [min, max] = PREFS_LIMITS.aiPanelWidth
+    const startX = event.clientX
+    const startWidth = panelWidth
+    const onMove = (move: MouseEvent): void => {
+      onPanelWidth(Math.min(max, Math.max(min, startWidth + (startX - move.clientX))))
+    }
+    const onUp = (): void => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }
+
   const providerLabel = useMemo(() => status?.providerId ?? '', [status])
 
   return (
-    <aside className="ai-panel" aria-label="AI 面板">
+    <aside
+      className="ai-panel"
+      aria-label="AI 面板"
+      style={{ width: panelWidth, flexBasis: panelWidth }}
+    >
+      {/* 拖它改宽度。往左拖变宽，往右拖变窄；区间与落库校验共用 PREFS_LIMITS */}
+      <div
+        className="ai-panel__resizer"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="拖动调整 AI 面板宽度"
+        onMouseDown={startResize}
+      />
       <div className="ai-panel__head">
         <span className="ai-panel__title">AI</span>
         {status && (
@@ -320,7 +359,7 @@ export function AiPanel({
           <>
             {historyLoaded && (
               <p className="ai-panel__note">
-                历史记录只保留文字：回答里的 [n] 不再可点，用量也只在本次会话里显示。
+                历史记录的用量只在本次会话里显示；回答里的 [n] 仍可点回原文。
               </p>
             )}
             {turns.map((turn) => (

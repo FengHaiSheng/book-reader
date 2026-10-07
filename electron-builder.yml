@@ -1,0 +1,49 @@
+appId: com.bookread.app
+productName: 书架
+copyright: Copyright © 2026
+
+directories:
+  output: dist
+  buildResources: build
+
+# 只打构建产物与 package.json；生产依赖的 node_modules 由 electron-builder 单独收集
+files:
+  - out/**/*
+  - package.json
+
+asar: true
+
+# better-sqlite3 的 .node 与 epub 抽取 worker 都不能留在 asar 里：
+# 前者是原生二进制（dlopen 不认识 asar 虚拟路径），后者要被 worker_threads 加载
+asarUnpack:
+  - '**/*.node'
+  - out/main/epub-worker.js
+
+mac:
+  category: public.app-category.books
+  target:
+    - target: dmg
+      arch:
+        - arm64
+        - x64
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  # 有 Apple Developer 账号后改成 true，并设好 APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD / APPLE_TEAM_ID
+  notarize: false
+
+dmg:
+  title: 书架 ${version}
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true

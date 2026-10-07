@@ -9,6 +9,8 @@ describe('clampPrefs', () => {
     expect(clampPrefs({ fontSize: 2 }).fontSize).toBe(15)
     expect(clampPrefs({ lineHeight: 9 }).lineHeight).toBe(2.2)
     expect(clampPrefs({ lineHeight: 0.1 }).lineHeight).toBe(1.5)
+    expect(clampPrefs({ aiPanelWidth: 9999 }).aiPanelWidth).toBe(720)
+    expect(clampPrefs({ aiPanelWidth: 100 }).aiPanelWidth).toBe(320)
   })
 
   it('坏值与缺省值回落到默认', () => {
@@ -25,7 +27,8 @@ describe('clampPrefs', () => {
       fontSize: 21,
       charsPerLine: 40,
       lineHeight: 2,
-      theme: 'dark'
+      theme: 'dark',
+      aiPanelWidth: 480
     } as const
     expect(clampPrefs(wanted)).toEqual(wanted)
   })

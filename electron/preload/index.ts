@@ -137,6 +137,12 @@ const api = {
       question?: string
     }): Promise<AiChatResult> => ipcRenderer.invoke(CH.aiChat, request),
     cancel: (requestId: string): Promise<void> => ipcRenderer.invoke(CH.aiCancel, requestId),
+    /** 停掉一个结构化任务（小结/关键词）。digest 有单独的 cancelDigest */
+    cancelTask: (
+      task: 'summary' | 'terms',
+      bookId: string,
+      chapterId: number | null
+    ): Promise<void> => ipcRenderer.invoke(CH.aiCancelTask, task, bookId, chapterId),
     /** 花钱之前的 token 预估。不调模型，也不消耗 token */
     estimate: (request: AiEstimateRequest): Promise<AiEstimate> =>
       ipcRenderer.invoke(CH.aiEstimate, request),

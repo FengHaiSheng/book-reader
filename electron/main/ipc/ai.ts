@@ -43,6 +43,17 @@ const inflight = new Map<string, AbortController>()
 /** 全书要点是长任务：它按 bookId 停，而不是按 requestId */
 const digestInflight = new Map<string, AbortController>()
 
+/**
+ * 结构化任务（小结/关键词）的中止信号。key 与队列的 key 完全一致，
+ * 「停下」时两件事一起做：撤掉还在排队的，中止已经在跑的。
+ */
+const taskInflight = new Map<string, AbortController>()
+
+/** 任务的中止 key。前端只说「哪个任务、哪本书」，key 的拼法收在主进程一处 */
+function taskKey(task: 'summary' | 'terms', bookId: string, chapterId: number | null): string {
+  return task === 'summary' ? `summary:${chapterId}` : `terms:${bookId}`
+}
+
 /** 渲染进程能给的对话参数：`requestId` 只有真正发送时才存在，派生值由主进程补 */
 type ChatRequest = Omit<ChatContext, 'chapterText' | 'scopeKey'> & { requestId: string }
 
@@ -125,7 +136,9 @@ export function registerAiIpc(): void {
           scopeKey,
           role: 'assistant',
           content: result.content,
-          tokens: result.usage?.outputTokens ?? 0
+          tokens: result.usage?.outputTokens ?? 0,
+          // 引用一并落库：下次打开面板，历史回答里的 [n] 依然能点回原文
+          citations: result.citations
         },
         now + 1
       )
@@ -203,8 +216,10 @@ export function registerAiIpc(): void {
     const database = getDatabase()
     const { providerId, model } = aiSettings(database)
     const controller = new AbortController()
+    const key = taskKey('summary', bookId, chapterId)
+    taskInflight.set(key, controller)
     try {
-      return await queue.run(`summary:${chapterId}`, () =>
+      return await queue.run(key, () =>
         runChapterSummary(database, {
           bookId,
           chapterId,
@@ -215,6 +230,8 @@ export function registerAiIpc(): void {
       )
     } catch (error) {
       throw toReadable(error, '本章小结没有生成成功')
+    } finally {
+      taskInflight.delete(key)
     }
   })
 
@@ -243,12 +260,16 @@ export function registerAiIpc(): void {
     const database = getDatabase()
     const { providerId, model } = aiSettings(database)
     const controller = new AbortController()
+    const key = taskKey('terms', bookId, null)
+    taskInflight.set(key, controller)
     try {
-      return await queue.run(`terms:${bookId}`, () =>
+      return await queue.run(key, () =>
         runTerms(database, { bookId, providerId, model, signal: controller.signal })
       )
     } catch (error) {
       throw toReadable(error, '关键词没有生成成功')
+    } finally {
+      taskInflight.delete(key)
     }
   })
 
@@ -265,6 +286,17 @@ export function registerAiIpc(): void {
   ipcMain.handle(CH.aiCancelDigest, (_event, bookId: string) => {
     digestInflight.get(bookId)?.abort()
   })
+
+  ipcMain.handle(
+    CH.aiCancelTask,
+    (_event, task: 'summary' | 'terms', bookId: string, chapterId: number | null) => {
+      const key = taskKey(task, bookId, chapterId)
+      // 与 ai:cancel 同款：先撤排队中的（还没花钱），再中止在跑的（停流，已花的钱不追回）
+      queue.cancel(key)
+      taskInflight.get(key)?.abort()
+      taskInflight.delete(key)
+    }
+  )
 
   // 只读缓存：打开面板不该产生任何花费，所以这一条不进队列、也不碰模型
   ipcMain.handle(CH.aiCachedResults, (_event, bookId: string, chapterId: number | null) =>

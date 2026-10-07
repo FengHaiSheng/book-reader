@@ -1267,12 +1267,32 @@ html[data-theme='dark'] .seg__b.is-on {
 
 /* ---- AI 面板 ---- */
 .ai-panel {
-  flex: 0 0 360px;
+  position: relative;
+  /* 宽度由偏好给（行内 style），这里只兜底上下限 */
+  flex: 0 0 auto;
+  min-width: 320px;
+  max-width: 720px;
   display: flex;
   flex-direction: column;
   min-height: 0;
   background: var(--panel);
   border-left: 1px solid var(--line);
+}
+
+/* 左边缘的拖拽把手：调 AI 面板宽度 */
+.ai-panel__resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 6px;
+  cursor: col-resize;
+  z-index: 2;
+}
+
+.ai-panel__resizer:hover,
+.ai-panel__resizer:active {
+  background: color-mix(in srgb, var(--accent-link) 30%, transparent);
 }
 
 .ai-panel__head {
@@ -1429,6 +1449,41 @@ html[data-theme='dark'] .seg__b.is-on {
   }
 }
 
+/* 首字之前的等待指示：三个依次跳动的点，让「正在生成」看起来是活的 */
+.ai-msg__dots {
+  display: inline-flex;
+  gap: 3px;
+  margin-left: 4px;
+  vertical-align: 2px;
+}
+
+.ai-msg__dots i {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--ink-muted);
+  animation: ai-dot 1.2s ease-in-out infinite;
+}
+
+.ai-msg__dots i:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.ai-msg__dots i:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes ai-dot {
+  0%,
+  60%,
+  100% {
+    opacity: 0.25;
+  }
+  30% {
+    opacity: 1;
+  }
+}
+
 .ai-msg__meta,
 .ai-msg__status {
   margin: 0;
@@ -1536,12 +1591,40 @@ html[data-theme='dark'] .seg__b.is-on {
   border-bottom: 1px solid var(--line);
 }
 
+/* 「本书分析」的折叠头。吸顶，列表滚起来时它不会跟着滚走 */
+.ai-tasks__head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: var(--s1) var(--s3);
+  background: var(--panel);
+}
+
+.ai-tasks__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ai-tasks__caret {
+  color: var(--ink-muted);
+  font-size: 10px;
+}
+
 .ai-task {
   padding: var(--s2) var(--s3);
   border-top: 1px solid var(--line);
 }
 
-.ai-task:first-child {
+.ai-tasks__head + .ai-task {
   border-top: 0;
 }
 
@@ -1571,14 +1654,20 @@ html[data-theme='dark'] .seg__b.is-on {
 }
 
 .ai-task__label {
-  margin: var(--s2) 0 var(--s1);
+  margin: var(--s3) 0 var(--s1);
   font-size: 12px;
-  color: var(--ink-muted);
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.ai-task__label:first-child {
+  margin-top: 0;
 }
 
 .ai-task__text {
   margin: 0 0 var(--s2);
   white-space: pre-wrap;
+  line-height: 1.75;
 }
 
 .ai-task__confirm {
@@ -1592,26 +1681,48 @@ html[data-theme='dark'] .seg__b.is-on {
   color: var(--ink-muted);
 }
 
+/* 结果是一张纸面上的卡片：从面板底色里分出来，长文本读起来不串行 */
 .ai-task__result {
   margin-top: var(--s2);
+  padding: var(--s3);
+  background: var(--paper);
+  border-radius: var(--r-sm);
+  font-size: 13px;
+  line-height: 1.75;
 }
 
-.ai-terms {
+.ai-task__result-toggle {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent-link);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.ai-task__result-toggle:hover {
+  text-decoration: underline;
+}
+
+.ai-terms,
+.ai-mindmap {
   margin: 0;
   padding-left: 1.2em;
+}
+
+.ai-terms li,
+.ai-mindmap li {
+  margin: var(--s1) 0;
+  line-height: 1.7;
 }
 
 .ai-terms__where {
   color: var(--ink-muted);
 }
 
-.ai-mindmap {
-  margin: 0;
-  padding-left: 1.2em;
-}
-
 .ai-mindmap ul {
-  margin: 0;
+  margin: var(--s1) 0;
   padding-left: 1.2em;
 }
 

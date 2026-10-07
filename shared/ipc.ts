@@ -39,6 +39,8 @@ export const CH = {
   aiTest: 'ai:test',
   aiChat: 'ai:chat',
   aiCancel: 'ai:cancel',
+  /** 停掉一个结构化任务（小结/关键词）。key 由主进程生成，前端只回传 */
+  aiCancelTask: 'ai:cancelTask',
   aiHistory: 'ai:history',
   aiClear: 'ai:clear',
   /** 花钱之前的 token 预估。只读库、只做检索与截断，不发起任何模型调用 */
@@ -92,6 +94,7 @@ export const API_SHAPE = {
     'test',
     'chat',
     'cancel',
+    'cancelTask',
     'history',
     'clear',
     'estimate',
