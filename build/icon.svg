@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- 一册立书 + 朱红书签。
+       配色取自 .uicraft.md 的 Design Tokens：纸 #FCFAF6、墨 #2B2723、朱红 #B4462F
+       整张 1024×1024 铺满纸色（全出血），圆角与投影交给 macOS 26+ 的图标系统裁切，
+       不再自带透明边距与烘焙投影，避免系统在边距处填自己的底色导致「背景偏灰」。
+       书体按 1024/824 等比放大，保持原先纸面上的比例。 -->
+  <defs>
+    <clipPath id="book"><rect x="244" y="180" width="536" height="664" rx="32" ry="32"/></clipPath>
+  </defs>
+
+  <!-- 纸面底（全出血） -->
+  <rect width="1024" height="1024" fill="#FCFAF6"/>
+
+  <!-- 墨色书面 -->
+  <rect x="244" y="180" width="536" height="664" rx="32" ry="32" fill="#2B2723"/>
+
+  <!-- 书脊：书面上一条极淡的纸色带，靠左 -->
+  <g clip-path="url(#book)"><rect x="262" y="180" width="44" height="664" fill="#FCFAF6" opacity="0.18"/></g>
+
+  <!-- 朱红书签：自书顶垂下，末端剪成燕尾 -->
+  <path d="M633 180 H736 V557 L684 500 L633 557 Z" fill="#B4462F"/>
+</svg>

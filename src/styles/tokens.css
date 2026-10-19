@@ -14,6 +14,8 @@
   --hl-green: #c9dfc4;
   --hl-blue: #c6d6e8;
   --hl-pink: #edcfd4;
+  /* 模态框遮罩：压暗背景但不至于看不清底下的书桌 */
+  --scrim: rgba(43, 39, 35, 0.28);
 
   --shadow-sheet: 0 1px 2px rgba(43, 39, 35, 0.05), 0 10px 30px rgba(43, 39, 35, 0.09);
   --shadow-pop: 0 6px 22px rgba(43, 39, 35, 0.16);
@@ -51,6 +53,7 @@ html[data-theme='dark'] {
   --hl-green: #2f3e2c;
   --hl-blue: #2a3644;
   --hl-pink: #452f33;
+  --scrim: rgba(0, 0, 0, 0.55);
   --shadow-sheet: 0 1px 2px rgba(0, 0, 0, 0.5), 0 10px 30px rgba(0, 0, 0, 0.45);
   --shadow-pop: 0 6px 22px rgba(0, 0, 0, 0.6);
 }

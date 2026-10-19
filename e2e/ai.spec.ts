@@ -119,6 +119,7 @@ test('本章小结：先说成本、生成后重算走缓存、一次都没多�
   await win.locator('iframe.reader__view').waitFor()
 
   await win.getByRole('button', { name: 'AI', exact: true }).click()
+  await win.getByRole('tab', { name: '分析' }).click()
   const card = win.locator('.ai-task').filter({ hasText: '本章小结' })
 
   // 成本要先说清楚，再等一句「开始」
@@ -171,6 +172,7 @@ test('花钱之前就能看到预估：对话与任务确认框都给数字，�
   await expect(line).toContainText('token 输出')
 
   // 任务确认框：同样在点击「开始」之前就把数字说清楚
+  await win.getByRole('tab', { name: '分析' }).click()
   const card = win.locator('.ai-task').filter({ hasText: '本章小结' })
   await card.getByRole('button', { name: '生成' }).click()
   await expect(card.locator('.ai-task__confirm')).toContainText('预估输入约')
@@ -212,31 +214,31 @@ test('重开面板：结果从库里回填、回填不花钱，长结果在面�
   await win.locator('iframe.reader__view').waitFor()
 
   await win.getByRole('button', { name: 'AI', exact: true }).click()
+  await win.getByRole('tab', { name: '分析' }).click()
   const card = win.locator('.ai-task').filter({ hasText: '本章小结' })
   await card.getByRole('button', { name: '生成' }).click()
   await card.getByRole('button', { name: '开始' }).click()
   await expect(card.locator('.ai-task__text')).toBeVisible()
   expect((await aiCallCount(app)).chat).toBe(1)
 
-  // 结果区自己滚，且不把面板撑破、不把对话区挤成 0
+  // 「分析」这一面自己滚：长结果不会撑破面板。
+  // 两块内容已经分属不同标签，不再互相挤压，所以也就不用再验证对话区的高度
   const box = await win.evaluate(() => {
     const tasks = document.querySelector('.ai-tasks') as HTMLElement
-    const stream = document.querySelector('.ai-panel__stream') as HTMLElement
     const panel = document.querySelector('.ai-panel') as HTMLElement
     return {
       tasksScrollable: tasks.scrollHeight > tasks.clientHeight,
-      panelOverflows: panel.scrollHeight > panel.clientHeight,
-      streamHeight: stream.clientHeight
+      panelOverflows: panel.scrollHeight > panel.clientHeight
     }
   })
   expect(box.tasksScrollable).toBe(true)
   expect(box.panelOverflows).toBe(false)
-  expect(box.streamHeight).toBeGreaterThan(0)
 
   // 收起再打开：结果必须还在，且这一下不能触发任何模型调用
   await win.getByRole('button', { name: '收起', exact: true }).click()
   await win.getByRole('button', { name: 'AI', exact: true }).click()
-  // 回填来的结果默认折叠（给对话区留高度），展开后才看得到正文
+  await win.getByRole('tab', { name: '分析' }).click()
+  // 回填来的结果默认折叠，展开后才看得到正文
   await card.getByRole('button', { name: '查看结果（来自缓存）' }).click()
   await expect(card.locator('.ai-task__text')).toBeVisible()
   await expect(card.locator('.ai-task__badge')).toHaveText('来自缓存')

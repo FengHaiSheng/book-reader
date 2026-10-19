@@ -22,7 +22,10 @@ export type ReadingPrefs = {
   charsPerLine: number
   lineHeight: number
   theme: 'light' | 'dark'
-  /** AI 面板宽度（px）。拖左边缘改它，和阅读偏好一样落库，下次开面板还是这个宽度 */
+  /**
+   * AI 面板宽度（px），即用户拖左边缘拖出来的宽度。默认给到上限：窗口够宽时面板就吃满
+   * 这个宽度，窗口不够宽时由 `computeAiPanelWidth` 收窄，先保证正文列不被压窄。
+   */
   aiPanelWidth: number
 }
 
@@ -32,7 +35,7 @@ export const DEFAULT_PREFS: ReadingPrefs = {
   charsPerLine: 34,
   lineHeight: 1.85,
   theme: 'light',
-  aiPanelWidth: 360
+  aiPanelWidth: 720
 }
 
 export type BookStatus = 'unread' | 'reading' | 'finished'

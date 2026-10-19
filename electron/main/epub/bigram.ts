@@ -41,6 +41,19 @@ export function toIndexText(text: string): string {
   return tokenize(text).join(' ')
 }
 
+/**
+ * 单字列：每个汉字各占一个 token，与 bigram 列分开存。
+ *
+ * 单字查询（「雾」）在 bigram 列里永远命不中 —— 那列只有二字滑窗切出来的东西。
+ * 之所以另开一列而不是把单字混进 bigram 列，是因为 FTS5 的短语匹配只要求「同一列内」token 相邻：
+ * 混在一起的话，像「量子纠缠」这种多字查询的相邻性会被插在中间的单字打断，反而漏召回。
+ */
+export function toSingleIndexText(text: string): string {
+  const singles: string[] = []
+  for (const ch of text) if (CJK.test(ch)) singles.push(ch)
+  return singles.join(' ')
+}
+
 /** 短语查询：token 之间必须相邻，避免 bigram 切分后召回一堆无关段落。 */
 export function toMatchQuery(text: string): string {
   const tokens = tokenize(text)

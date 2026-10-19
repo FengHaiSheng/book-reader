@@ -1,6 +1,6 @@
 <div align="center">
 
-# 书架
+# 阅微
 
 **一个纯本地的桌面端 epub 阅读器 —— 把本地书当作要沉淀的知识，而不是消遣**
 
@@ -11,7 +11,7 @@
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-2B2723)](#下载与安装)
 [![License](https://img.shields.io/badge/license-ISC-2B2723)](#许可)
 
-[界面预览](#界面预览) · [下载与安装](#下载与安装) · [从源码运行](#从源码运行) · [AI 配置](#ai-配置byok) · [技术栈](#技术栈与架构) · [设计文档](#设计文档)
+[界面预览](#界面预览) · [下载与安装](#下载与安装) · [快速开始](#快速开始) · [从源码运行](#从源码运行) · [AI 配置](#ai-配置byok) · [技术栈](#技术栈与架构) · [设计文档](#设计文档)
 
 </div>
 
@@ -86,9 +86,9 @@
 
 | 你的系统 | 下载文件 |
 |---|---|
-| macOS（Apple 芯片 / M 系列） | `书架-x.y.z-arm64.dmg` |
-| macOS（Intel） | `书架-x.y.z-x64.dmg` |
-| Windows 10 / 11（64 位） | `书架 Setup x.y.z.exe` |
+| macOS（Apple 芯片 / M 系列） | `阅微-x.y.z-arm64.dmg` |
+| macOS（Intel） | `阅微-x.y.z-x64.dmg` |
+| Windows 10 / 11（64 位） | `阅微 Setup x.y.z.exe` |
 
 ### 系统要求
 
@@ -98,7 +98,7 @@
 ### macOS 安装
 
 1. 双击下载到的 `.dmg`
-2. 把 **书架** 拖进「应用程序」文件夹
+2. 把 **阅微** 拖进「应用程序」文件夹
 3. 在启动台或「应用程序」里打开
 
 ### Windows 安装
@@ -111,7 +111,7 @@
 
 这是**未签名应用的必然结果，不是装错了**：
 
-- **macOS**：双击会提示「无法打开，因为 Apple 无法检查其是否包含恶意软件」。在「应用程序」里 **右键（或按住 Control 点击）书架 → 打开 → 再点一次「打开」** 即可放行，之后正常双击启动。
+- **macOS**：双击会提示「无法打开，因为 Apple 无法检查其是否包含恶意软件」。在「应用程序」里 **右键（或按住 Control 点击）阅微 → 打开 → 再点一次「打开」** 即可放行，之后正常双击启动。
 - **Windows**：会出现 SmartScreen 蓝色提示。点 **「更多信息」→「仍要运行」**。
 
 放行这一步只需要做一次。如果希望双击即可打开（需要 Apple Developer Program 账号，99 USD/年），可参考 [打包](#打包) 一节开启签名与公证。
@@ -119,6 +119,34 @@
 ### 首次启动
 
 不联网、不需要注册登录。导入一本 epub 就能开始读；AI 功能是可选增强，随时在「设置 → 模型」里配置。
+
+---
+
+## 快速开始
+
+装好之后，从打开到读完一本书，只需要四步。
+
+### 1. 导入一本 epub
+
+打开「书架」，把 epub 文件拖进窗口（末尾的拖放区就是终点，可以一次拖多本），或点「导入」选择文件。书会被**复制进书库**，之后原文件移动或删除都不影响阅读；同一本书重复导入会自动去重。
+
+### 2. 打开来读
+
+点封面进入阅读器。翻页用 `←` `→`，或点左右页边。左侧「排版」面板可随时调整：
+
+- 字体（宋 / 黑）、字号 15–24
+- **每行字数 24–48**（独立控件，不跟着字号走）
+- 行距 1.5–2.2、亮 / 暗主题
+
+改完排版位置不丢——进度和高亮都以 CFI 为准，重新分页后依然会回到原处。窗口拉到 ≥1900px 会自动切成对开双页。
+
+### 3. 留下高亮与笔记
+
+选中正文任意一段文字，浮条就会出现：**高亮**（4 色）、**写批注**、复制、查词、问 AI。所有标注都收进「笔记」页，跨书汇总、可按书或类型筛选，也能一键导出 Markdown。笔记与高亮都落在本机 SQLite 里，杀进程重开零丢失。
+
+### 4.（可选）接上 AI
+
+打开 **设置 → 模型**，选服务商（DeepSeek / 通义千问 / 智谱 GLM / Kimi），填入 API Key 保存即可。**不配置也能完整读书**。所有 AI 调用都由你显式触发，不会在后台自动运行——详见 [AI 配置](#ai-配置byok)。
 
 ---
 
@@ -168,6 +196,19 @@ npm start
 ### 打包
 
 打包用 [electron-builder](https://www.electron.build/)，配置在 `electron-builder.yml`。两个必须解包到 asar 之外的东西：`better-sqlite3` 的原生 `.node`（`dlopen` 不认 asar 虚拟路径），以及 epub 抽取 worker（要被 `worker_threads` 加载）。
+
+应用图标是手绘的 `build/icon.svg`（配色取自设计 token：纸 `#FCFAF6`、墨 `#2B2723`、朱红 `#B4462F`），栅格化成 1024×1024 的 `build/icon.png`：
+
+```bash
+sips -s format png build/icon.svg --out build/icon.png
+```
+
+electron-builder 会由这张 PNG 自动生成 macOS 的 `icns` 与 Windows 的 `ico`，不需要分别维护两个文件。
+
+改图标时有两个坑：
+
+- **按 macOS 图标网格排版。** 主体占 `824/1024` 居中，四周留透明边距（`<rect>` 用 `x/y=100 w/h=824`）。铺满整张画布会让它在 Dock 里比系统 App 大一圈。
+- **`sips` 用的 CoreSVG 不支持 `feDropShadow`**，写了也不报错、直接不渲染。投影要手动拼：同形矩形下移 18px + `feGaussianBlur stdDeviation="20"`，再用 `clipPath` 裁掉纸面上方的溢出。改完务必抽查像素，别只看渲染没报错。
 
 未签名的 macOS dmg 首次打开会被 Gatekeeper 拦住（自己用右键「打开」放行）。要给别人双击即可打开，需要 Apple Developer Program 账号，拿到 Developer ID 后设置 `CSC_LINK` / `CSC_KEY_PASSWORD` 环境变量，并把配置里的 `notarize` 改成 `true`。Windows 侧同理，未签名时会触发 SmartScreen 警告。
 
@@ -245,8 +286,8 @@ docs/superpowers/   # 设计文档与实现计划
 
 | 平台 | 位置 |
 |---|---|
-| macOS | `~/Library/Application Support/书架/` |
-| Windows | `%APPDATA%\书架\` |
+| macOS | `~/Library/Application Support/book-read/` |
+| Windows | `%APPDATA%\book-read\` |
 
 ```
 db.sqlite          # 书库、目录、章节、chunk、进度、高亮、笔记、AI 结果

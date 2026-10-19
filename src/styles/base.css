@@ -501,6 +501,134 @@ html[data-theme='dark'] .seg__b.is-on {
   cursor: default;
 }
 
+/* 书内查找条：贴工具条下方的一条，不占左栏 —— 目录始终留在原地 */
+.findbar {
+  flex: 0 0 auto;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+
+.findbar__row {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  padding: var(--s2) var(--s3);
+}
+
+.findbar__input {
+  width: 220px;
+  height: 26px;
+  padding: 0 var(--s2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+}
+
+.findbar__input:focus {
+  outline: none;
+  border-color: var(--accent-link);
+}
+
+.findbar__status {
+  color: var(--ink-muted);
+  font-size: 12px;
+}
+
+/* 请求失败不是「没找到」，颜色要分得开 */
+.findbar__status--error {
+  color: var(--accent-mark);
+}
+
+.findbar__btn {
+  height: 26px;
+  padding: 0 var(--s2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.findbar__btn:hover:not(:disabled) {
+  background: var(--hover);
+}
+
+.findbar__btn:disabled {
+  color: var(--ink-muted);
+  cursor: default;
+}
+
+.findbar__spacer {
+  flex: 1;
+}
+
+.findbar__note {
+  margin: 0;
+  padding: 0 var(--s3) var(--s2);
+  color: var(--accent-mark);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+/* 结果列表：有上限高度，别把正文顶到看不见 */
+.findbar__list {
+  max-height: 40vh;
+  margin: 0;
+  padding: 0 0 var(--s2);
+  list-style: none;
+  overflow-y: auto;
+  border-top: 1px solid var(--line);
+}
+
+.findbar__item {
+  display: block;
+  width: 100%;
+  padding: var(--s2) var(--s3);
+  border: 0;
+  background: none;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.findbar__item:hover {
+  background: var(--hover);
+}
+
+/* 回车/下一条走到哪一条，要看得出来 */
+.findbar__item--active {
+  background: var(--active);
+}
+
+.findbar__chapter {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--ink-muted);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.findbar__snippet {
+  display: block;
+  font-size: 12px;
+  line-height: 1.6;
+  word-break: break-word;
+}
+
+/* 命中词标一下：结果一堆相似的句子，不标出来认不出差别 */
+.findbar__mark {
+  background: var(--hl-yellow);
+  color: inherit;
+  border-radius: 2px;
+}
+
 /* 降级提示条：常驻在工具条下方，不做成可关闭的 toast —— 它是状态，不是事件 */
 .reader__degrade {
   margin: 0;
@@ -1295,21 +1423,23 @@ html[data-theme='dark'] .seg__b.is-on {
   background: color-mix(in srgb, var(--accent-link) 30%, transparent);
 }
 
+/* 头部只放身份与两个安静操作，不再兼做导航 */
 .ai-panel__head {
+  flex: 0 0 40px;
   display: flex;
   align-items: center;
   gap: var(--s2);
-  padding: var(--s2) var(--s3);
-  border-bottom: 1px solid var(--line);
+  padding: 0 var(--s2) 0 var(--s3);
 }
 
 .ai-panel__title {
   font-size: 13px;
   font-weight: 600;
+  letter-spacing: 0.02em;
 }
 
 .ai-panel__model {
-  font-size: 12px;
+  font-size: 11.5px;
   color: var(--ink-muted);
   white-space: nowrap;
   overflow: hidden;
@@ -1318,6 +1448,78 @@ html[data-theme='dark'] .seg__b.is-on {
 
 .ai-panel__spacer {
   flex: 1;
+  min-width: 0;
+}
+
+.ai-btn {
+  flex: 0 0 auto;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: var(--r-sm);
+  color: var(--ink-muted);
+  font-size: 12px;
+  transition: background var(--ease), color var(--ease);
+}
+
+.ai-btn:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.ai-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* 两个视图各占满整块高度，互不挤压。选中态用墨色下划线：安静，且明确 */
+.ai-panel__tabs {
+  flex: 0 0 34px;
+  display: flex;
+  border-bottom: 1px solid var(--line);
+}
+
+.ai-tab {
+  flex: 1;
+  position: relative;
+  color: var(--ink-muted);
+  font-size: 12.5px;
+  transition: color var(--ease);
+}
+
+.ai-tab:hover {
+  color: var(--ink);
+}
+
+.ai-tab[aria-selected='true'] {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.ai-tab[aria-selected='true']::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  background: var(--ink);
+}
+
+.ai-tab:focus-visible {
+  outline: 2px solid var(--accent-link);
+  outline-offset: -3px;
+}
+
+.ai-pane {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* display:flex 会盖掉 [hidden] 的默认 display:none，这里显式补回 */
+.ai-pane[hidden] {
+  display: none;
 }
 
 .ai-panel__stream {
@@ -1327,26 +1529,50 @@ html[data-theme='dark'] .seg__b.is-on {
   padding: var(--s3);
   display: flex;
   flex-direction: column;
-  gap: var(--s3);
+  gap: var(--s4);
 }
 
-.ai-panel__empty,
-.ai-panel__note {
+/* 空态：一屏一个焦点，顺手把这屏能做的事讲清楚 */
+.ai-panel__empty {
+  margin: auto;
+  max-width: 240px;
+  text-align: center;
+}
+
+.ai-panel__empty-lead {
+  margin: 0 0 var(--s2);
+  font-family: var(--serif);
+  font-size: 14px;
+  line-height: 1.8;
+  color: var(--ink);
+}
+
+.ai-panel__empty-hint {
   margin: 0;
   font-size: 12px;
+  line-height: 1.75;
   color: var(--ink-muted);
-  line-height: 1.6;
 }
 
-.ai-panel__foot {
-  border-top: 1px solid var(--line);
-  padding: var(--s3);
+.ai-panel__note {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- 输入区 ---- */
+.ai-composer {
+  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
   gap: var(--s2);
+  padding: var(--s3);
+  border-top: 1px solid var(--line);
 }
 
-.ai-panel__quote {
+.ai-quote {
   display: flex;
   align-items: flex-start;
   gap: var(--s2);
@@ -1356,13 +1582,57 @@ html[data-theme='dark'] .seg__b.is-on {
   border-radius: var(--r-sm);
   font-size: 12px;
   color: var(--ink-muted);
-  line-height: 1.5;
+  line-height: 1.6;
+}
+
+.ai-quote__text {
+  flex: 1;
+  min-width: 0;
+}
+
+.ai-quote__x {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--r-sm);
+  color: var(--ink-muted);
+  font-size: 14px;
+  line-height: 1;
+}
+
+.ai-quote__x:hover {
+  background: var(--active);
+  color: var(--ink);
+}
+
+/* 常用动作：没划词时教用户「这本书能分析什么」，划了词就换成「对这段做什么」 */
+.ai-quick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ai-chip {
+  height: 24px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper-raised);
+  color: var(--ink-muted);
+  font-size: 12px;
+  transition: background var(--ease), color var(--ease), border-color var(--ease);
+}
+
+.ai-chip:hover {
+  background: var(--hover);
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--ink) 22%, transparent);
 }
 
 .ai-panel__input {
   width: 100%;
   resize: none;
-  padding: 8px;
+  padding: 8px 10px;
   border: 1px solid var(--line);
   border-radius: var(--r-sm);
   background: var(--paper-raised);
@@ -1372,15 +1642,26 @@ html[data-theme='dark'] .seg__b.is-on {
   line-height: 1.6;
 }
 
-.ai-panel__actions {
+.ai-panel__input:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--accent-link) 55%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-link) 14%, transparent);
+}
+
+/* 预估与发送同一行：预估常有第二行文案，独占一行会把发送键推得太低 */
+.ai-composer__foot {
   display: flex;
   align-items: center;
   gap: var(--s2);
 }
 
-.ai-panel__hint {
-  font-size: 12px;
-  color: var(--ink-muted);
+.ai-composer__meta {
+  flex: 1;
+  min-width: 0;
+}
+
+.ai-composer__foot .btn {
+  flex: 0 0 auto;
 }
 
 /* ---- 消息 ---- */
@@ -1389,9 +1670,10 @@ html[data-theme='dark'] .seg__b.is-on {
   flex-direction: column;
   gap: 6px;
   font-size: 13px;
-  line-height: 1.7;
+  line-height: 1.75;
 }
 
+/* 用户那条：右对齐、压低，像写在页边的批注 */
 .ai-msg--user {
   align-items: flex-end;
 }
@@ -1405,19 +1687,24 @@ html[data-theme='dark'] .seg__b.is-on {
   border-radius: var(--r-sm);
   color: var(--ink-muted);
   font-size: 12px;
-  line-height: 1.5;
+  line-height: 1.6;
 }
 
 .ai-msg__say {
   margin: 0;
   padding: 6px 10px;
-  max-width: 90%;
+  max-width: 88%;
   background: var(--active);
   border-radius: var(--r-md);
 }
 
+/* 助手那条：一张纸。从面板底色里分出来，长回答读起来不串行 */
 .ai-msg--assistant {
   align-items: stretch;
+  padding: 10px 12px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
 }
 
 .ai-msg__body {
@@ -1487,8 +1774,12 @@ html[data-theme='dark'] .seg__b.is-on {
 .ai-msg__meta,
 .ai-msg__status {
   margin: 0;
-  font-size: 12px;
+  font-size: 11.5px;
   color: var(--ink-muted);
+}
+
+.ai-msg--failed {
+  border-color: color-mix(in srgb, var(--accent-mark) 40%, var(--line));
 }
 
 .ai-msg--failed .ai-msg__body {
@@ -1499,6 +1790,7 @@ html[data-theme='dark'] .seg__b.is-on {
   color: var(--accent-mark);
 }
 
+/* 引用上标：一个能点回原文的小按钮，而不是纯文本 */
 .ai-cite {
   min-width: 16px;
   height: 16px;
@@ -1512,6 +1804,7 @@ html[data-theme='dark'] .seg__b.is-on {
   line-height: 16px;
   vertical-align: 2px;
   cursor: pointer;
+  transition: background var(--ease), color var(--ease);
 }
 
 .ai-cite:hover {
@@ -1521,7 +1814,7 @@ html[data-theme='dark'] .seg__b.is-on {
 
 /* ---- 降级与提示 ---- */
 .ai-degrade {
-  margin: 0;
+  margin: 0 0 var(--s2);
   padding: 6px 8px;
   background: color-mix(in srgb, var(--hl-yellow) 60%, transparent);
   border-radius: var(--r-sm);
@@ -1546,9 +1839,11 @@ html[data-theme='dark'] .seg__b.is-on {
   color: var(--accent-mark);
 }
 
+/* 向量索引：一行状态 + 一个动作，不再独占一条横幅 */
 .ai-index-bar {
+  flex: 0 0 auto;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--s2);
   padding: var(--s2) var(--s3);
   border-bottom: 1px solid var(--line);
@@ -1557,14 +1852,45 @@ html[data-theme='dark'] .seg__b.is-on {
   color: var(--ink-muted);
 }
 
+.ai-index-bar__text {
+  flex: 1;
+  min-width: 0;
+}
+
+.ai-index-bar__dot {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: var(--ink-muted);
+  opacity: 0.5;
+}
+
+.ai-index-bar__dot--ok {
+  background: var(--accent-link);
+  opacity: 0.85;
+}
+
+.ai-index-bar__dot--busy {
+  background: var(--accent-mark);
+  opacity: 1;
+  animation: ai-dot 1.2s ease-in-out infinite;
+}
+
 .ai-index-bar--confirm {
   flex-direction: column;
   align-items: stretch;
 }
 
+.ai-index-bar--confirm p {
+  margin: 0;
+}
+
 .ai-index-bar__actions {
   display: flex;
   gap: var(--s2);
+  margin-top: var(--s2);
 }
 
 .btn--quiet {
@@ -1578,54 +1904,50 @@ html[data-theme='dark'] .seg__b.is-on {
   color: var(--ink);
 }
 
-/* ---- 结构化任务 ---- */
+/* ---- 本书分析 ---- */
 .ai-tasks {
   display: flex;
   flex-direction: column;
-  /* 结果可能很长（全书要点/关键词/导图），必须自己滚：给个上限，别把对话区挤成 0，
-     也别撑破面板 —— 设计约定「滚动在面板内发生」。 */
-  flex: 0 1 auto;
+  /* 整块就是「分析」视图的滚动区：索引条钉在上方，卡片列表在这里滚 */
+  flex: 1;
   min-height: 0;
-  max-height: 50%;
   overflow-y: auto;
-  border-bottom: 1px solid var(--line);
 }
 
-/* 「本书分析」的折叠头。吸顶，列表滚起来时它不会跟着滚走 */
+/* 分组头吸顶：滚到下面时还知道这是哪一块 */
 .ai-tasks__head {
   position: sticky;
   top: 0;
   z-index: 1;
-  padding: var(--s1) var(--s3);
+  padding: var(--s3) var(--s3) var(--s1);
   background: var(--panel);
 }
 
-.ai-tasks__toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--ink);
-  font: inherit;
+.ai-tasks__title {
   font-size: 12px;
   font-weight: 600;
-  cursor: pointer;
+  letter-spacing: 0.06em;
 }
 
-.ai-tasks__caret {
+.ai-tasks__lead {
+  display: block;
+  margin-top: 2px;
+  font-size: 11.5px;
   color: var(--ink-muted);
-  font-size: 10px;
 }
 
 .ai-task {
-  padding: var(--s2) var(--s3);
+  padding: var(--s3);
   border-top: 1px solid var(--line);
 }
 
 .ai-tasks__head + .ai-task {
   border-top: 0;
+}
+
+/* 正在跑的那张给一点底色：一眼能在列表里找到它 */
+.ai-task--running {
+  background: color-mix(in srgb, var(--paper) 60%, transparent);
 }
 
 .ai-task__head {
@@ -1636,6 +1958,7 @@ html[data-theme='dark'] .seg__b.is-on {
 
 .ai-task__name {
   font-size: 13px;
+  font-weight: 500;
 }
 
 .ai-task__badge {
@@ -1649,7 +1972,8 @@ html[data-theme='dark'] .seg__b.is-on {
 .ai-task__hint,
 .ai-task__meta {
   margin: var(--s1) 0 0;
-  font-size: 12px;
+  font-size: 11.5px;
+  line-height: 1.6;
   color: var(--ink-muted);
 }
 
@@ -1670,8 +1994,12 @@ html[data-theme='dark'] .seg__b.is-on {
   line-height: 1.75;
 }
 
+/* 确认框：往面板底色里再沉一层，像一张要先签字的单子 */
 .ai-task__confirm {
-  margin-top: var(--s2);
+  margin-top: var(--s3);
+  padding: var(--s3);
+  background: var(--shell);
+  border-radius: var(--r-sm);
 }
 
 .ai-task__confirm p {
@@ -1681,24 +2009,25 @@ html[data-theme='dark'] .seg__b.is-on {
   color: var(--ink-muted);
 }
 
-/* 结果是一张纸面上的卡片：从面板底色里分出来，长文本读起来不串行 */
+/* 结果：展开时才成一张纸卡。收起时只剩一行链接，不白占版面 */
 .ai-task__result {
   margin-top: var(--s2);
+}
+
+.ai-task__result--open {
   padding: var(--s3);
   background: var(--paper);
-  border-radius: var(--r-sm);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
   font-size: 13px;
   line-height: 1.75;
 }
 
 .ai-task__result-toggle {
   padding: 0;
-  border: 0;
-  background: transparent;
   color: var(--accent-link);
   font: inherit;
   font-size: 12px;
-  cursor: pointer;
 }
 
 .ai-task__result-toggle:hover {
@@ -2033,15 +2362,33 @@ html[data-theme='dark'] .seg__b.is-on {
   flex: 0 0 120px;
 }
 
-.book-card__remove {
-  font-size: 12px;
-  color: var(--ink-muted);
-  opacity: 0;
-  transition: opacity var(--ease), color var(--ease);
+.book-card__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s1);
 }
 
-.book-grid__cell:hover .book-card__remove {
+/* 卡片的两个动作：和列表行一样悬停才显出来，免得网格里排满按钮 */
+.book-card__acts {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  opacity: 0;
+  transition: opacity var(--ease);
+}
+
+.book-grid__cell:hover .book-card__acts {
   opacity: 1;
+}
+
+.book-card__acts button {
+  font-size: 12px;
+  color: var(--ink-muted);
+  transition: color var(--ease);
+}
+
+.book-card__tag-add:hover {
+  color: var(--accent-link);
 }
 
 .book-card__remove:hover {
@@ -2177,9 +2524,16 @@ html[data-theme='dark'] .seg__b.is-on {
 
 .tag-dot {
   flex: 0 0 auto;
-  width: 8px;
-  height: 8px;
+  width: 9px;
+  height: 9px;
   border-radius: 50%;
+  /* 高亮底色本身很淡，白底上几乎看不出边界，补一条发丝线才有个「点」的样子 */
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 14%, transparent);
+}
+
+/* 暗色下高亮底色比面板还暗，发丝线得再亮一档，否则一排点全是糊的 */
+html[data-theme='dark'] .tag-dot {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 30%, transparent);
 }
 
 .tag-dot--yellow {
@@ -2196,10 +2550,13 @@ html[data-theme='dark'] .seg__b.is-on {
 }
 
 .tag-chip {
-  padding: 1px 6px;
-  border-radius: 3px;
-  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: var(--r-sm);
+  font-size: 12px;
+  line-height: 1.4;
   color: var(--ink);
+  /* 同 .tag-dot：淡底在纸面上要一条发丝线才收得住边 */
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 12%, transparent);
 }
 
 .tag-chip--yellow {
@@ -2215,10 +2572,6 @@ html[data-theme='dark'] .seg__b.is-on {
   background: var(--hl-pink);
 }
 
-.book-list__item {
-  position: relative;
-}
-
 .book-list__tags {
   display: flex;
   align-items: center;
@@ -2228,17 +2581,13 @@ html[data-theme='dark'] .seg__b.is-on {
 }
 
 .book-list__tag-add {
-  /* 浮层的遮罩铺满窗口（z-index 4），这个入口要压在它上面才能再次点到 */
-  position: relative;
-  z-index: 5;
   font-size: 12px;
   color: var(--ink-muted);
   opacity: 0;
   transition: opacity var(--ease), color var(--ease);
 }
 
-.book-list__item:hover .book-list__tag-add,
-.book-list__tag-add[aria-expanded='true'] {
+.book-list__item:hover .book-list__tag-add {
   opacity: 1;
 }
 
@@ -2246,52 +2595,187 @@ html[data-theme='dark'] .seg__b.is-on {
   color: var(--accent-link);
 }
 
-.tag-picker__scrim {
+/* ---- 模态框 ---- */
+.modal {
   position: fixed;
   inset: 0;
-  z-index: 4;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.tag-picker {
+.modal__scrim {
   position: absolute;
-  right: var(--s5);
-  top: calc(100% - var(--s2));
-  z-index: 5;
-  width: 260px;
-  padding: var(--s4);
+  inset: 0;
+  background: var(--scrim);
+  /* 出现要有个过程：直接啪一下贴上来，再好的配色也显得生硬 */
+  animation: modal-scrim-in 160ms var(--ease) both;
+}
+
+.modal__panel {
+  position: relative;
+  width: 380px;
+  max-width: calc(100vw - var(--s7));
+  max-height: calc(100vh - var(--s7));
   display: flex;
   flex-direction: column;
-  gap: var(--s2);
   background: var(--paper-raised);
   border: 1px solid var(--line);
-  border-radius: var(--r-md);
+  border-radius: var(--r-lg);
   box-shadow: var(--shadow-pop);
+  animation: modal-panel-in 160ms var(--ease) both;
 }
 
-.tag-picker__title {
-  margin: 0;
-  font-size: 12px;
+.modal__panel:focus {
+  outline: none;
+}
+
+.modal__head {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  padding: var(--s4) var(--s5) var(--s2);
+}
+
+.modal__title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.modal__x {
+  flex: 0 0 auto;
+  font-size: 15px;
+  line-height: 1;
   color: var(--ink-muted);
+  transition: color var(--ease);
+}
+
+.modal__x:hover {
+  color: var(--ink);
+}
+
+@keyframes modal-scrim-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* 从 .96 起手：像抽屉被推出来，而不是凭空出现 */
+@keyframes modal-panel-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+
+/*
+ * 模态框的内容面：管理和指派都是「一排一排」的，间距统一由这里给。
+ * 左右 16 而不是 24：每行自己还有 8 的内边距，加起来正好和标题的左边缘对齐。
+ */
+.modal__body {
+  padding: 0 var(--s4) var(--s5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s1);
+  overflow-y: auto;
 }
 
 .tag-picker__hint,
 .tag-manager__hint {
   margin: 0;
+  padding: var(--s2) var(--s2) 0;
   font-size: 12px;
   color: var(--ink-muted);
 }
 
-.tag-picker__row {
+/* 两个模态框里的行共用一套行框：悬停有底、行高按桌面端密度收紧 */
+.tag-picker__row,
+.tag-manager__row {
   display: flex;
   align-items: center;
   gap: var(--s2);
+  min-height: 32px;
+  padding: 0 var(--s2);
+  border-radius: var(--r-sm);
   font-size: 13px;
+  transition: background var(--ease);
+}
+
+.tag-picker__row:hover,
+.tag-manager__row:hover {
+  background: var(--hover);
+}
+
+.tag-picker__row {
   cursor: pointer;
 }
 
-.tag-picker__name {
+.tag-picker__name,
+.tag-manager__name {
   flex: 1;
   min-width: 0;
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+
+/* 名字就是改名的入口：平时是一行安静的字，悬停才亮起来说自己能点 */
+.tag-manager__name {
+  padding: 0;
+}
+
+.tag-manager__name:hover:not(:disabled) {
+  color: var(--accent-link);
+}
+
+.tag-manager__count {
+  flex: 0 0 auto;
+  font-size: 12px;
+  color: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 行内动作和书架一样悬停才显出来，平时这一列是安静的 */
+.tag-manager__act {
+  flex: 0 0 auto;
+  height: 22px;
+  padding: 0 var(--s2);
+  border-radius: var(--r-sm);
+  font-size: 12px;
+  color: var(--ink-muted);
+  opacity: 0;
+  transition: opacity var(--ease), color var(--ease), background var(--ease);
+}
+
+.tag-manager__row:hover .tag-manager__act,
+.tag-manager__act:focus-visible {
+  opacity: 1;
+}
+
+.tag-manager__act:hover {
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  color: var(--accent-link);
+}
+
+/* 二次确认留在行内：原生 confirm 会把模态框的情绪打断，还要重看一眼才知道自己在删什么。
+   确认态要有底：光把字染红，看起来仍像一行说明，不像一个能按的东西 */
+.tag-manager__act--danger {
+  color: var(--accent-mark);
+  background: color-mix(in srgb, var(--accent-mark) 12%, transparent);
+  opacity: 1;
+}
+
+.tag-manager__act--danger:hover {
+  color: var(--accent-mark);
+  background: color-mix(in srgb, var(--accent-mark) 20%, transparent);
 }
 
 .tag-picker__new,
@@ -2299,61 +2783,48 @@ html[data-theme='dark'] .seg__b.is-on {
   display: flex;
   align-items: center;
   gap: var(--s2);
+  min-height: 32px;
+  padding: 0 var(--s2);
 }
 
+/*
+ * 模态框里所有文字输入的同一副皮：原生默认的凹陷边框放在这套纸面上很扎眼。
+ * 三处（指派页新建、管理页新建、就地改名）必须长得一模一样，否则同一个框换一行就变样。
+ */
 .tag-picker__new input,
-.tag-manager__new input {
+.tag-manager__new input,
+.tag-manager__rename {
   flex: 1;
   min-width: 0;
+  height: 28px;
+  padding: 0 var(--s2);
+  font: inherit;
+  font-size: 13px;
+  color: var(--ink);
+  background: var(--paper-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+}
+
+.tag-picker__new input::placeholder,
+.tag-manager__new input::placeholder {
+  color: var(--ink-muted);
+}
+
+/* 删标签不删书这句话原来是原生 confirm 说的，确认框挪进行内之后由它来说 */
+.tag-manager__note {
+  margin: var(--s1) 0 0;
+  padding: 0 var(--s2);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--ink-muted);
 }
 
 .tag-picker__error,
 .tag-manager__error {
   margin: 0;
+  padding: 0 var(--s2);
   font-size: 12px;
-  color: var(--accent-mark);
-}
-
-.tag-manager {
-  margin-bottom: var(--s5);
-  padding: var(--s4) var(--s5);
-  display: flex;
-  flex-direction: column;
-  gap: var(--s2);
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: var(--r-lg);
-}
-
-.tag-manager__title {
-  margin: 0;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.tag-manager__row {
-  display: flex;
-  align-items: center;
-  gap: var(--s2);
-}
-
-.tag-manager__name {
-  flex: 1;
-  min-width: 0;
-}
-
-.tag-manager__count {
-  font-size: 12px;
-  color: var(--ink-muted);
-  font-variant-numeric: tabular-nums;
-}
-
-.tag-manager__remove {
-  font-size: 12px;
-  color: var(--ink-muted);
-}
-
-.tag-manager__remove:hover:not(:disabled) {
   color: var(--accent-mark);
 }
 

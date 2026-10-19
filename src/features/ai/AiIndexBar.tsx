@@ -38,15 +38,17 @@ export function AiIndexBar({
 
   if (!status.caps.embed) {
     return (
-      <p className="ai-notice" role="status">
-        {providerName} 不提供向量检索，本面板用的是关键词检索 + 当前章节窗口，跨章节召回会变弱。
+      <p className="ai-index-bar ai-index-bar--calm" role="status">
+        <span className="ai-index-bar__dot" aria-hidden="true" />
+        {providerName} 不提供向量检索，用的是关键词检索 + 当前章节窗口，跨章节召回会变弱。
       </p>
     )
   }
 
   if (status.unavailable.includes('embed')) {
     return (
-      <p className="ai-notice" role="status">
+      <p className="ai-index-bar ai-index-bar--calm" role="status">
+        <span className="ai-index-bar__dot" aria-hidden="true" />
         {providerName} 这次拒绝了向量检索请求，已停用该能力，改用关键词检索 + 当前章节窗口。
       </p>
     )
@@ -71,11 +73,16 @@ export function AiIndexBar({
   if (running) {
     return (
       <div className="ai-index-bar" role="status">
-        <span>
+        <span className="ai-index-bar__dot ai-index-bar__dot--busy" aria-hidden="true" />
+        <span className="ai-index-bar__text">
           正在建立向量索引：{done} / {total}
           {progress?.label ? `（${progress.label}）` : ''}
         </span>
-        <button type="button" className="btn btn--quiet" onClick={() => void window.api.ai.cancelIndex(bookId)}>
+        <button
+          type="button"
+          className="btn btn--quiet"
+          onClick={() => void window.api.ai.cancelIndex(bookId)}
+        >
           停下
         </button>
       </div>
@@ -104,7 +111,8 @@ export function AiIndexBar({
 
   if (remaining === 0) {
     return (
-      <p className="ai-notice" role="status">
+      <p className="ai-index-bar ai-index-bar--calm" role="status">
+        <span className="ai-index-bar__dot ai-index-bar__dot--ok" aria-hidden="true" />
         向量索引已建立（{total} 段），跨章节的问题召回更准。
       </p>
     )
@@ -112,13 +120,14 @@ export function AiIndexBar({
 
   return (
     <div className="ai-index-bar">
-      <span>
+      <span className="ai-index-bar__dot" aria-hidden="true" />
+      <span className="ai-index-bar__text">
         {done === 0
           ? '这本书还没有建立向量索引，跨章节的问题只能靠关键词召回。'
           : `向量索引建了一半（${done} / ${total}），可以接着建。`}
       </span>
       <button type="button" className="btn" onClick={() => setConfirming(true)}>
-        {done === 0 ? '建立向量索引' : '继续建立'}
+        {done === 0 ? '建立索引' : '继续建立'}
       </button>
       {error && <p className="ai-notice ai-notice--error">{error}</p>}
     </div>

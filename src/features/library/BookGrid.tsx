@@ -10,11 +10,14 @@ import { confirmRemove, ctaLabel, progressLabel } from './shelf'
 export function BookGrid({
   books,
   onOpen,
-  onRemove
+  onRemove,
+  onTag
 }: {
   books: BookSummary[]
   onOpen: (id: string) => void
   onRemove: (id: string) => void
+  /** 打标签的入口交给页面：指派是一个模态框，两套视图共用同它 */
+  onTag: (book: BookSummary) => void
 }) {
   return (
     <ul className="book-grid">
@@ -29,6 +32,15 @@ export function BookGrid({
             </span>
             <span className="book-card__title">{book.title}</span>
             <span className="book-card__meta">{book.author ?? '未知作者'}</span>
+            {book.tags.length > 0 && (
+              <span className="book-card__tags">
+                {book.tags.map((tag) => (
+                  <span key={tag.id} className={`tag-chip tag-chip--${tag.color}`}>
+                    {tag.name}
+                  </span>
+                ))}
+              </span>
+            )}
             {(book.percent > 0 || book.status === 'finished') && (
               <span className="book-card__prog">
                 <span className="track">
@@ -41,15 +53,20 @@ export function BookGrid({
               </span>
             )}
           </button>
-          <button
-            type="button"
-            className="book-card__remove"
-            onClick={() => {
-              if (confirmRemove(book)) onRemove(book.id)
-            }}
-          >
-            删除
-          </button>
+          <span className="book-card__acts">
+            <button type="button" className="book-card__tag-add" onClick={() => onTag(book)}>
+              ＋标签
+            </button>
+            <button
+              type="button"
+              className="book-card__remove"
+              onClick={() => {
+                if (confirmRemove(book)) onRemove(book.id)
+              }}
+            >
+              删除
+            </button>
+          </span>
         </li>
       ))}
       <li className="book-grid__cell book-grid__drop">拖 epub 到这里</li>

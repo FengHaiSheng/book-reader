@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { PREFS_LIMITS, type AiEstimate, type AiStatus, type Citation } from '@shared/types'
+import type { AiEstimate, AiStatus, Citation } from '@shared/types'
 import { AiIndexBar } from './AiIndexBar'
 import { AiMessage, type Turn } from './AiMessage'
 import { AiTasks, estimateLine, type TaskKey } from './AiTasks'
@@ -9,11 +9,28 @@ export type AiSeed =
   | { kind: 'prefill'; task: 'ask'; text: string }
   | { kind: 'send'; task: 'explain' | 'translate'; text: string }
 
+/** 面板的两个视图。对话是默认面：用户打开面板多半是想问点什么 */
+type Tab = 'chat' | 'analysis'
+
+/**
+ * 没带选段时，输入框上方的常用入口。
+ *
+ * 全部指向「分析」里的任务，点了就切过去并把成本确认框摆出来——
+ * 这些是这本书能做的事里最容易被忽略的一部分，摆在输入框上是最低成本的发现路径。
+ */
+const QUICK_TASKS: { task: TaskKey; label: string }[] = [
+  { task: 'summary', label: '本章小结' },
+  { task: 'digest', label: '全书要点' },
+  { task: 'terms', label: '关键词' }
+]
+
 export function AiPanel({
   bookId,
   chapterId,
   seed,
   panelWidth,
+  minWidth,
+  maxWidth,
   onPanelWidth,
   onSeedConsumed,
   onCitation,
@@ -22,8 +39,11 @@ export function AiPanel({
   bookId: string
   chapterId: number | null
   seed: AiSeed | null
-  /** 面板宽度（px），由偏好来。拖左边缘改它 */
+  /** 面板宽度（px），由偏好与窗口一起算出来。拖左边缘改它 */
   panelWidth: number
+  /** 能拖到的下限与上限。上限是「再宽就会挤窄正文列」那条线，比 PREFS_LIMITS 更紧 */
+  minWidth: number
+  maxWidth: number
   onPanelWidth: (width: number) => void
   onSeedConsumed: () => void
   onCitation?: (citation: Citation) => void
@@ -40,6 +60,9 @@ export function AiPanel({
   const [estimateError, setEstimateError] = useState<string | null>(null)
   /** 本章是否已有小结，决定「重新生成」要不要提醒会再花一次钱 */
   const [hasSummary, setHasSummary] = useState(false)
+  const [tab, setTab] = useState<Tab>('chat')
+  /** 从快捷入口点进来的任务：切到「分析」后由 AiTasks 把它打开 */
+  const [focusTask, setFocusTask] = useState<TaskKey | null>(null)
 
   const streamRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
@@ -117,7 +140,7 @@ export function AiPanel({
   useEffect(() => {
     const box = streamRef.current
     if (box) box.scrollTop = box.scrollHeight
-  }, [turns.length, lastLength])
+  }, [turns.length, lastLength, tab])
 
   const send = useCallback(
     async (task: 'ask' | 'explain' | 'translate', input: { question?: string; excerpt?: string }) => {
@@ -126,6 +149,7 @@ export function AiPanel({
 
       inflightRef.current.add(requestId)
       setError(null)
+      setTab('chat')
       setTurns((list) => [
         ...list,
         {
@@ -191,6 +215,7 @@ export function AiPanel({
   useEffect(() => {
     if (!seed) return
     onSeedConsumed()
+    setTab('chat')
     if (seed.kind === 'prefill') {
       setExcerpt(seed.text)
       inputRef.current?.focus()
@@ -272,6 +297,19 @@ export function AiPanel({
     })
   }
 
+  /** 快捷入口：针对当前选段直接发一条完整指令 */
+  const sendExcerpt = (task: 'explain' | 'translate'): void => {
+    if (!excerpt) return
+    void send(task, { excerpt })
+    setExcerpt(null)
+  }
+
+  /** 快捷入口：跳到「分析」并把它对应的确认框打开，成本先摆出来 */
+  const openTask = (task: TaskKey): void => {
+    setTab('analysis')
+    setFocusTask(task)
+  }
+
   const onKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>): void => {
     if (event.key === 'Enter' && !event.shiftKey) {
       submit(event)
@@ -282,15 +320,15 @@ export function AiPanel({
    * 拖左边缘改宽度。
    *
    * 拖动期间只改界面：applyPrefs 是乐观更新 + 防抖落库，所以跟手，且不会每移动
-   * 一像素就发一次 IPC。区间在这里先夹一次，免得松手前把面板拖出边界。
+   * 一像素就发一次 IPC。区间由 ReaderPage 按窗口算好传进来（上限比 PREFS_LIMITS 更紧：
+   * 再宽就会挤窄正文列），这里先夹一次，免得松手前把面板拖出边界。
    */
   const startResize = (event: React.MouseEvent): void => {
     event.preventDefault()
-    const [min, max] = PREFS_LIMITS.aiPanelWidth
     const startX = event.clientX
     const startWidth = panelWidth
     const onMove = (move: MouseEvent): void => {
-      onPanelWidth(Math.min(max, Math.max(min, startWidth + (startX - move.clientX))))
+      onPanelWidth(Math.min(maxWidth, Math.max(minWidth, startWidth + (startX - move.clientX))))
     }
     const onUp = (): void => {
       window.removeEventListener('mousemove', onMove)
@@ -316,116 +354,192 @@ export function AiPanel({
         aria-label="拖动调整 AI 面板宽度"
         onMouseDown={startResize}
       />
-      <div className="ai-panel__head">
+
+      <header className="ai-panel__head">
         <span className="ai-panel__title">AI</span>
         {status && (
-          <span className="ai-panel__model">
+          <span className="ai-panel__model" title={`${providerLabel} · ${status.model}`}>
             {providerLabel} · {status.model}
           </span>
         )}
         <span className="ai-panel__spacer" />
-        <button type="button" className="btn btn--quiet" onClick={clear} disabled={turns.length === 0}>
+        <button type="button" className="ai-btn" onClick={clear} disabled={turns.length === 0}>
           清空
         </button>
-        <button type="button" className="btn btn--quiet" onClick={onClose}>
+        <button type="button" className="ai-btn" onClick={onClose}>
           收起
+        </button>
+      </header>
+
+      {/* 两个视图各占满整块高度，互不挤压。对话是默认面 */}
+      <div className="ai-panel__tabs" role="tablist" aria-label="AI 面板视图">
+        <button
+          type="button"
+          role="tab"
+          id="ai-tab-chat"
+          className="ai-tab"
+          aria-selected={tab === 'chat'}
+          aria-controls="ai-pane-chat"
+          tabIndex={tab === 'chat' ? 0 : -1}
+          onClick={() => setTab('chat')}
+        >
+          对话
+        </button>
+        <button
+          type="button"
+          role="tab"
+          id="ai-tab-analysis"
+          className="ai-tab"
+          aria-selected={tab === 'analysis'}
+          aria-controls="ai-pane-analysis"
+          tabIndex={tab === 'analysis' ? 0 : -1}
+          onClick={() => setTab('analysis')}
+        >
+          分析
         </button>
       </div>
 
-      {status && <AiIndexBar bookId={bookId} status={status} onStatusChanged={refreshStatus} />}
-
+      {/* 未配置与报错是跨视图的状态，摆在标签下方，切到哪一面都看得见 */}
       {status && !status.configured && (
         <p className="ai-notice ai-notice--strong" role="status">
           还没有填这家的 API Key。到「设置 → 模型」里填一个再回来。
         </p>
       )}
-
-      <AiTasks
-        bookId={bookId}
-        chapterId={chapterId}
-        hasSummary={hasSummary}
-        onError={setError}
-        onResult={(task: TaskKey) => {
-          if (task === 'summary') setHasSummary(true)
-        }}
-      />
-
-      <div className="ai-panel__stream" ref={streamRef}>
-        {turns.length === 0 ? (
-          <p className="ai-panel__empty">
-            在正文里划一句话，选「问 AI」「解释」或「翻译」；也可以直接在这里提问。
-          </p>
-        ) : (
-          <>
-            {historyLoaded && (
-              <p className="ai-panel__note">
-                历史记录的用量只在本次会话里显示；回答里的 [n] 仍可点回原文。
-              </p>
-            )}
-            {turns.map((turn) => (
-              <AiMessage key={turn.id} turn={turn} onCitation={onCitation} />
-            ))}
-          </>
-        )}
-      </div>
-
       {error && (
         <p className="ai-notice ai-notice--error" role="status">
           {error}
         </p>
       )}
 
-      <form className="ai-panel__foot" onSubmit={submit}>
-        {excerpt && (
-          <div className="ai-panel__quote">
-            <span>
-              {excerpt.slice(0, 60)}
-              {excerpt.length > 60 ? '…' : ''}
-            </span>
-            <button
-              type="button"
-              className="btn btn--quiet"
-              aria-label="去掉引用的原文"
-              onClick={() => setExcerpt(null)}
-            >
-              ×
-            </button>
-          </div>
-        )}
-        <textarea
-          ref={inputRef}
-          className="ai-panel__input"
-          rows={2}
-          value={question}
-          placeholder="就这本书问点什么…（Enter 发送，Shift+Enter 换行）"
-          onChange={(event) => setQuestion(event.target.value)}
-          onKeyDown={onKeyDown}
-        />
-        <div className="ai-panel__actions">
-          {busy ? (
-            <button type="button" className="btn" onClick={stop}>
-              停下
-            </button>
+      <section
+        className="ai-pane"
+        id="ai-pane-chat"
+        role="tabpanel"
+        aria-labelledby="ai-tab-chat"
+        hidden={tab !== 'chat'}
+      >
+        <div className="ai-panel__stream" ref={streamRef}>
+          {turns.length === 0 ? (
+            <div className="ai-panel__empty">
+              <p className="ai-panel__empty-lead">在正文里划一句话，就能问 AI。</p>
+              <p className="ai-panel__empty-hint">
+                选中正文后会浮出「问 AI」「解释」「翻译」；也可以直接在下面提问。
+              </p>
+            </div>
           ) : (
-            <button type="submit" className="btn btn--accent" disabled={!canSend}>
-              发送
-            </button>
+            <>
+              {historyLoaded && (
+                <p className="ai-panel__note">
+                  历史记录的用量只在本次会话里显示；回答里的 [n] 仍可点回原文。
+                </p>
+              )}
+              {turns.map((turn) => (
+                <AiMessage key={turn.id} turn={turn} onCitation={onCitation} />
+              ))}
+            </>
           )}
-          {turns.length > 0 && !busy && <span className="ai-panel__hint">已中断的回答不会续跑</span>}
         </div>
-        {/* 预估放在发送按钮下面而不是塞进行里：它常常有两行文案，挤在一起会顶坏按钮 */}
-        {estimateError !== null && (
-          <p className="ai-panel__note" role="status">
-            暂时无法预估：{estimateError}
-          </p>
-        )}
-        {estimate !== null && (
-          <p className="ai-panel__note">
-            {estimateLine(estimate)}
-            {estimate.note ? `（${estimate.note}）` : ''}
-          </p>
-        )}
-      </form>
+
+        <form className="ai-composer" onSubmit={submit}>
+          {excerpt && (
+            <div className="ai-quote">
+              <span className="ai-quote__text">
+                {excerpt.slice(0, 60)}
+                {excerpt.length > 60 ? '…' : ''}
+              </span>
+              <button
+                type="button"
+                className="ai-quote__x"
+                aria-label="去掉引用的原文"
+                onClick={() => setExcerpt(null)}
+              >
+                ×
+              </button>
+            </div>
+          )}
+
+          {/* 常用动作：有选段时是「对这段做什么」，没选段时是「这本书能分析什么」 */}
+          <div className="ai-quick" role="group" aria-label="常用动作">
+            {excerpt ? (
+              <>
+                <button type="button" className="ai-chip" onClick={() => sendExcerpt('explain')}>
+                  解释这段
+                </button>
+                <button type="button" className="ai-chip" onClick={() => sendExcerpt('translate')}>
+                  翻译这段
+                </button>
+              </>
+            ) : (
+              QUICK_TASKS.map((item) => (
+                <button
+                  key={item.task}
+                  type="button"
+                  className="ai-chip"
+                  onClick={() => openTask(item.task)}
+                >
+                  {item.label}
+                </button>
+              ))
+            )}
+          </div>
+
+          <textarea
+            ref={inputRef}
+            className="ai-panel__input"
+            rows={2}
+            value={question}
+            placeholder="就这本书问点什么…（Enter 发送，Shift+Enter 换行）"
+            onChange={(event) => setQuestion(event.target.value)}
+            onKeyDown={onKeyDown}
+          />
+
+          <div className="ai-composer__foot">
+            {/* 预估与错误共用一行：它常常有两行文案，独占一行会把发送键推得太低 */}
+            <div className="ai-composer__meta">
+              {estimateError !== null ? (
+                <p className="ai-panel__note" role="status">
+                  暂时无法预估：{estimateError}
+                </p>
+              ) : estimate !== null ? (
+                <p className="ai-panel__note">
+                  {estimateLine(estimate)}
+                  {estimate.note ? `（${estimate.note}）` : ''}
+                </p>
+              ) : null}
+            </div>
+            {busy ? (
+              <button type="button" className="btn" onClick={stop}>
+                停下
+              </button>
+            ) : (
+              <button type="submit" className="btn btn--accent" disabled={!canSend}>
+                发送
+              </button>
+            )}
+          </div>
+        </form>
+      </section>
+
+      <section
+        className="ai-pane"
+        id="ai-pane-analysis"
+        role="tabpanel"
+        aria-labelledby="ai-tab-analysis"
+        hidden={tab !== 'analysis'}
+      >
+        {status && <AiIndexBar bookId={bookId} status={status} onStatusChanged={refreshStatus} />}
+        <AiTasks
+          bookId={bookId}
+          chapterId={chapterId}
+          hasSummary={hasSummary}
+          focusTask={focusTask}
+          onFocusConsumed={() => setFocusTask(null)}
+          onError={setError}
+          onResult={(task: TaskKey) => {
+            if (task === 'summary') setHasSummary(true)
+          }}
+        />
+      </section>
     </aside>
   )
 }

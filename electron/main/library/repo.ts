@@ -7,7 +7,7 @@ import type {
   SearchHit
 } from '@shared/types'
 import { tagsByBook } from './tags'
-import { toIndexText, toMatchQuery } from '../epub/bigram'
+import { toIndexText, toMatchQuery, toSingleIndexText } from '../epub/bigram'
 import type { ChapterRow, ChunkDraft } from '../epub/types'
 
 export type BookInsert = {
@@ -146,7 +146,9 @@ export function insertBookGraph(
     `INSERT INTO chunks (book_id, chapter_id, order_index, text, token_count, heading_path)
      VALUES (?, ?, ?, ?, ?, ?)`
   )
-  const insertFts = db.prepare('INSERT INTO chunks_fts (rowid, text_bigram) VALUES (?, ?)')
+  const insertFts = db.prepare(
+    'INSERT INTO chunks_fts (rowid, text_bigram, text_single) VALUES (?, ?, ?)'
+  )
 
   const idByIndex: number[] = []
   chapters.forEach((chapter, index) => {
@@ -172,7 +174,11 @@ export function insertBookGraph(
         chunk.tokenCount,
         chapter.headingPath
       )
-      insertFts.run(Number(chunkInfo.lastInsertRowid), toIndexText(chunk.text))
+      insertFts.run(
+        Number(chunkInfo.lastInsertRowid),
+        toIndexText(chunk.text),
+        toSingleIndexText(chunk.text)
+      )
     }
   })
 }

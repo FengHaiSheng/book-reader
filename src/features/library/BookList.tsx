@@ -1,23 +1,19 @@
-import { useState } from 'react'
-import type { BookSummary, Tag } from '@shared/types'
+import type { BookSummary } from '@shared/types'
 import { BookCover } from './BookCover'
-import { TagPicker } from './TagPicker'
 import { confirmRemove, progressLabel } from './shelf'
 
 export function BookList({
   books,
-  tags,
   onOpen,
   onRemove,
-  onTagsChanged
+  onTag
 }: {
   books: BookSummary[]
-  tags: Tag[]
   onOpen: (id: string) => void
   onRemove: (id: string) => void
-  onTagsChanged: () => Promise<void>
+  /** 打标签的入口交给页面：指派是一个模态框，两套视图共用同它 */
+  onTag: (book: BookSummary) => void
 }) {
-  const [picking, setPicking] = useState<string | null>(null)
   return (
     <ul className="book-list">
       {books.map((book) => (
@@ -48,12 +44,7 @@ export function BookList({
               </span>
             ))}
           </span>
-          <button
-            type="button"
-            className="book-list__tag-add"
-            aria-expanded={picking === book.id}
-            onClick={() => setPicking(book.id)}
-          >
+          <button type="button" className="book-list__tag-add" onClick={() => onTag(book)}>
             ＋标签
           </button>
           <button type="button" className="btn" onClick={() => onOpen(book.id)}>
@@ -68,17 +59,6 @@ export function BookList({
           >
             删除
           </button>
-          {picking === book.id && (
-            <>
-              <span className="tag-picker__scrim" onClick={() => setPicking(null)} />
-              <TagPicker
-                book={book}
-                tags={tags}
-                onChanged={onTagsChanged}
-                onClose={() => setPicking(null)}
-              />
-            </>
-          )}
         </li>
       ))}
     </ul>

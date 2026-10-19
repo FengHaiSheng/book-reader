@@ -2,7 +2,7 @@ import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync, statSync } fr
 import { join } from 'node:path'
 import Database from 'better-sqlite3'
 import { migrations } from './migrations'
-import { migrate } from './migrate'
+import { migrate, type MigrationDb } from './migrate'
 
 const KEEP_BACKUPS = 3
 
@@ -19,10 +19,29 @@ export function openDatabase(userDataDir: string): Database.Database {
   const db = new Database(dbPath)
   db.pragma('journal_mode = WAL')
   db.pragma('foreign_keys = ON')
-  migrate(db, migrations)
+  migrate(asMigrationDb(db), migrations)
 
   instance = db
   return db
+}
+
+/**
+ * 把真实的库收成迁移需要的那几个方法。
+ *
+ * 不直接传 `db`，是因为 better-sqlite3 的 `prepare` 是重载、Statement 类型随绑定参数形状变化，
+ * 与 `MigrationDb` 的最小签名对不上；在这里收口一次，迁移那边就能保持窄而可测的接口。
+ */
+function asMigrationDb(db: Database.Database): MigrationDb {
+  return {
+    pragma: (source, options) => db.pragma(source, options),
+    exec: (sql) => db.exec(sql),
+    transaction: (fn) => db.transaction(fn),
+    prepare: (sql) => ({
+      // 参数类型定为 unknown[]，重载联合里的每个签名都接得住
+      all: (...params) => db.prepare(sql).all(...(params as never[])),
+      run: (...params) => db.prepare(sql).run(...(params as never[]))
+    })
+  }
 }
 
 export function getDatabase(): Database.Database {

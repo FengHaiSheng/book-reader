@@ -26,6 +26,19 @@ const TASK_LABELS: Record<TaskKey, string> = {
 }
 
 /**
+ * 每张卡片的第二行：一直摆着的作用域与成本口径。
+ *
+ * BYOK 产品的底线是「花钱之前就看得到要花多少」。确认框里再说一遍是给最后一次反悔机会，
+ * 但用户扫一眼列表时就该知道哪几个贵、哪几个不要钱。
+ */
+const TASK_HINT: Record<TaskKey, string> = {
+  summary: '把这一章的正文发一次请求，产出概览、要点与名词。',
+  digest: '逐章各发一次；已经做过小结的章直接复用，不重复花钱。',
+  terms: '复用逐章小结，整本书只发一次请求。',
+  mindmap: '不调用模型：把「关键词」的结果按章节重新组织。'
+}
+
+/**
  * 每个任务开跑前要说清「大概要发几次请求」。
  * 这是 BYOK 产品的底线：多步任务的成本必须在点击之前可见（硬规则 1）。
  */
@@ -80,6 +93,8 @@ export function AiTasks({
   bookId,
   chapterId,
   hasSummary,
+  focusTask,
+  onFocusConsumed,
   onError,
   onResult
 }: {
@@ -88,6 +103,9 @@ export function AiTasks({
   chapterId: number | null
   /** 本章是否已有小结 —— 决定「本章小结」是不是「查看已有小结」 */
   hasSummary: boolean
+  /** 从面板的快捷入口指过来的任务：打开它的确认框并滚到它 */
+  focusTask?: TaskKey | null
+  onFocusConsumed?: () => void
   onError: (message: string | null) => void
   /** 每次拿到结果后通知父组件。父组件用它记住「本章已有小结」这类跨任务状态 */
   onResult?: (task: TaskKey, result: AiResultView<unknown>) => void
@@ -98,8 +116,6 @@ export function AiTasks({
   const [restored, setRestored] = useState<CachedTaskResults>({})
   const [running, setRunning] = useState<TaskKey | null>(null)
   const [confirming, setConfirming] = useState<TaskKey | null>(null)
-  /** 「本书分析」整块是否展开。默认展开；收起来能给对话区腾出整屏高度 */
-  const [open, setOpen] = useState(true)
   /** 每个任务的结果是否展开。回填的（缓存）默认收起，亲手生成的默认展开 */
   const [openResults, setOpenResults] = useState<Partial<Record<TaskKey, boolean>>>({})
   /** 全书要点逐章生成的进度。主进程一直在发，之前没人接 */
@@ -112,6 +128,8 @@ export function AiTasks({
   const estimateSeq = useRef(0)
   /** 换书/换章会重新回填，只认最后一次的结果 */
   const restoreSeq = useRef(0)
+  /** 快捷入口落进来时要滚到那张卡片 */
+  const cardRefs = useRef<Partial<Record<TaskKey, HTMLElement | null>>>({})
   // onResult 是父组件每次渲染新建的内联函数，放进依赖会让回填 effect 转个不停；
   // 用 ref 拿最新的那个，effect 只依赖书与章。
   const onResultRef = useRef(onResult)
@@ -180,6 +198,21 @@ export function AiTasks({
       })
   }
 
+  // confirm 与 onFocusConsumed 每次渲染都会重建，用 ref 拿最新的，effect 只认 focusTask 的指向
+  const confirmRef = useRef(confirm)
+  confirmRef.current = confirm
+  const onFocusConsumedRef = useRef(onFocusConsumed)
+  onFocusConsumedRef.current = onFocusConsumed
+
+  // 快捷入口点了「本章小结」这类：滚到那张卡片并把成本确认框打开。
+  // 本章小结在没打开具体章节时跑不了，那就只滚过去，让它自己显示「先翻到某一章」的提示
+  useEffect(() => {
+    if (!focusTask) return
+    if (!(focusTask === 'summary' && chapterId === null)) confirmRef.current(focusTask)
+    cardRefs.current[focusTask]?.scrollIntoView({ block: 'nearest' })
+    onFocusConsumedRef.current?.()
+  }, [focusTask, chapterId])
+
   const run = async (task: TaskKey): Promise<void> => {
     setConfirming(null)
     setRunning(task)
@@ -213,112 +246,106 @@ export function AiTasks({
     else if (task === 'terms') void window.api.ai.cancelTask('terms', bookId, null)
   }
 
-  // 有任务在跑时强制展开：不能让用户收起后连「停下」都找不着
-  const expanded = open || running !== null
-
   return (
     <section className="ai-tasks" aria-label="本书分析">
-      <div className="ai-tasks__head">
-        <button
-          type="button"
-          className="ai-tasks__toggle"
-          aria-expanded={expanded}
-          onClick={() => setOpen((value) => !value)}
-        >
-          <span className="ai-tasks__caret" aria-hidden="true">
-            {expanded ? '▾' : '▸'}
-          </span>
-          本书分析
-        </button>
-      </div>
-      {expanded &&
-        (Object.keys(TASK_LABELS) as TaskKey[]).map((task) => {
-          /** 本次会话生成的优先。回填的只是「上次存下的」，所以按钮仍走一次确认框 */
-          const session = results[task]
-          const result = session ?? restored[task]
-          const disabled = running !== null || (task === 'summary' && chapterId === null)
-          const isRunning = running === task
-          return (
-            <div className="ai-task" key={task}>
-              <div className="ai-task__head">
-                <span className="ai-task__name">{TASK_LABELS[task]}</span>
-                {result?.cached && <span className="ai-task__badge">来自缓存</span>}
-                <span className="ai-panel__spacer" />
-                {isRunning && isCancelable(task) ? (
-                  // 能停的任务在跑时，按钮直接变成「停下」——不用去别处找
-                  <button type="button" className="btn btn--quiet" onClick={() => stop(task)}>
-                    停下
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    className="btn"
-                    disabled={disabled}
-                    // 只有「这次亲手生成过」才允许跳过确认框直接重跑：
-                    // 回填来的结果点一下可能真的再花一次钱，成本必须先摆出来（硬规则 1）
-                    onClick={() => (session ? void run(task) : confirm(task))}
-                  >
-                    {isRunning ? '生成中…' : result ? '重新生成' : '生成'}
-                  </button>
-                )}
-              </div>
+      <header className="ai-tasks__head">
+        <span className="ai-tasks__title">本书分析</span>
+        <span className="ai-tasks__lead">结果按本书缓存，重复打开不再花钱</span>
+      </header>
 
-              {/* 逐章生成时把进度摆出来，别让用户对着「生成中…」干等 */}
-              {isRunning && task === 'digest' && progress && progress.total > 0 && (
-                <p className="ai-task__hint" role="status">
-                  正在逐章生成：{progress.done} / {progress.total}
-                  {progress.label ? `（${progress.label}）` : ''}
-                </p>
-              )}
-
-              {task === 'summary' && chapterId === null && (
-                <p className="ai-task__hint">先在正文里翻到具体某一章，才能做本章小结。</p>
-              )}
-
-              {confirming === task && (
-                <div className="ai-task__confirm">
-                  <p>
-                    {TASK_CONFIRM[task]}
-                    {task === 'summary' && hasSummary
-                      ? '这一章已有小结，重新生成会再发一次请求。'
-                      : ''}
-                  </p>
-                  {estimating ? (
-                    <p className="ai-task__hint">正在估算这次要花多少 token…</p>
-                  ) : estimateError ? (
-                    <p className="ai-task__hint">暂时无法预估：{estimateError}</p>
-                  ) : (
-                    estimate && (
-                      <>
-                        {estimateLine(estimate) !== '' && (
-                          <p>{estimateLine(estimate)}</p>
-                        )}
-                        {estimate.note && <p className="ai-task__hint">{estimate.note}</p>}
-                      </>
-                    )
-                  )}
-                  <div className="ai-index-bar__actions">
-                    <button type="button" className="btn btn--accent" onClick={() => void run(task)}>
-                      开始
-                    </button>
-                    <button type="button" className="btn" onClick={() => setConfirming(null)}>
-                      算了
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {result && (
-                <TaskResult
-                  task={task}
-                  result={result}
-                  open={openResults[task] ?? false}
-                  onToggle={() => setOpenResults((list) => ({ ...list, [task]: !list[task] }))}
-                />
+      {(Object.keys(TASK_LABELS) as TaskKey[]).map((task) => {
+        /** 本次会话生成的优先。回填的只是「上次存下的」，所以按钮仍走一次确认框 */
+        const session = results[task]
+        const result = session ?? restored[task]
+        const disabled = running !== null || (task === 'summary' && chapterId === null)
+        const isRunning = running === task
+        return (
+          <article
+            className={`ai-task${isRunning ? ' ai-task--running' : ''}`}
+            key={task}
+            ref={(element) => {
+              cardRefs.current[task] = element
+            }}
+          >
+            <div className="ai-task__head">
+              <span className="ai-task__name">{TASK_LABELS[task]}</span>
+              {result?.cached && <span className="ai-task__badge">来自缓存</span>}
+              <span className="ai-panel__spacer" />
+              {isRunning && isCancelable(task) ? (
+                // 能停的任务在跑时，按钮直接变成「停下」——不用去别处找
+                <button type="button" className="btn btn--quiet" onClick={() => stop(task)}>
+                  停下
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={disabled}
+                  // 只有「这次亲手生成过」才允许跳过确认框直接重跑：
+                  // 回填来的结果点一下可能真的再花一次钱，成本必须先摆出来（硬规则 1）
+                  onClick={() => (session ? void run(task) : confirm(task))}
+                >
+                  {isRunning ? '生成中…' : result ? '重新生成' : '生成'}
+                </button>
               )}
             </div>
-          )
-        })}
+
+            <p className="ai-task__hint">{TASK_HINT[task]}</p>
+
+            {/* 逐章生成时把进度摆出来，别让用户对着「生成中…」干等 */}
+            {isRunning && task === 'digest' && progress && progress.total > 0 && (
+              <p className="ai-task__hint" role="status">
+                正在逐章生成：{progress.done} / {progress.total}
+                {progress.label ? `（${progress.label}）` : ''}
+              </p>
+            )}
+
+            {task === 'summary' && chapterId === null && (
+              <p className="ai-task__hint">先在正文里翻到具体某一章，才能做本章小结。</p>
+            )}
+
+            {confirming === task && (
+              <div className="ai-task__confirm">
+                <p>
+                  {TASK_CONFIRM[task]}
+                  {task === 'summary' && hasSummary
+                    ? '这一章已有小结，重新生成会再发一次请求。'
+                    : ''}
+                </p>
+                {estimating ? (
+                  <p className="ai-task__hint">正在估算这次要花多少 token…</p>
+                ) : estimateError ? (
+                  <p className="ai-task__hint">暂时无法预估：{estimateError}</p>
+                ) : (
+                  estimate && (
+                    <>
+                      {estimateLine(estimate) !== '' && <p>{estimateLine(estimate)}</p>}
+                      {estimate.note && <p className="ai-task__hint">{estimate.note}</p>}
+                    </>
+                  )
+                )}
+                <div className="ai-index-bar__actions">
+                  <button type="button" className="btn btn--accent" onClick={() => void run(task)}>
+                    开始
+                  </button>
+                  <button type="button" className="btn" onClick={() => setConfirming(null)}>
+                    算了
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {result && (
+              <TaskResult
+                task={task}
+                result={result}
+                open={openResults[task] ?? false}
+                onToggle={() => setOpenResults((list) => ({ ...list, [task]: !list[task] }))}
+              />
+            )}
+          </article>
+        )
+      })}
     </section>
   )
 }
@@ -335,7 +362,7 @@ function TaskResult({
   onToggle: () => void
 }) {
   return (
-    <div className="ai-task__result">
+    <div className={`ai-task__result${open ? ' ai-task__result--open' : ''}`}>
       <button type="button" className="ai-task__result-toggle" aria-expanded={open} onClick={onToggle}>
         {open ? '收起结果' : result.cached ? '查看结果（来自缓存）' : '查看结果'}
       </button>

@@ -1,4 +1,5 @@
 import type { Migration } from './migrate'
+import { toIndexText, toSingleIndexText } from '../epub/bigram'
 
 export const migrations: Migration[] = [
   {
@@ -61,8 +62,9 @@ export const migrations: Migration[] = [
         CREATE INDEX idx_chunks_book ON chunks(book_id);
         CREATE INDEX idx_chunks_pending ON chunks(book_id) WHERE embedding IS NULL;
 
-        -- 只存 bigram 切分后的文本，检索走它，原文仍在 chunks.text
-        CREATE VIRTUAL TABLE chunks_fts USING fts5(text_bigram, tokenize = 'unicode61');
+        -- 两列都存切分后的文本，检索走它，原文仍在 chunks.text：
+        -- text_bigram 是二字滑窗（多字查询的相邻性靠它），text_single 是每个汉字一枚（单字查询靠它）
+        CREATE VIRTUAL TABLE chunks_fts USING fts5(text_bigram, text_single, tokenize = 'unicode61');
 
         CREATE TABLE reading_progress (
           book_id    TEXT PRIMARY KEY REFERENCES books(id) ON DELETE CASCADE,
@@ -132,6 +134,29 @@ export const migrations: Migration[] = [
     up: (db) => {
       // 回答里 [n] 的落库映射。历史读回来后上标仍可点回原文（旧行是 NULL，退化为普通文字）
       db.exec(`ALTER TABLE ai_messages ADD COLUMN citations TEXT;`)
+    }
+  },
+  {
+    version: 4,
+    up: (db) => {
+      /**
+       * 索引原先只有 bigram 一列，单个汉字在旧库里永远查不到。
+       *
+       * 原始正文一直在 chunks.text 里，所以就地重切一遍即可 —— 不必让用户重新导入，也不碰模型。
+       * FTS 是虚拟表，改不了列，只能删了重建再灌回去；整步在迁移事务里，中途失败会整体回滚。
+       */
+      db.exec('DROP TABLE IF EXISTS chunks_fts')
+      db.exec(
+        `CREATE VIRTUAL TABLE chunks_fts USING fts5(text_bigram, text_single, tokenize = 'unicode61')`
+      )
+
+      const rows = db.prepare('SELECT id, text FROM chunks').all() as { id: number; text: string }[]
+      const insert = db.prepare(
+        'INSERT INTO chunks_fts (rowid, text_bigram, text_single) VALUES (?, ?, ?)'
+      )
+      for (const row of rows) {
+        insert.run(row.id, toIndexText(row.text), toSingleIndexText(row.text))
+      }
     }
   }
 ]

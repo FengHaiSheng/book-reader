@@ -6,6 +6,8 @@ import { EmptyShelf } from '../features/library/EmptyShelf'
 import { LibraryTitlebarTools } from '../features/library/LibraryTitlebarTools'
 import { LibraryToolbar } from '../features/library/LibraryToolbar'
 import { TagManager } from '../features/library/TagManager'
+import { TagPicker } from '../features/library/TagPicker'
+import { Modal } from '../shell/Modal'
 import {
   filterBooks,
   parseView,
@@ -35,6 +37,11 @@ export function LibraryPage({
   const [sort, setSort] = useState<LibrarySort>('recent')
   const [dropping, setDropping] = useState(false)
   const [managing, setManaging] = useState(false)
+  /**
+   * 只记 id，不记那本书本身：指派之后要重新拉列表，记对象的话拿到的还是旧快照，
+   * 复选框会在改完之后弹回原状。
+   */
+  const [taggingId, setTaggingId] = useState<string | null>(null)
   const dragDepth = useRef(0)
 
   const refresh = useCallback(async () => {
@@ -57,9 +64,10 @@ export function LibraryPage({
     void window.api.settings.getAll().then((all) => setView(parseView(all['library.view'])))
   }, [])
 
-  // 切换标签或状态筛选相当于换了个上下文，管理面板跟着收起，避免停在旧上下文里
+  // 切换标签或状态筛选相当于换了个上下文，模态框跟着收起，避免停在旧上下文里
   useEffect(() => {
     setManaging(false)
+    setTaggingId(null)
   }, [tagFilter, statusFilter])
 
   /*
@@ -117,6 +125,8 @@ export function LibraryPage({
         : '全部书籍'
   const pristine =
     books.length === 0 && statusFilter === null && tagFilter === null && trimmed === ''
+  // 每轮刷新都从列表里现取，指派完 chip 与复选框一起变
+  const tagging = taggingId === null ? null : (books.find((book) => book.id === taggingId) ?? null)
 
   return (
     <div
@@ -157,7 +167,17 @@ export function LibraryPage({
         {notice && <span className="import__notice">{notice}</span>}
       </div>
 
-      {managing && <TagManager tags={tags} onChanged={refreshAll} />}
+      {managing && (
+        <Modal title="标签" onClose={() => setManaging(false)}>
+          <TagManager tags={tags} onChanged={refreshAll} />
+        </Modal>
+      )}
+
+      {tagging && (
+        <Modal title={`《${tagging.title}》的标签`} onClose={() => setTaggingId(null)}>
+          <TagPicker book={tagging} tags={tags} onChanged={refreshAll} />
+        </Modal>
+      )}
 
       <div className="library__shelf">
         {pristine ? (
@@ -171,14 +191,14 @@ export function LibraryPage({
             books={visible}
             onOpen={onOpen}
             onRemove={(id) => void window.api.library.remove(id).then(refreshAll)}
+            onTag={(book) => setTaggingId(book.id)}
           />
         ) : (
           <BookList
             books={visible}
-            tags={tags}
             onOpen={onOpen}
             onRemove={(id) => void window.api.library.remove(id).then(refreshAll)}
-            onTagsChanged={refreshAll}
+            onTag={(book) => setTaggingId(book.id)}
           />
         )}
       </div>

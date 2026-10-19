@@ -1,9 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { DEFAULT_HIGHLIGHT_COLOR, MAX_HIGHLIGHT_CHARS, type HighlightColor } from '@shared/highlights'
 import { DEFAULT_PREFS } from '@shared/types'
-import type { Citation, Highlight, ReadingPrefs, ReaderBook, ReadingTarget } from '@shared/types'
+import type { Citation, Highlight, ReadingPrefs, ReaderBook, ReadingTarget, SearchHit } from '@shared/types'
 import { chapterBlobUrl, prepareChapter } from './document'
-import { computeLayout, PAGE_PAD_Y, type ReaderLayout } from './layout'
+import {
+  aiPanelRange,
+  computeAiPanelWidth,
+  computeLayout,
+  PAGE_PAD_Y,
+  type ReaderLayout
+} from './layout'
 import { ChapterPaginator } from './paginator'
 import { buildReaderCss } from './theme'
 import { classifyLink } from './links'
@@ -11,6 +17,8 @@ import { anchorOf, rangeFromSpan, spanFromSelection } from './cfi'
 import { clearHighlights, highlightAt, paintHighlights, supportsHighlights } from './highlights'
 import { HighlightPopover, POPOVER_MAX_HEIGHT } from './HighlightPopover'
 import { SelectionToolbar, type SelectionState } from './SelectionToolbar'
+import { FindBar } from './FindBar'
+import { isSearchableQuery } from './search'
 import { TocPanel } from './TocPanel'
 import { TypographyPanel } from './TypographyPanel'
 import { AiPanel, type AiSeed } from '../ai/AiPanel'
@@ -24,6 +32,15 @@ const CITATION_MISS = '没能在这章正文里定位到这段原文（正文与
 
 /** 引用指向的章节没了。书被重新导入过就会这样 */
 const CITATION_NO_CHAPTER = '这条引用对应的章节现在不在书里了，书可能被重新导入过。'
+
+/** 查找结果定位失败与引用回跳同口径：说清「没定位到」，不假装成功 */
+const FIND_MISS = '没能在这章正文里定位到这条结果（检索用的文本与正文对不上）。'
+const FIND_NO_CHAPTER = '这条结果对应的章节不在书里了，书可能被重新导入过。'
+
+/** 边打边找：等手停下来再发 IPC，免得每敲一个字都查一遍 */
+const FIND_DEBOUNCE_MS = 250
+/** 一次最多回多少条。再多也翻不完，反而把左栏堆成一堵墙 */
+const FIND_LIMIT = 30
 
 /**
  * 章节文档的 base：`epub://<bookId>/<本章所在目录>/`。
@@ -66,6 +83,18 @@ export function ReaderPage({
   const [aiOpen, setAiOpen] = useState(false)
   const [aiSeed, setAiSeed] = useState<AiSeed | null>(null)
   const [citationNote, setCitationNote] = useState<string | null>(null)
+  /** 书内查找：面板是否开着，以及这一次查到的结果 */
+  const [findOpen, setFindOpen] = useState(false)
+  const [findQuery, setFindQuery] = useState('')
+  const [findHits, setFindHits] = useState<SearchHit[]>([])
+  const [findBusy, setFindBusy] = useState(false)
+  /** 查找请求本身失败（IPC 出错），与「没找到结果」是两回事 */
+  const [findError, setFindError] = useState<string | null>(null)
+  const [findNote, setFindNote] = useState<string | null>(null)
+  /** 当前停在第几条结果上，从 0 数 */
+  const [findIndex, setFindIndex] = useState(0)
+  /** 每次打开查找都 +1：查找条已经开着时也要把焦点还给输入框 */
+  const [findFocus, setFindFocus] = useState(0)
 
   const stageRef = useRef<HTMLDivElement | null>(null)
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
@@ -82,6 +111,25 @@ export function ReaderPage({
   const layoutRef = useRef<ReaderLayout | null>(null)
   const prefsRef = useRef<ReadingPrefs | null>(null)
   const windowWidth = useWindowWidth()
+
+  /**
+   * AI 面板宽度。偏好里存的是「用户想要多宽」，实际宽度还要看窗口当下给不给得起：
+   * 够宽就给到他想要的最大值（上限 720），不够宽就先把面板收窄，正文列不被压窄。
+   * 拖动面板时同样只能在这个区间里拖，所以拖不出「挤窄正文」的宽度。
+   */
+  const aiRange = useMemo(
+    () => aiPanelRange({ windowWidth, prefs: prefs ?? DEFAULT_PREFS }),
+    [prefs, windowWidth]
+  )
+  const aiWidth = useMemo(
+    () =>
+      computeAiPanelWidth({
+        windowWidth,
+        prefs: prefs ?? DEFAULT_PREFS,
+        preferred: prefs?.aiPanelWidth ?? DEFAULT_PREFS.aiPanelWidth
+      }),
+    [prefs, windowWidth]
+  )
 
   /** 只有带正文的节点才进阅读流：目录里的分组节点 href 是空串 */
   const readable = useMemo(() => book?.chapters.filter((item) => item.href !== '') ?? [], [book])
@@ -361,6 +409,129 @@ export function ReaderPage({
     const timer = window.setTimeout(() => setCitationNote(null), 6000)
     return () => window.clearTimeout(timer)
   }, [citationNote])
+
+  const openFind = useCallback(() => {
+    setFindOpen(true)
+    setFindFocus((token) => token + 1)
+  }, [])
+
+  /** 收起面板但保留关键词：再按 ⌘F 时还看得见上一次查的是什么 */
+  const closeFind = useCallback(() => {
+    setFindOpen(false)
+    setFindBusy(false)
+  }, [])
+
+  // 换书时把查找连同关键词一起清掉：上一本的查询与结果留着只会误导
+  useEffect(() => {
+    closeFind()
+    setFindQuery('')
+    setFindHits([])
+    setFindError(null)
+    setFindNote(null)
+  }, [bookId, closeFind])
+
+  /**
+   * 查找取数：防抖后问主进程。
+   *
+   * 关键词里只有标点时不必发请求 —— 入库侧按 bigram 切不出任何 token，查了必然是空，
+   * 那种「查了但没结果」会让人误以为书里根本没有。
+   */
+  useEffect(() => {
+    if (!findOpen) return
+    const keyword = findQuery.trim()
+    if (keyword === '' || !isSearchableQuery(keyword)) {
+      setFindHits([])
+      setFindIndex(0)
+      setFindBusy(false)
+      setFindError(null)
+      return
+    }
+
+    let alive = true
+    setFindBusy(true)
+    setFindError(null)
+    const timer = window.setTimeout(() => {
+      void window.api.library
+        .search(bookId, keyword, FIND_LIMIT)
+        .then((hits) => {
+          if (!alive) return
+          setFindHits(hits)
+          setFindIndex(0)
+          setFindBusy(false)
+        })
+        .catch((e: unknown) => {
+          if (!alive) return
+          setFindError(e instanceof Error ? e.message : '查找没成功')
+          setFindBusy(false)
+        })
+    }, FIND_DEBOUNCE_MS)
+
+    return () => {
+      alive = false
+      window.clearTimeout(timer)
+    }
+  }, [findOpen, findQuery, bookId])
+
+  // 查找提示与引用提示一样是「事件不是状态」，过一会儿收掉
+  useEffect(() => {
+    if (!findNote) return
+    const timer = window.setTimeout(() => setFindNote(null), 6000)
+    return () => window.clearTimeout(timer)
+  }, [findNote])
+
+  const chapterTitleOf = useCallback(
+    (chapterId: number | null): string => {
+      if (chapterId === null) return '未标注章节'
+      return book?.chapters.find((item) => item.id === chapterId)?.title ?? '章节已不在书里'
+    },
+    [book]
+  )
+
+  /**
+   * 点一条查找结果：跳到那一章，并把命中的那段闪一下。
+   *
+   * 与引用回跳共用同一套定位路径（`goToExcerpt`）：跨章时把摘录挂到 pendingRef 上，
+   * 等新文档就位后由 ⑤ 号 effect 去定位。定位失败要明说，不假装成功。
+   */
+  const goToHit = useCallback(
+    (hit: SearchHit) => {
+      setFindNote(null)
+      const index =
+        hit.chapterId === null ? -1 : readable.findIndex((item) => item.id === hit.chapterId)
+
+      if (index >= 0 && index !== chapterIndex) {
+        pendingRef.current = { excerpt: hit.text }
+        setChapterIndex(index)
+        return
+      }
+      if (index < 0) {
+        setFindNote(FIND_NO_CHAPTER)
+        return
+      }
+      if (!paginatorRef.current?.goToExcerpt(hit.text)) setFindNote(FIND_MISS)
+    },
+    [readable, chapterIndex]
+  )
+
+  /** 点某一条结果：先记住是第几条（查找条要显示「第 N / M 条」），再跳过去 */
+  const pickHit = useCallback(
+    (index: number) => {
+      const hit = findHits[index]
+      if (!hit) return
+      setFindIndex(index)
+      goToHit(hit)
+    },
+    [findHits, goToHit]
+  )
+
+  /** 上一条 / 下一条：到头绕回来，一直按总能转一圈 */
+  const stepHit = useCallback(
+    (delta: 1 | -1) => {
+      if (findHits.length === 0) return
+      pickHit((findIndex + delta + findHits.length) % findHits.length)
+    },
+    [findHits.length, findIndex, pickHit]
+  )
 
   /** 处理书内的一次链接点击：内链自己跳，外链交系统，其余忽略 */
   const openLink = useCallback(
@@ -686,7 +857,19 @@ export function ReaderPage({
   const onKeyRef = useRef<(event: KeyboardEvent) => void>(() => {})
   useEffect(() => {
     onKeyRef.current = (event) => {
+      // ⌘F / Ctrl+F 打开查找。必须排在修饰键总闸之前，否则会被下一句直接吞掉
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'f') {
+        event.preventDefault()
+        openFind()
+        return
+      }
       if (event.metaKey || event.ctrlKey || event.altKey) return
+      // 查找开着时 Esc 先收面板，再按一次才退出阅读
+      if (event.key === 'Escape' && findOpen) {
+        event.preventDefault()
+        closeFind()
+        return
+      }
       // 焦点在表单控件上时，方向键是控件自己的操作（Aa 面板的滑块就靠它改字号），
       // 不能被翻页抢走；这里不用 instanceof，跨 realm 的事件对象 instanceof 恒为 false
       const target = event.target as { closest?: (selector: string) => Element | null } | null
@@ -751,6 +934,14 @@ export function ReaderPage({
         </button>
         <button
           type="button"
+          className={`btn${findOpen ? ' btn--on' : ''}`}
+          aria-pressed={findOpen}
+          onClick={() => (findOpen ? closeFind() : openFind())}
+        >
+          查找
+        </button>
+        <button
+          type="button"
           className={`btn${aiOpen ? ' btn--on' : ''}`}
           aria-pressed={aiOpen}
           onClick={() => setAiOpen((open) => !open)}
@@ -761,6 +952,22 @@ export function ReaderPage({
           排版
         </button>
       </div>
+      {findOpen && (
+        <FindBar
+          query={findQuery}
+          onQuery={setFindQuery}
+          hits={findHits}
+          busy={findBusy}
+          error={findError}
+          note={findNote}
+          activeIndex={findIndex}
+          focusToken={findFocus}
+          chapterTitleOf={chapterTitleOf}
+          onPick={pickHit}
+          onStep={stepHit}
+          onClose={closeFind}
+        />
+      )}
       {layout?.clamped && (
         <p className="reader__degrade" role="status">
           窗口宽度只够 {layout.charsPerLine} 字／行，已按上限显示
@@ -829,7 +1036,9 @@ export function ReaderPage({
             bookId={bookId}
             chapterId={chapter?.id ?? null}
             seed={aiSeed}
-            panelWidth={prefs?.aiPanelWidth ?? DEFAULT_PREFS.aiPanelWidth}
+            panelWidth={aiWidth}
+            minWidth={aiRange.min}
+            maxWidth={aiRange.max}
             onPanelWidth={(width) => applyPrefs({ aiPanelWidth: width })}
             onSeedConsumed={() => setAiSeed(null)}
             onCitation={goToCitation}

@@ -1,5 +1,5 @@
 appId: com.bookread.app
-productName: 书架
+productName: 阅微
 copyright: Copyright © 2026
 
 directories:
@@ -34,7 +34,7 @@ mac:
   notarize: false
 
 dmg:
-  title: 书架 ${version}
+  title: 阅微 ${version}
 
 win:
   target:

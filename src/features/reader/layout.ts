@@ -1,4 +1,4 @@
-import type { ReadingPrefs } from '@shared/types'
+import { PREFS_LIMITS, type ReadingPrefs } from '@shared/types'
 
 /**
  * 纸面留白。这一圈是**屏幕空间**的留白，不参与分栏 —— 也就是说 iframe（正文区）
@@ -21,6 +21,13 @@ export const SPREAD_WIDTH = 1900
 export const NARROW_FONT_SIZE = 17
 /** 版心宽的兜底下限，避免退化输入算出负数或 0 */
 const MIN_COLUMN_WIDTH = 120
+
+/**
+ * 阅读器左栏（目录）宽度，与 base.css 里 `.toc` 的 `flex-basis` 一致，
+ * 再加上它右侧那 1px 分隔线。算 AI 面板能占多少时要按它扣，改 CSS 必须同步改这里。
+ */
+export const TOC_WIDTH = 248
+const TOC_BORDER = 1
 
 export type ReaderLayout = {
   /** 一屏几栏 */
@@ -90,4 +97,50 @@ export function computeLayout(input: {
     clamped: charsPerLine < prefs.charsPerLine,
     fontSizeClamped
   }
+}
+
+/**
+ * 正文区至少要有多宽，设定的每行字数才不会被压窄（也就是 `computeLayout` 的 clamped 为假）。
+ *
+ * 与 `computeLayout` 反着算：它拿正文区宽度决定版心宽，这里拿想要的版心宽反推正文区。
+ * 断点口径必须一致（都看窗口宽度），否则会和它算出来的结果对不上。
+ */
+export function readingAreaWidth(prefs: ReadingPrefs, windowWidth: number): number {
+  const fontSize =
+    windowWidth < NARROW_WIDTH ? Math.min(prefs.fontSize, NARROW_FONT_SIZE) : prefs.fontSize
+  const columns = windowWidth >= SPREAD_WIDTH ? 2 : 1
+  return PAGE_PAD_X * 2 + columns * prefs.charsPerLine * fontSize + COLUMN_GAP * (columns - 1)
+}
+
+/**
+ * AI 面板当下能占的宽度区间。
+ *
+ * 上限不是写死的 720，而是「窗口扣掉目录栏、再扣掉正文所需宽度」之后剩下的那一块：
+ * 窗口够宽时上限就是 720（面板吃满自己的最大宽度），窗口不够宽时上限跟着变小，
+ * 正文列始终不被压窄 —— 面板先退让，正文优先（.uicraft.md 的自适应策略第一条）。
+ * 窄到连下限都放不下时上限就是下限，那种情况下正文只能被压窄，界面按硬规则 2 明说。
+ */
+export function aiPanelRange(input: {
+  windowWidth: number
+  prefs: ReadingPrefs
+}): { min: number; max: number } {
+  const [min, cap] = PREFS_LIMITS.aiPanelWidth
+  const room =
+    input.windowWidth - TOC_WIDTH - TOC_BORDER - readingAreaWidth(input.prefs, input.windowWidth)
+  return { min, max: Math.max(min, Math.min(cap, room)) }
+}
+
+/**
+ * AI 面板的实际宽度。
+ *
+ * 偏好里存的是「用户拖出来的宽度」，也就是他想要多宽；这个函数把它夹进窗口当下给得起的
+ * 区间里：在正文列不被压窄的前提下让面板尽量宽，最多到 720。
+ */
+export function computeAiPanelWidth(input: {
+  windowWidth: number
+  prefs: ReadingPrefs
+  preferred: number
+}): number {
+  const { min, max } = aiPanelRange(input)
+  return Math.max(min, Math.min(max, input.preferred))
 }

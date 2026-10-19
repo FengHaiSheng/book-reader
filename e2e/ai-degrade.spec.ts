@@ -77,6 +77,7 @@ test('模型其实不支持结构化输出 —— 结果里说明改用了提示
   await win.locator('iframe.reader__view').waitFor()
 
   await win.getByRole('button', { name: 'AI', exact: true }).click()
+  await win.getByRole('tab', { name: '分析' }).click()
   const card = win.locator('.ai-task').filter({ hasText: '本章小结' })
   await card.getByRole('button', { name: '生成' }).click()
   await card.getByRole('button', { name: '开始' }).click()
@@ -113,6 +114,7 @@ test('正文超出上下文上限 —— 结果里说明有段落没有送进去
   await win.locator('iframe.reader__view').waitFor()
 
   await win.getByRole('button', { name: 'AI', exact: true }).click()
+  await win.getByRole('tab', { name: '分析' }).click()
   const card = win.locator('.ai-task').filter({ hasText: '本章小结' })
   await card.getByRole('button', { name: '生成' }).click()
   await card.getByRole('button', { name: '开始' }).click()
@@ -159,6 +161,7 @@ test('全书要点：长章节的正文真的进了提示词，不会被自己�
   await win.locator('iframe.reader__view').waitFor()
 
   await win.getByRole('button', { name: 'AI', exact: true }).click()
+  await win.getByRole('tab', { name: '分析' }).click()
   const card = win.locator('.ai-task').filter({ hasText: '全书要点' })
   await card.getByRole('button', { name: '生成' }).click()
   await card.getByRole('button', { name: '开始' }).click()

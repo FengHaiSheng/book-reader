@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { toIndexText, toMatchQuery, tokenize } from '../electron/main/epub/bigram'
+import {
+  toIndexText,
+  toMatchQuery,
+  toSingleIndexText,
+  tokenize
+} from '../electron/main/epub/bigram'
 
 describe('tokenize', () => {
   it('中文按二字切分', () => {
@@ -26,6 +31,24 @@ describe('tokenize', () => {
 describe('toIndexText', () => {
   it('用空格连接 token', () => {
     expect(toIndexText('量子纠缠')).toBe('量子 子纠 纠缠')
+  })
+})
+
+describe('toSingleIndexText', () => {
+  it('每个汉字各占一个 token —— 单字查询靠这一列命中', () => {
+    expect(toSingleIndexText('量子纠缠')).toBe('量 子 纠 缠')
+  })
+
+  it('孤立的单字也照常落进来', () => {
+    expect(toSingleIndexText('甲，乙。')).toBe('甲 乙')
+  })
+
+  it('拉丁词与标点不进这一列（整词查询在 bigram 列里就够了）', () => {
+    expect(toSingleIndexText('量子 Entanglement，纠缠。')).toBe('量 子 纠 缠')
+  })
+
+  it('没有汉字时为空串', () => {
+    expect(toSingleIndexText('abc 123')).toBe('')
   })
 })
 

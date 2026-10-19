@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { migrate, type Migration, type MigrationDb } from '../electron/main/store/migrate'
+import { migrations } from '../electron/main/store/migrations'
 
 /** 记录调用的假数据库，替代真实 better-sqlite3（原生模块在 vitest 里加载不了） */
-function fakeDb(initialVersion = 0) {
+function fakeDb(initialVersion = 0, chunkRows: { id: number; text: string }[] = []) {
   const applied: string[] = []
+  const ftsRows: unknown[][] = []
   let version = initialVersion
   const db: MigrationDb = {
     pragma(source, options) {
@@ -20,9 +22,18 @@ function fakeDb(initialVersion = 0) {
       return undefined
     },
     // 真实 better-sqlite3 的 transaction 返回一个可直接调用的函数，假实现保持同样形状
-    transaction: ((fn: () => void) => fn) as MigrationDb['transaction']
+    transaction: ((fn: () => void) => fn) as MigrationDb['transaction'],
+    prepare(sql) {
+      return {
+        all: () => (sql.includes('FROM chunks') ? chunkRows : []),
+        run: (...params: unknown[]) => {
+          if (sql.includes('INSERT INTO chunks_fts')) ftsRows.push(params)
+          return undefined
+        }
+      }
+    }
   }
-  return { db, applied, version: () => version }
+  return { db, applied, ftsRows, version: () => version }
 }
 
 describe('migrate', () => {
@@ -66,5 +77,27 @@ describe('migrate', () => {
       { version: 1, up: (d) => d.exec('one') }
     ])
     expect(applied).toEqual(['exec:one', 'pragma:1', 'exec:two', 'pragma:2'])
+  })
+
+  it('v4 从 chunks.text 就地重切索引，补出单字列，不需要重新导入', () => {
+    const { db, applied, ftsRows } = fakeDb(3, [{ id: 7, text: '河面上浮着一层薄薄的雾' }])
+    expect(migrate(db, migrations)).toBe(4)
+    expect(applied).toContain('exec:DROP TABLE IF EXISTS chunks_fts')
+    expect(applied).toContain(
+      "exec:CREATE VIRTUAL TABLE chunks_fts USING fts5(text_bigram, text_single, tokenize = 'unicode61')"
+    )
+    expect(ftsRows).toEqual([
+      [
+        7,
+        '河面 面上 上浮 浮着 着一 一层 层薄 薄薄 薄的 的雾',
+        '河 面 上 浮 着 一 层 薄 薄 的 雾'
+      ]
+    ])
+  })
+
+  it('库里没有 chunk 时 v4 只是把表换成两列，不灌任何行', () => {
+    const { db, ftsRows } = fakeDb(3, [])
+    expect(migrate(db, migrations)).toBe(4)
+    expect(ftsRows).toEqual([])
   })
 })
