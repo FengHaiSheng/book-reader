@@ -2,10 +2,17 @@ import { readdirSync, rmSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import { dialog, ipcMain } from 'electron'
 import { CH } from '@shared/ipc'
-import type { ImportOutcome, ImportProgress, ImportProgressEvent, IpcResult } from '@shared/types'
+import type {
+  ImportOutcome,
+  ImportProgress,
+  ImportProgressEvent,
+  IpcResult
+} from '@shared/types'
+import { isBookFile } from '@shared/types'
 import { appError, toAppError } from '@shared/errors'
 import { assignTag, createTag, deleteTag, listTags, renameTag } from '../library/tags'
 import { importEpub } from '../library/importer'
+import { importPdf } from '../library/pdf-importer'
 import { bookDir } from '../library/paths'
 import {
   deleteBookRows,
@@ -25,9 +32,13 @@ export function registerLibraryIpc(): void {
     async (event): Promise<IpcResult<ImportOutcome[] | null>> => {
       try {
         const picked = await dialog.showOpenDialog({
-          title: '选择 epub 文件',
+          title: '选择图书文件',
           properties: ['openFile', 'multiSelections'],
-          filters: [{ name: 'EPUB', extensions: ['epub'] }]
+          filters: [
+            { name: '电子书（EPUB / PDF）', extensions: ['epub', 'pdf'] },
+            { name: 'EPUB', extensions: ['epub'] },
+            { name: 'PDF', extensions: ['pdf'] }
+          ]
         })
         if (picked.canceled || picked.filePaths.length === 0) return { ok: true, value: null }
 
@@ -55,12 +66,12 @@ export function registerLibraryIpc(): void {
 
         const dir = picked.filePaths[0]!
         const paths = readdirSync(dir)
-          .filter((name) => name.toLowerCase().endsWith('.epub'))
+          .filter((name) => isBookFile(name))
           .sort()
           .map((name) => join(dir, name))
-        // 空文件夹不是「导入成功 0 本」：要让用户知道这个文件夹里没有 epub
+        // 空文件夹不是「导入成功 0 本」：要让用户知道这个文件夹里没有可导入的书
         if (paths.length === 0) {
-          throw appError('FILE_MISSING', '这个文件夹里没有 epub 文件')
+          throw appError('FILE_MISSING', '这个文件夹里没有 epub 或 pdf 文件')
         }
 
         const sender = event.sender as Electron.WebContents
@@ -170,21 +181,26 @@ async function runImport(
   sender: Electron.WebContents,
   slot: ImportSlot
 ): Promise<ImportOutcome> {
-  if (!filePath.toLowerCase().endsWith('.epub')) {
-    throw appError('EPUB_PARSE_FAILED', `${basename(filePath)} 不是 epub 文件`)
+  const lower = filePath.toLowerCase()
+  if (!isBookFile(lower)) {
+    throw appError('EPUB_PARSE_FAILED', `${basename(filePath)} 不是 epub 或 pdf 文件`)
   }
   const fileName = basename(filePath)
+  const isPdf = lower.endsWith('.pdf')
   try {
-    return await importEpub(getDatabase(), filePath, (progress: ImportProgress) => {
+    const progress = (item: ImportProgress): void => {
       if (sender.isDestroyed()) return
       const event: ImportProgressEvent = {
-        ...progress,
+        ...item,
         fileIndex: slot.index,
         fileCount: slot.count,
         fileName
       }
       sender.send(CH.libraryImportProgress, event)
-    })
+    }
+    return isPdf
+      ? await importPdf(getDatabase(), filePath, progress)
+      : await importEpub(getDatabase(), filePath, progress)
   } catch (error) {
     throw toAppError(error, `《${fileName}》导入失败`)
   }

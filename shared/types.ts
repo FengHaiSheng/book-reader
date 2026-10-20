@@ -15,6 +15,14 @@ export const PROVIDERS: { id: ProviderId; name: string; baseURL: string }[] = [
   { id: 'kimi', name: 'Kimi', baseURL: 'https://api.moonshot.cn/v1' }
 ]
 
+/** 可导入的书籍格式。导入对话框、文件夹扫描与拖放筛选都按这一份判断。 */
+export const BOOK_EXTENSIONS = ['epub', 'pdf'] as const
+
+export function isBookFile(filePath: string): boolean {
+  const lower = filePath.toLowerCase()
+  return BOOK_EXTENSIONS.some((ext) => lower.endsWith(`.${ext}`))
+}
+
 /** 阅读偏好。每行字数是独立控件，不是字号的副产物。 */
 export type ReadingPrefs = {
   font: 'serif' | 'sans'

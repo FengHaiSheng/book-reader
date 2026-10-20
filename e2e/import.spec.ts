@@ -99,7 +99,7 @@ test('导入畸形 epub：报可读错误且不留脏数据', async () => {
   await app.close()
 })
 
-test('非 epub 文件被挡在门口', async () => {
+test('非 epub / pdf 文件被挡在门口', async () => {
   const userDataDir = mkdtempSync(join(tmpdir(), 'book-read-import-txt-'))
   const txtPath = join(userDataDir, 'note.txt')
   writeFileSync(txtPath, '这不是一本书')
@@ -108,6 +108,6 @@ test('非 epub 文件被挡在门口', async () => {
   const win = await app.firstWindow()
   await expect(
     win.evaluate((file) => (window as any).api.library.importPath(file), txtPath)
-  ).rejects.toThrow(/不是 epub 文件/)
+  ).rejects.toThrow(/不是 epub 或 pdf 文件/)
   await app.close()
 })

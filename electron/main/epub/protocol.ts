@@ -41,6 +41,13 @@ export function handleEpubProtocol(): void {
     // 封面不进 zip：导入时已经抽成文件了，直接读（spec §3.3 的「只有封面例外」）
     if (target.entry === COVER_ENTRY) return serveCover(target.bookId)
 
+    // PDF 导入时生成的章节 HTML 也落在书目录里；路径形状固定，不接受任意文件名。
+    // 文件不存在时继续走 zip，避免 epub 里恰好有同名 entry 时被这里挡住
+    if (PDF_PAGE_ENTRY.test(target.entry)) {
+      const page = servePdfPage(target.bookId, target.entry)
+      if (page) return page
+    }
+
     // 有扩展名的一律走白名单，认不出就拒绝：书内的 .js 靠这条挡住
     const known = mimeFor(target.entry)
     if (!known && hasExtension(target.entry)) return new Response(null, { status: 403 })
@@ -70,6 +77,30 @@ export function handleEpubProtocol(): void {
 }
 
 const COVER_FILE = /^cover\.[a-z0-9]+$/i
+
+/** PDF 章节固定写成 `pdf/00001.html`，位数与导入时 padStart(5) 一致 */
+const PDF_PAGE_ENTRY = /^pdf\/\d{5}\.html$/
+
+/**
+ * 读导入时生成到 `library/<bookId>/pdf/` 的章节。
+ *
+ * 文件名由上面的正则限死，entry 不参与任意路径拼接，出不了这本书的目录。
+ */
+function servePdfPage(bookId: string, entry: string): Response | null {
+  try {
+    const bytes = readFileSync(join(bookDir(bookId), entry))
+    return new Response(new Uint8Array(bytes), {
+      headers: {
+        'Content-Type': 'application/xhtml+xml',
+        'Access-Control-Allow-Origin': '*',
+        // 与 zip 里的章节同一口径：即使被直接导航也挡掉脚本
+        'Content-Security-Policy': CHAPTER_CSP
+      }
+    })
+  } catch {
+    return null
+  }
+}
 
 /**
  * 从 `library/<bookId>/` 里找封面文件。

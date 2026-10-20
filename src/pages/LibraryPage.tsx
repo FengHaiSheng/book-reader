@@ -7,6 +7,7 @@ import type {
   SearchHitWithBook,
   Tag
 } from '@shared/types'
+import { isBookFile } from '@shared/types'
 import { BookGrid } from '../features/library/BookGrid'
 import { BookList } from '../features/library/BookList'
 import { EmptyShelf } from '../features/library/EmptyShelf'
@@ -167,10 +168,10 @@ export function LibraryPage({
 
     const paths = Array.from(event.dataTransfer.files)
       .map((file) => window.api.library.pathForFile(file))
-      .filter((path) => path.toLowerCase().endsWith('.epub'))
+      .filter((path) => isBookFile(path))
 
     if (paths.length === 0) {
-      setNotice('拖进来的文件里没有 .epub')
+      setNotice('拖进来的文件里没有 .epub 或 .pdf')
       return
     }
     await run(() => window.api.library.importPaths(paths))

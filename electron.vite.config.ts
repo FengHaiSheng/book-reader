@@ -11,7 +11,8 @@ export default defineConfig({
       rollupOptions: {
         input: {
           index: resolve(__dirname, 'electron/main/index.ts'),
-          'epub-worker': resolve(__dirname, 'electron/main/epub/extract.worker.ts')
+          'epub-worker': resolve(__dirname, 'electron/main/epub/extract.worker.ts'),
+          'pdf-worker': resolve(__dirname, 'electron/main/pdf/extract.worker.ts')
         }
       }
     },

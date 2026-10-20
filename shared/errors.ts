@@ -1,5 +1,6 @@
 export const APP_ERROR_CODES = [
   'EPUB_PARSE_FAILED',
+  'PDF_PARSE_FAILED',
   'FILE_MISSING',
   'DB_ERROR',
   'AI_AUTH',

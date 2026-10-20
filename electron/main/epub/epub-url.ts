@@ -23,6 +23,8 @@ export function isBookId(value: string): boolean {
  * 安全上真正的保证是**结构性的**：文件路径只由 bookId 决定
  * （`library/<bookId>/book.epub`），entry 只用来在 zip 里查条目，
  * 从不参与文件系统路径拼接，所以 entry 就算带穿越也出不了这一本书。
+ * 唯一的例外是 PDF 生成的章节：协议层只放行 `pdf/五位数字.html` 这一种形状，
+ * 超出形状的 entry 仍然只会在 zip 里查。
  * 下面这些校验是第二道防线，不是唯一那道。
  */
 export function parseEpubUrl(url: string): EpubUrl | null {
