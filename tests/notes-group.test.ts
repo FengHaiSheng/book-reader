@@ -34,13 +34,36 @@ const NOTES = [
 
 describe('applyFilter', () => {
   it('只按类型筛', () => {
-    expect(applyFilter(NOTES, { kind: 'annotated', bookId: null }).map((n) => n.id)).toEqual([1])
-    expect(applyFilter(NOTES, { kind: 'marked', bookId: null }).map((n) => n.id)).toEqual([2, 3])
-    expect(applyFilter(NOTES, { kind: 'all', bookId: null })).toHaveLength(3)
+    expect(applyFilter(NOTES, { kind: 'annotated', bookId: null, query: '' }).map((n) => n.id)).toEqual([1])
+    expect(applyFilter(NOTES, { kind: 'marked', bookId: null, query: '' }).map((n) => n.id)).toEqual([2, 3])
+    expect(applyFilter(NOTES, { kind: 'all', bookId: null, query: '' })).toHaveLength(3)
   })
 
   it('类型与书籍同时生效', () => {
-    expect(applyFilter(NOTES, { kind: 'marked', bookId: 'b1' }).map((n) => n.id)).toEqual([2])
+    expect(applyFilter(NOTES, { kind: 'marked', bookId: 'b1', query: '' }).map((n) => n.id)).toEqual([2])
+  })
+
+  it('关键字在原文与批注里各筛一次', () => {
+    expect(applyFilter(NOTES, { kind: 'all', bookId: null, query: '第 1 条原文' }).map((n) => n.id)).toEqual([1])
+    expect(applyFilter(NOTES, { kind: 'all', bookId: null, query: '批注' }).map((n) => n.id)).toEqual([1])
+  })
+
+  it('关键字与类型、书籍三者叠加', () => {
+    expect(
+      applyFilter(NOTES, { kind: 'marked', bookId: 'b2', query: '第 3 条' }).map((n) => n.id)
+    ).toEqual([3])
+  })
+
+  it('关键字大小写不敏感，纯空白不筛', () => {
+    const withCase = [{ ...NOTES[0]!, text: 'Deep Work 的注意力' }]
+    expect(applyFilter(withCase, { kind: 'all', bookId: null, query: 'deep work' })).toHaveLength(1)
+    expect(applyFilter(NOTES, { kind: 'all', bookId: null, query: '   ' })).toHaveLength(3)
+  })
+
+  it('正则元字符按普通字符处理，不抛 SyntaxError', () => {
+    const paren = [{ ...NOTES[0]!, text: '这里有个 ( 括号' }]
+    expect(() => applyFilter(paren, { kind: 'all', bookId: null, query: '(' })).not.toThrow()
+    expect(applyFilter(paren, { kind: 'all', bookId: null, query: '(' })).toHaveLength(1)
   })
 })
 

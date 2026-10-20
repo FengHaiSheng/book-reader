@@ -1,7 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { DEFAULT_HIGHLIGHT_COLOR, MAX_HIGHLIGHT_CHARS, type HighlightColor } from '@shared/highlights'
 import { DEFAULT_PREFS } from '@shared/types'
-import type { Citation, Highlight, ReadingPrefs, ReaderBook, ReadingTarget, SearchHit } from '@shared/types'
+import type {
+  Bookmark,
+  Citation,
+  Highlight,
+  ReadingPrefs,
+  ReaderBook,
+  ReadingTarget,
+  SearchHit
+} from '@shared/types'
 import { chapterBlobUrl, prepareChapter } from './document'
 import {
   aiPanelRange,
@@ -19,6 +27,9 @@ import { HighlightPopover, POPOVER_MAX_HEIGHT } from './HighlightPopover'
 import { SelectionToolbar, type SelectionState } from './SelectionToolbar'
 import { FindBar } from './FindBar'
 import { isSearchableQuery } from './search'
+import { bookPercent } from './progress'
+import { IDLE_MS, creditMs } from '../reading/tracker'
+import { setUnrecordedMs } from '../reading/failures'
 import { TocPanel } from './TocPanel'
 import { TypographyPanel } from './TypographyPanel'
 import { AiPanel, type AiSeed } from '../ai/AiPanel'
@@ -41,6 +52,19 @@ const FIND_NO_CHAPTER = '这条结果对应的章节不在书里了，书可能�
 const FIND_DEBOUNCE_MS = 250
 /** 一次最多回多少条。再多也翻不完，反而把左栏堆成一堵墙 */
 const FIND_LIMIT = 30
+
+/** 书签跳回失败的三种口径。都是「说清发生了什么」，不假装成功 */
+const BOOKMARK_MISS = '这条书签的位置没能在正文里定位到（正文与生成书签时对不上）。'
+const BOOKMARK_NO_CHAPTER = '这条书签对应的章节现在不在书里了，书可能被重新导入过。'
+/** 同一页只有一条书签（主进程有唯一键挡着），第二次点必须说清而不是静默 */
+const BOOKMARK_DUPLICATE = '这一页已经有书签了。'
+const BOOKMARK_ADDED = '已加书签。'
+const BOOKMARK_REMOVED = '已取消这条书签。'
+
+/** 计时心跳：5 秒累一次，纯内存，不发 IPC */
+const TICK_MS = 5000
+/** 上报间隔：每分钟把攒下的整秒数写一次库 */
+const REPORT_MS = 60_000
 
 /**
  * 章节文档的 base：`epub://<bookId>/<本章所在目录>/`。
@@ -95,14 +119,41 @@ export function ReaderPage({
   const [findIndex, setFindIndex] = useState(0)
   /** 每次打开查找都 +1：查找条已经开着时也要把焦点还给输入框 */
   const [findFocus, setFindFocus] = useState(0)
+  /** 本书的书签，顺序与主进程一致（最近加的在前） */
+  const [bookmarks, setBookmarks] = useState<Bookmark[]>([])
+  /** 加 / 删 / 跳书签的一行提示，与引用提示同寿命（6 秒后自己收掉） */
+  const [bookmarkNote, setBookmarkNote] = useState<string | null>(null)
+  /** 当前页页首的 CFI：用来判断「这一页是不是已经有书签」，按钮文案跟着它变 */
+  const [pageCfi, setPageCfi] = useState<string | null>(null)
 
   const stageRef = useRef<HTMLDivElement | null>(null)
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
   const paginatorRef = useRef<ChapterPaginator | null>(null)
-  /** 新文档载入后要跳到的位置：进度用 cfi、书内锚点用 fragment、往回翻章用 edge、引用回跳用 excerpt */
-  const pendingRef = useRef<{ cfi?: string; fragment?: string; edge?: 'end'; excerpt?: string } | null>(
-    null
-  )
+  /**
+   * 新文档载入后要跳到的位置：进度用 cfi、书内锚点用 fragment、往回翻章用 edge、
+   * 引用回跳 / 跨书命中用 excerpt。`miss` 是这一条定位失败时要说的话 ——
+   * 引用、书内查找、跨书命中失败的口径不同，不能共用一句。
+   */
+  const pendingRef = useRef<{
+    cfi?: string
+    fragment?: string
+    edge?: 'end'
+    excerpt?: string
+    miss?: string
+  } | null>(null)
+
+  /**
+   * 阅读时长的三个时间戳。
+   *
+   * `activity` 每次按键 / 滚轮 / 点击 / 翻页都刷新；超过 5 分钟没动就停表。
+   * 可见性与焦点分开记：窗口在后台时即使还有焦点也不该计时。
+   */
+  const activityRef = useRef(Date.now())
+  const visibleRef = useRef(!document.hidden)
+  const focusedRef = useRef(document.hasFocus())
+  const markActivity = useCallback((): void => {
+    activityRef.current = Date.now()
+  }, [])
 
   /**
    * 版式只在这里算。`windowWidth` 与 `size` 分开传：断点说的是窗口宽度，
@@ -209,10 +260,24 @@ export function ReaderPage({
         const wanted = target?.chapterId ?? opened.progress?.chapterId ?? null
         const found = list.findIndex((item) => item.id === wanted)
         setChapterIndex(found >= 0 ? found : 0)
-        // cfi 只在「确实要落在指定章节」时才跟着 target 走，
-        // 否则会拿 A 章的 cfi 去定位 B 章，必然失败并退化成章首
-        const cfi = target?.chapterId != null ? target.cfi : (opened.progress?.cfi ?? null)
-        pendingRef.current = cfi ? { cfi } : null
+        if (target?.excerpt) {
+          // 跨书搜索的命中只有摘录、没有 CFI：等新文档就位后按摘录匹配（第 ⑤ 步）
+          pendingRef.current = { excerpt: target.excerpt, miss: FIND_MISS }
+        } else {
+          // cfi 只在「确实要落在指定章节」时才跟着 target 走，
+          // 否则会拿 A 章的 cfi 去定位 B 章，必然失败并退化成章首
+          const cfi = target?.chapterId != null ? target.cfi : (opened.progress?.cfi ?? null)
+          pendingRef.current = cfi ? { cfi } : null
+        }
+        // 书签读失败不该连带开不了书：单独拉，失败时在提示条上明说
+        void window.api.bookmarks
+          .list(bookId)
+          .then((marks) => {
+            if (alive) setBookmarks(marks)
+          })
+          .catch((e: unknown) => {
+            if (alive) setBookmarkNote(e instanceof Error ? e.message : '书签没读出来')
+          })
       } catch (e) {
         if (alive) setError(e instanceof Error ? e.message : '打开失败')
       }
@@ -323,15 +388,21 @@ export function ReaderPage({
     if (!paginator || !pending) return
     pendingRef.current = null
     if (pending.cfi) {
-      paginator.goToCfi(pending.cfi)
+      // CFI 失效（正文与生成它时对不上）时，有摘录就按摘录兜底；都不成就明说
+      if (!paginator.goToCfi(pending.cfi)) {
+        const fallback = pending.excerpt ? paginator.goToExcerpt(pending.excerpt) : false
+        if (!fallback && pending.miss) setCitationNote(pending.miss)
+      }
     } else if (pending.edge === 'end') {
       paginator.goToPage(paginator.pages - 1)
     } else if (pending.fragment) {
       // 锚点找不到就停在章首：链接至少把用户带到了对的那一章
       paginator.goToElement(pending.fragment)
     } else if (pending.excerpt) {
-      // 引用回跳：跨章时摘录要等新文档就位才能匹配，失败也必须明说
-      setCitationNote(paginator.goToExcerpt(pending.excerpt) ? null : CITATION_MISS)
+      // 引用回跳 / 跨书命中：摘录要等新文档就位才能匹配，失败也必须明说
+      setCitationNote(
+        paginator.goToExcerpt(pending.excerpt) ? null : (pending.miss ?? CITATION_MISS)
+      )
     }
     setPage(paginator.page + 1)
     setPageCount(paginator.pages)
@@ -344,6 +415,7 @@ export function ReaderPage({
 
   const turn = useCallback(
     (direction: 1 | -1) => {
+      markActivity()
       // 翻页时收掉浮条与浮层：它们的坐标锚在上一页的正文上，留着就是错位
       setActive(null)
       setSelection(null)
@@ -360,17 +432,18 @@ export function ReaderPage({
       pendingRef.current = direction === -1 ? { edge: 'end' } : null
       setChapterIndex(target)
     },
-    [chapterIndex, readable.length]
+    [chapterIndex, readable.length, markActivity]
   )
 
   const goToChapterById = useCallback(
     (chapterId: number) => {
+      markActivity()
       const index = readable.findIndex((item) => item.id === chapterId)
       if (index < 0 || index === chapterIndex) return
       pendingRef.current = null
       setChapterIndex(index)
     },
-    [readable, chapterIndex]
+    [readable, chapterIndex, markActivity]
   )
 
   /**
@@ -500,7 +573,7 @@ export function ReaderPage({
         hit.chapterId === null ? -1 : readable.findIndex((item) => item.id === hit.chapterId)
 
       if (index >= 0 && index !== chapterIndex) {
-        pendingRef.current = { excerpt: hit.text }
+        pendingRef.current = { excerpt: hit.text, miss: FIND_MISS }
         setChapterIndex(index)
         return
       }
@@ -571,12 +644,12 @@ export function ReaderPage({
   const saveNow = useCallback(() => {
     const paginator = paginatorRef.current
     if (!book || !paginator || !chapter) return
-    const share = 1 / Math.max(1, readable.length)
     void window.api.reader.saveProgress({
       bookId: book.id,
       cfi: paginator.currentCfi(),
       chapterId: chapter.id,
-      percent: Math.min(1, chapterIndex * share + paginator.chapterFraction() * share)
+      // 与「加书签」共用同一个公式，两处不会各自演化出两个百分比
+      percent: bookPercent(chapterIndex, paginator.chapterFraction(), readable.length)
     })
   }, [book, readable, chapter, chapterIndex])
 
@@ -584,6 +657,199 @@ export function ReaderPage({
   useEffect(() => {
     saveNowRef.current = saveNow
   }, [saveNow])
+
+  // ── 书签 ─────────────────────────────────────────────────────────────
+
+  /** 当前这一页已有的书签；按钮文案与列表高亮都跟着它变 */
+  const currentBookmark = useMemo(
+    () => (pageCfi === null ? null : (bookmarks.find((item) => item.cfi === pageCfi) ?? null)),
+    [bookmarks, pageCfi]
+  )
+
+  // 每翻一页 / 换一章 / 重排后重算页首 CFI。挂在 page 上而不是直接读 ref，
+  // 是为了读到的分页器与刚刚渲染出来的那一页是同一个状态
+  useEffect(() => {
+    setPageCfi(paginatorRef.current?.currentCfi() ?? null)
+  }, [page, pageCount, chapterIndex, docVersion])
+
+  const addBookmark = useCallback(async () => {
+    const paginator = paginatorRef.current
+    if (!book || !paginator || !chapter) return
+    try {
+      // 现场取 CFI 与摘录：不吃 600 毫秒防抖后的旧 state，否则记下的是上一页
+      const result = await window.api.bookmarks.add({
+        bookId: book.id,
+        chapterId: chapter.id,
+        cfi: paginator.currentCfi(),
+        excerpt: paginator.pageStartExcerpt(),
+        label: null,
+        percent: bookPercent(chapterIndex, paginator.chapterFraction(), readable.length)
+      })
+      setBookmarks((list) =>
+        list.some((item) => item.id === result.bookmark.id) ? list : [result.bookmark, ...list]
+      )
+      // 同一页再点一次会被主进程的唯一键挡住：必须说清，不能让人以为点了没反应
+      setBookmarkNote(result.created ? BOOKMARK_ADDED : BOOKMARK_DUPLICATE)
+      setPageCfi(result.bookmark.cfi)
+    } catch (e) {
+      setBookmarkNote(e instanceof Error ? e.message : '书签没有保存成功')
+    }
+  }, [book, chapter, chapterIndex, readable.length])
+
+  const removeBookmark = useCallback(async (id: number) => {
+    try {
+      await window.api.bookmarks.remove(id)
+      setBookmarks((list) => list.filter((item) => item.id !== id))
+      setBookmarkNote(BOOKMARK_REMOVED)
+    } catch (e) {
+      setBookmarkNote(e instanceof Error ? e.message : '书签没有删掉')
+    }
+  }, [])
+
+  /**
+   * 跳回一条书签。CFI 是唯一精确手段，同章内定位不到就退一步按摘录匹配；
+   * 章节没了（书被重导入）直接说清，不把人丢在章首装作成功了。
+   */
+  const goToBookmark = useCallback(
+    (mark: Bookmark) => {
+      setBookmarkNote(null)
+      const index =
+        mark.chapterId === null ? -1 : readable.findIndex((item) => item.id === mark.chapterId)
+      if (index < 0) {
+        setCitationNote(BOOKMARK_NO_CHAPTER)
+        return
+      }
+      if (index !== chapterIndex) {
+        // 跨章：把 CFI 与摘录一起挂上，新文档就位后由第 ⑤ 步去定位
+        pendingRef.current = { cfi: mark.cfi, excerpt: mark.excerpt, miss: BOOKMARK_MISS }
+        setChapterIndex(index)
+        return
+      }
+      const paginator = paginatorRef.current
+      if (!paginator) return
+      if (paginator.goToCfi(mark.cfi)) {
+        setPage(paginator.page + 1)
+        setPageCount(paginator.pages)
+        setPageCfi(mark.cfi)
+        return
+      }
+      if (mark.excerpt !== '' && paginator.goToExcerpt(mark.excerpt)) {
+        setPage(paginator.page + 1)
+        setPageCount(paginator.pages)
+        return
+      }
+      setCitationNote(BOOKMARK_MISS)
+    },
+    [readable, chapterIndex]
+  )
+
+  // 书签提示与引用提示一样是「事件不是状态」，过一会儿收掉
+  useEffect(() => {
+    if (!bookmarkNote) return
+    const timer = window.setTimeout(() => setBookmarkNote(null), 6000)
+    return () => window.clearTimeout(timer)
+  }, [bookmarkNote])
+
+  // ── 阅读时长 ─────────────────────────────────────────────────────────
+
+  /**
+   * 时长采集。口径（设置页有一句话写明，避免被当成 bug）：
+   * **窗口可见 + 有焦点 + 连续 5 分钟内有操作**，人离开即停表。
+   *
+   * 心跳 5 秒一次、纯内存累加，零 IPC；每 60 秒把攒下的整秒数写一次库。
+   * **只有 await 成功才把本地增量清零** —— 累加写的重复投递是这条通道独有的坑，
+   * 宁可少记不可多记；失败时残差留在本地、下一次连同它一起重投，长期不漂移。
+   */
+  const creditRef = useRef(0)
+  const lastTickRef = useRef(0)
+  const readingFailRef = useRef(0)
+
+  const pump = useCallback((now: number): void => {
+    creditRef.current += creditMs({
+      now,
+      lastTickAt: lastTickRef.current,
+      lastActivityAt: activityRef.current,
+      // 分页器不在位（换章载入中）时不算：那一段屏幕上根本没有正文
+      active: visibleRef.current && focusedRef.current && paginatorRef.current !== null,
+      idleMs: IDLE_MS
+    })
+    lastTickRef.current = now
+  }, [])
+
+  const flushReading = useCallback(async (): Promise<void> => {
+    pump(Date.now())
+    const seconds = Math.floor(creditRef.current / 1000)
+    if (seconds <= 0) return
+    try {
+      await window.api.reading.addSeconds(seconds)
+      // 清零放在成功分支的第一句：没确认写进去就清零等于把这段时长弄丢了
+      creditRef.current -= seconds * 1000
+      readingFailRef.current = 0
+      setUnrecordedMs(0)
+    } catch {
+      readingFailRef.current += 1
+      // 一次失败多半是瞬时抖动，连着两次才在设置页明说「有多少没能记入」
+      if (readingFailRef.current >= 2) setUnrecordedMs(creditRef.current)
+    }
+  }, [pump])
+
+  const flushReadingRef = useRef(flushReading)
+  useEffect(() => {
+    flushReadingRef.current = flushReading
+  }, [flushReading])
+
+  useEffect(() => {
+    if (!canLoad) return
+    lastTickRef.current = Date.now()
+    activityRef.current = Date.now()
+    const tick = window.setInterval(() => pump(Date.now()), TICK_MS)
+    const report = window.setInterval(() => void flushReadingRef.current(), REPORT_MS)
+    return () => {
+      window.clearInterval(tick)
+      window.clearInterval(report)
+    }
+  }, [canLoad, pump])
+
+  // 可见性 / 焦点一变就立刻结算：切后台之后那一段本来就不该记
+  useEffect(() => {
+    const onVisibility = (): void => {
+      visibleRef.current = !document.hidden
+      if (document.hidden) void flushReadingRef.current()
+    }
+    const onFocus = (): void => {
+      focusedRef.current = true
+      markActivity()
+    }
+    const onBlur = (): void => {
+      focusedRef.current = false
+      void flushReadingRef.current()
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+    window.addEventListener('focus', onFocus)
+    window.addEventListener('blur', onBlur)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility)
+      window.removeEventListener('focus', onFocus)
+      window.removeEventListener('blur', onBlur)
+    }
+  }, [markActivity])
+
+  // 操作信号：父文档与正文 iframe 都要听（焦点在正文里时父文档收不到事件）
+  useEffect(() => {
+    const docs = [document, iframeRef.current?.contentDocument].filter(
+      (doc): doc is Document => Boolean(doc)
+    )
+    const bump = (): void => markActivity()
+    const events = ['keydown', 'wheel', 'pointerdown'] as const
+    for (const doc of docs) {
+      for (const name of events) doc.addEventListener(name, bump, { passive: true })
+    }
+    return () => {
+      for (const doc of docs) {
+        for (const name of events) doc.removeEventListener(name, bump)
+      }
+    }
+  }, [docVersion, markActivity])
 
   // 翻页/换章后延迟落库：每翻一页写一次 IPC 没有意义
   useEffect(() => {
@@ -818,13 +1084,16 @@ export function ReaderPage({
   const exit = useCallback(() => {
     flushPrefs()
     saveNow()
+    // 攒着的那一段时长也要结掉：退出后没有计时器再替它上报了
+    void flushReadingRef.current()
     onExit()
   }, [flushPrefs, saveNow, onExit])
 
-  // 卸载时补一次：防抖窗口内直接关窗，偏好改动不能丢
+  // 卸载时补一次：防抖窗口内直接关窗，偏好改动与没上报的时长都不能丢
   useEffect(
     () => () => {
       flushPrefs()
+      void flushReadingRef.current()
     },
     [flushPrefs]
   )
@@ -861,6 +1130,12 @@ export function ReaderPage({
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'f') {
         event.preventDefault()
         openFind()
+        return
+      }
+      // ⌘D / Ctrl+D 加书签。同样排在总闸之前；查找优先于它（⌘F 在前）
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'd') {
+        event.preventDefault()
+        void addBookmark()
         return
       }
       if (event.metaKey || event.ctrlKey || event.altKey) return
@@ -979,6 +1254,11 @@ export function ReaderPage({
           {citationNote}
         </p>
       )}
+      {bookmarkNote && (
+        <p className="reader__degrade" role="status">
+          {bookmarkNote}
+        </p>
+      )}
       {!canHighlight && docVersion > 0 && (
         <p className="reader__degrade" role="status">
           当前环境不支持无侵入高亮，书内标注只保存不显示；笔记页仍能看到全部内容。
@@ -994,6 +1274,11 @@ export function ReaderPage({
           chapters={book?.chapters ?? []}
           currentId={readable[chapterIndex]?.id ?? null}
           onSelect={goToChapterById}
+          marks={bookmarks}
+          currentMark={currentBookmark}
+          onAddMark={() => void addBookmark()}
+          onRemoveMark={(id) => void removeBookmark(id)}
+          onSelectMark={goToBookmark}
         />
         {/* 阅读区整块是纸，上留白由舞台给，正文块在纸面上上下居中 */}
         <div className="reader__stage" ref={stageRef} style={{ paddingTop: PAGE_PAD_Y }}>

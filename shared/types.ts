@@ -100,6 +100,15 @@ export type SearchHit = {
 }
 
 /**
+ * 跨书搜索的命中：在单书命中上加书名与书籍 id。
+ * 主进程回的是扁平数组，数组顺序就是 bm25 名次，渲染层分组时不能重排。
+ */
+export type SearchHitWithBook = SearchHit & {
+  bookId: string
+  bookTitle: string
+}
+
+/**
  * IPC 结果信封。用于需要展示可读中文错误的调用：主进程直接 throw 会被 Electron
  * 套上 "Error invoking remote method '...'" 英文前缀，这里改成回传结果，由 preload
  * 还原成干净的 Error 再抛给渲染进程。
@@ -227,13 +236,41 @@ export type HighlightContext = {
   after: string
 }
 
-/** 阅读落点：从书架进来只有 bookId，从笔记「回到原文」进来带章节与位置 */
+/** 阅读落点：从书架进来只有 bookId，从笔记「回到原文」回来带章节与位置 */
 export type ReadingTarget = {
   bookId: string
   /** 指定时优先于上次进度 */
   chapterId: number | null
   /** 仅当 chapterId 不为 null 时有意义 */
   cfi: string | null
+  /** 跨书搜索的命中只有摘录、没有 CFI：靠摘录在章节正文里匹配落点 */
+  excerpt?: string
+}
+
+/**
+ * 书签：一个「位置标记」，与高亮（标注）是两件事。
+ * cfi 是文本路径，改字号后不变，所以同一页不会因为排版变化而重排。
+ */
+export type Bookmark = {
+  id: number
+  bookId: string
+  chapterId: number | null
+  cfi: string
+  /** 加书签那一刻页首的一小段原文：列表辨识文字，也是回跳兜底 */
+  excerpt: string
+  label: string | null
+  /** 0–1，与阅读进度同一口径，供列表显示「全书 37%」 */
+  percent: number
+  createdAt: number
+}
+
+export type BookmarkInput = {
+  bookId: string
+  chapterId: number | null
+  cfi: string
+  excerpt: string
+  label?: string | null
+  percent: number
 }
 
 export type NotesExportOptions = {
@@ -249,10 +286,41 @@ export type NotesExportPreview = {
   unlocated: number
 }
 
+/** 导出格式。markdown 走既有通道，anki / html 走新通道 —— 但预览与落盘始终是同一份内容 */
+export type NotesExportFormat = 'markdown' | 'anki' | 'html'
+
+/**
+ * 新导出通道的预览。
+ *
+ * `content` 与落盘的那一份完全一致（同一个 buildExport 产出），
+ * 「预览即所得」这条性质在两个实现里各自演化的话，迟早会对不上。
+ */
+export type NotesFilePreview = {
+  content: string
+  fileName: string
+  total: number
+  unlocated: number
+}
+
 /** 导出落盘的结果。用户点了「取消」也是正常路径，所以用 saved 而不是抛错 */
 export type NotesExportResult = {
   saved: boolean
   path: string | null
+}
+
+/** 某一天的阅读秒数。day 是本地日期串（YYYY-MM-DD） */
+export type ReadingDay = { day: string; seconds: number }
+
+/**
+ * 阅读统计。`days` 只含当年有记录的日子，年历按它染色。
+ * today / last7 / total 由 SQL 直接算，渲染层不再遍历求和。
+ */
+export type ReadingStats = {
+  year: number
+  days: ReadingDay[]
+  today: number
+  last7: number
+  total: number
 }
 
 export type AiSettings = { providerId: ProviderId; model: string }

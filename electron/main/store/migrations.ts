@@ -158,5 +158,42 @@ export const migrations: Migration[] = [
         insert.run(row.id, toIndexText(row.text), toSingleIndexText(row.text))
       }
     }
+  },
+  {
+    version: 5,
+    up: (db) => {
+      /**
+       * 书签与阅读时长。两张表互不依赖、都不需要重算已有数据（不像 v4 要就地重切），
+       * 所以合并成一次迁移 —— 每次迁移都会占掉一个库备份轮转名额（见 db.ts 的 KEEP_BACKUPS）。
+       *
+       * 跨书搜索零 DDL：复用 chunks_fts 的两列索引，只去掉 book_id 过滤。
+       */
+      db.exec(`
+        CREATE TABLE bookmarks (
+          id         INTEGER PRIMARY KEY AUTOINCREMENT,
+          book_id    TEXT NOT NULL REFERENCES books(id) ON DELETE CASCADE,
+          -- 与 highlights 同口径：书重导入导致章节被删时置空，书签本身保留
+          chapter_id INTEGER REFERENCES chapters(id) ON DELETE SET NULL,
+          -- 跳回的唯一精确手段，与 reading_progress.cfi 同源
+          cfi        TEXT NOT NULL,
+          -- 加书签那一刻页首的一小段原文：既是列表的辨识文字，也是回跳兜底
+          excerpt    TEXT NOT NULL DEFAULT '',
+          label      TEXT,
+          -- 与 saveProgress 同一口径的百分比，供列表显示「全书 37%」
+          percent    REAL NOT NULL DEFAULT 0,
+          created_at INTEGER NOT NULL
+        );
+        CREATE INDEX idx_bookmarks_book ON bookmarks(book_id, created_at DESC);
+        -- 书签语义是「标记这一页」，同一页两条没有意义（CFI 是文本路径，改字号后不变）
+        CREATE UNIQUE INDEX idx_bookmarks_place ON bookmarks(book_id, cfi);
+
+        -- 一天一行，本地日期串直接做主键：年历与「今日/近 7 天/累计」都只需按天聚合
+        CREATE TABLE reading_time (
+          day        TEXT PRIMARY KEY,
+          seconds    INTEGER NOT NULL DEFAULT 0,
+          updated_at INTEGER NOT NULL
+        );
+      `)
+    }
   }
 ]

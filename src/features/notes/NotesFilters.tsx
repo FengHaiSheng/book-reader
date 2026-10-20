@@ -7,18 +7,36 @@ export function NotesFilters({
   books,
   kind,
   bookId,
+  query,
   onKind,
-  onBook
+  onBook,
+  onQuery
 }: {
   counts: NoteCounts
   books: BookOption[]
   kind: NotesKind
   bookId: string | null
+  query: string
   onKind: (kind: NotesKind) => void
   onBook: (bookId: string | null) => void
+  onQuery: (value: string) => void
 }) {
   return (
     <nav className="notes-side" aria-label="笔记筛选">
+      <div className="notes-side__search">
+        <input
+          type="text"
+          className="notes-side__search-input"
+          value={query}
+          placeholder="搜划线或批注"
+          aria-label="搜索笔记"
+          onChange={(event) => onQuery(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') onQuery('')
+          }}
+        />
+      </div>
+
       <div className="notes-side__section">类型</div>
       <ul className="notes-side__list">
         {KINDS.map((item) => (

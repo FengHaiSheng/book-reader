@@ -5,6 +5,7 @@ import { toAppError } from '@shared/errors'
 import type {
   HighlightInput,
   HighlightPatch,
+  NotesExportFormat,
   NotesExportOptions,
   NotesExportResult
 } from '@shared/types'
@@ -16,7 +17,7 @@ import {
   listChapterHighlights,
   updateHighlight
 } from '../notes/repo'
-import { fileStamp, previewExport } from '../notes/export'
+import { EXPORT_FORMATS, fileStamp, previewExport, previewFile } from '../notes/export'
 import { getDatabase } from '../store/db'
 
 export function registerNotesIpc(): void {
@@ -46,12 +47,15 @@ export function registerNotesIpc(): void {
 
   ipcMain.handle(CH.notesContext, (_event, id: number) => highlightContext(getDatabase(), id))
 
+  // 保留供契约使用：界面已改走 notes:previewFile / notes:exportFile，
+  // 但 API_SHAPE 与 preload 里仍留着这条通道，不要当死代码删掉。
   ipcMain.handle(
     CH.notesPreviewExport,
     (_event, ids: number[] | null, options: NotesExportOptions) =>
       previewExport(getDatabase(), ids, options, Date.now())
   )
 
+  // 同上：保留供契约使用
   ipcMain.handle(
     CH.notesExportMarkdown,
     async (_event, ids: number[] | null, options: NotesExportOptions): Promise<NotesExportResult> => {
@@ -68,6 +72,41 @@ export function registerNotesIpc(): void {
 
       try {
         await writeFile(picked.filePath, preview.markdown, 'utf8')
+      } catch (error) {
+        throw new Error(toAppError(error, '文件没有写成功').message)
+      }
+      return { saved: true, path: picked.filePath }
+    }
+  )
+
+  ipcMain.handle(
+    CH.notesPreviewFile,
+    (_event, ids: number[] | null, options: NotesExportOptions, format: NotesExportFormat) =>
+      previewFile(getDatabase(), ids, options, format, Date.now())
+  )
+
+  ipcMain.handle(
+    CH.notesExportFile,
+    async (
+      _event,
+      ids: number[] | null,
+      options: NotesExportOptions,
+      format: NotesExportFormat
+    ): Promise<NotesExportResult> => {
+      const now = new Date()
+      // 预览与落盘同源：对话框的默认文件名也来自这次 preview
+      const preview = previewFile(getDatabase(), ids, options, format, now.getTime())
+      const spec = EXPORT_FORMATS[format]
+
+      const picked = await dialog.showSaveDialog({
+        title: spec.title,
+        defaultPath: preview.fileName,
+        filters: [{ name: spec.filterName, extensions: [spec.extension] }]
+      })
+      if (picked.canceled || !picked.filePath) return { saved: false, path: null }
+
+      try {
+        await writeFile(picked.filePath, preview.content, 'utf8')
       } catch (error) {
         throw new Error(toAppError(error, '文件没有写成功').message)
       }

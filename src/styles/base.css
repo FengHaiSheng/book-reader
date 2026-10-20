@@ -219,6 +219,13 @@ button {
   cursor: not-allowed;
 }
 
+/* 开启态（查找 / AI / 本页已有书签）。之前在组件里用了却没有规则，开着也看不出来 */
+.btn--on {
+  background: var(--active);
+  border-color: color-mix(in srgb, var(--ink) 26%, var(--line));
+  font-weight: 500;
+}
+
 .seg {
   display: flex;
   gap: 2px;
@@ -459,7 +466,10 @@ html[data-theme='dark'] .seg__b.is-on {
   background: var(--panel);
   border-right: 1px solid var(--line);
   padding: var(--s2) 0;
-  overflow-y: auto;
+  /* 页签行固定、下面的列表自己滚：滚动条从整栏移到 .toc__pane 上 */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .toc__list {
@@ -3068,4 +3078,323 @@ html[data-theme='dark'] .tag-dot {
   .sidebar__section {
     display: none;
   }
+}
+
+/* ── 阅读器左栏：目录 / 书签两个页签（宽度不变，仍是 TOC_WIDTH） ───────── */
+
+.toc__tabs {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 2px;
+  padding: 0 var(--s2) var(--s2);
+}
+
+.toc__tab {
+  flex: 1;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border-radius: var(--r-sm);
+  font-size: 12px;
+  color: var(--ink-muted);
+  transition: background var(--ease), color var(--ease);
+}
+
+.toc__tab:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.toc__tab--on {
+  background: var(--active);
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.toc__tab-n {
+  font-size: 11px;
+  color: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 滚动只发生在这一层，页签行固定 */
+.toc__pane {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* ── 书签列表 ──────────────────────────────────────────────────────── */
+
+.marks__bar {
+  padding: var(--s2) var(--s2) var(--s3);
+}
+
+.marks__bar .btn {
+  width: 100%;
+}
+
+.marks__list {
+  margin: 0;
+  padding: 0 var(--s2) var(--s2);
+  list-style: none;
+}
+
+.marks__item {
+  display: block;
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: var(--r-sm);
+  text-align: left;
+  transition: background var(--ease);
+}
+
+.marks__item:hover {
+  background: var(--hover);
+}
+
+.marks__item--here {
+  background: var(--active);
+}
+
+.marks__excerpt {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+.marks__meta {
+  display: block;
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.marks__empty {
+  margin: 0;
+  padding: var(--s2);
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--ink-muted);
+}
+
+/* 4B 全库跨书搜索结果：书架工具条下方的一块，收起时只留标题行 */
+.libsearch {
+  margin-bottom: var(--s4);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+}
+
+.libsearch__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+  padding: var(--s2) var(--s3);
+}
+
+.libsearch__title {
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.libsearch__body {
+  padding: 0 var(--s3) var(--s3);
+  border-top: 1px solid var(--line);
+}
+
+.libsearch__group {
+  padding-top: var(--s3);
+}
+
+.libsearch__ghead {
+  margin: 0 0 var(--s1);
+  color: var(--ink-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.libsearch__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.libsearch__item {
+  display: block;
+  width: 100%;
+  padding: var(--s2);
+  border-radius: var(--r-sm);
+  color: var(--ink);
+  text-align: left;
+}
+
+.libsearch__item:hover {
+  background: var(--hover);
+}
+
+.libsearch__chapter {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--ink-muted);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.libsearch__snippet {
+  display: block;
+  font-size: 12px;
+  line-height: 1.6;
+  word-break: break-word;
+}
+
+/* 命中词标一下：一组相似句子里认不出差别；不用 <mark> 的浏览器默认黄底 */
+.libsearch__mark {
+  background: color-mix(in srgb, var(--accent-mark) 18%, transparent);
+  color: inherit;
+  border-radius: 2px;
+}
+
+.libsearch__more,
+.libsearch__note {
+  margin: var(--s2) 0 0;
+  color: var(--ink-muted);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.libsearch__empty {
+  margin: var(--s3) 0 0;
+  color: var(--ink-muted);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+/* 请求失败与「一条没找到」不是一回事，颜色要分得开 */
+.libsearch__empty--error {
+  color: var(--accent-mark);
+}
+
+/* 笔记页侧栏顶部的关键字搜索框 */
+.notes-side__search {
+  padding: var(--s3) var(--s2) 0;
+}
+
+.notes-side__search-input {
+  width: 100%;
+  height: 28px;
+  padding: 0 var(--s2);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  outline: none;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--ink);
+  transition: border-color var(--ease), background var(--ease);
+}
+
+.notes-side__search-input:focus {
+  border-color: color-mix(in srgb, var(--ink) 28%, transparent);
+  background: var(--paper-raised);
+}
+
+.notes-side__search-input::placeholder {
+  color: var(--ink-muted);
+}
+
+/* 三个格式按钮在 .pop 的 348px 内宽里不敢保证一行放得下，
+   所以改成纵向：标签一行，三个按钮另起一行铺满 */
+.pop__row--stack {
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--s2);
+}
+
+.pop__row--stack > .lb {
+  flex: 0 0 auto;
+}
+
+.pop__row--stack .seg {
+  flex: 0 0 auto;
+  width: 100%;
+}
+
+.pop > .hint2 {
+  margin: var(--s1) 0 0;
+  font-size: 11.5px;
+  color: var(--ink-muted);
+  line-height: 1.6;
+}
+
+/* ── 设置页：阅读统计（三个数字格 + 年历热力图） ────────────────────── */
+
+/* 三个数字格自带排版：.settings__row 是 flex，套上去会挤成一行 */
+.stats__grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--s3);
+}
+
+.stats__card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--s3) var(--s4);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+}
+
+.stats__label {
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+
+.stats__num {
+  font-size: 17px;
+  line-height: 1.3;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.stats__year {
+  margin: var(--s4) 0 var(--s2);
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+
+/* 一列一周、周一起头：53 周 × 9px + 52 × 3px = 633px，一行放得下 */
+.stats__heat {
+  display: grid;
+  grid-template-rows: repeat(7, 9px);
+  grid-auto-flow: column;
+  gap: 3px;
+  justify-content: start;
+}
+
+.stats__cell {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+}
+
+/* 当年第一天之前 / 最后一天之后的补白：不属于任何日期 */
+.stats__cell--pad {
+  background: transparent;
+}
+
+/* 今天不能只靠颜色深浅认出来：不管档位高低都补一圈内描边 */
+.stats__cell--today {
+  box-shadow: inset 0 0 0 1px var(--ink-muted);
 }

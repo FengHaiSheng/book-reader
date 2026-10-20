@@ -8,6 +8,39 @@ import { rangeFromExcerpt } from './locate'
 const PROBE_X = 2
 const PROBE_Y = 2
 
+/** 书签摘录取多长。够列表辨认与回跳匹配，又不至于把一整段塞进列表 */
+const EXCERPT_CHARS = 40
+
+/** 脚本、样式这类节点里的文字不是正文，摘录不收 */
+const SKIP_EXCERPT_TAGS = new Set(['SCRIPT', 'STYLE', 'TEMPLATE', 'NOSCRIPT'])
+
+/**
+ * 从 `from` 之后接着收文本，最多 `need` 个字。
+ *
+ * 跨 realm：`from` 是 iframe 里的节点，不能判 instanceof，只按 nodeType 走；
+ * `NodeFilter.SHOW_TEXT` 是个常量（4），跨 realm 传没有语义问题。
+ */
+function collectAfter(doc: Document, from: Node, need: number): string {
+  const root = doc.body
+  if (!root) return ''
+  const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+  try {
+    // 元素节点上 current = 它自己时，nextNode() 会落到它内部第一个文本节点
+    walker.currentNode = from
+  } catch {
+    return ''
+  }
+  let rest = ''
+  let current = walker.nextNode()
+  while (current && rest.length < need) {
+    const text = current as Text
+    const parent = text.parentElement
+    if (!(parent && SKIP_EXCERPT_TAGS.has(parent.tagName))) rest += text.data
+    current = walker.nextNode()
+  }
+  return rest.slice(0, need)
+}
+
 /**
  * 一章的分页与定位。
  *
@@ -111,6 +144,29 @@ export class ChapterPaginator {
   currentCfi(): string {
     const range = this.pageStartRange()
     return pointCfi(this.doc, range.startContainer, range.startOffset, this.spineIndex)
+  }
+
+  /**
+   * 页首那一小段原文：书签列表的辨识文字，也是书签回跳的兜底锚点。
+   *
+   * 在页首折叠 Range 上往右扩到 40 字，跨文本节点继续往后续收。摘录只影响
+   * 可读性与兜底定位，取不到就返回空串 —— 不能让它挡住「加书签」这件事本身。
+   */
+  pageStartExcerpt(max = EXCERPT_CHARS): string {
+    const range = this.pageStartRange()
+    const start = range.startContainer
+    let raw: string
+    // 跨 realm：只能看 nodeType，不能用 instanceof
+    if (start.nodeType === 3) {
+      const text = start as Text
+      const head = text.data.slice(range.startOffset, range.startOffset + max)
+      raw = head.length < max ? head + collectAfter(this.doc, text, max - head.length) : head
+    } else {
+      // 页首落到元素上（起头是图片或空白）：从该元素内部往后收
+      raw = collectAfter(this.doc, start, max)
+    }
+    // 段落之间的换行在列表里只会变成一块黑，压成单空格再掐两头
+    return raw.replace(/\s+/gu, ' ').trim()
   }
 
   private pageStartRange(): Range {

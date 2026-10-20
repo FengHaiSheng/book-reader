@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
-import type { NotesExportOptions, NotesExportPreview } from '@shared/types'
+import type { NotesExportFormat, NotesExportOptions, NotesFilePreview } from '@shared/types'
 
-const EMPTY: NotesExportPreview = { markdown: '', total: 0, unlocated: 0 }
+const EMPTY: NotesFilePreview = { content: '', fileName: '', total: 0, unlocated: 0 }
 
 /**
  * 导出浮层。
@@ -20,12 +20,13 @@ export function ExportPopover({
   const [host, setHost] = useState<HTMLElement | null>(null)
   const [open, setOpen] = useState(false)
   const [scope, setScope] = useState<'all' | 'filtered'>('all')
+  const [format, setFormat] = useState<NotesExportFormat>('markdown')
   const [options, setOptions] = useState<NotesExportOptions>({
     includeNotes: true,
     includeLocation: true,
     includeContext: false
   })
-  const [preview, setPreview] = useState<NotesExportPreview>(EMPTY)
+  const [preview, setPreview] = useState<NotesFilePreview>(EMPTY)
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -40,13 +41,13 @@ export function ExportPopover({
     [scope, allIds, filteredIds]
   )
 
-  // 预览永远跟着当前选项重算一次。数据在本地 sqlite，条数几十到几千，
+  // 预览永远跟着当前选项与格式重算一次。数据在本地 sqlite，条数几十到几千，
   // 重算是毫秒级——比加一层缓存再处理失效便宜得多。
   useEffect(() => {
     if (!open) return
     let alive = true
     window.api.notes
-      .previewExport([...ids], options)
+      .previewFile([...ids], options, format)
       .then((result) => {
         if (!alive) return
         setPreview(result)
@@ -58,7 +59,7 @@ export function ExportPopover({
     return () => {
       alive = false
     }
-  }, [open, ids, options])
+  }, [open, ids, options, format])
 
   // 浮层压在正文之上，点别处或按 Esc 都要收起来
   useEffect(() => {
@@ -85,7 +86,7 @@ export function ExportPopover({
   const save = useCallback(async () => {
     setBusy(true)
     try {
-      const result = await window.api.notes.exportMarkdown([...ids], options)
+      const result = await window.api.notes.exportFile([...ids], options, format)
       // 用户点了取消不是错误：不清空上一次的「已导出」提示，也不报错
       if (result.saved) {
         setSaved(result.path)
@@ -96,7 +97,7 @@ export function ExportPopover({
     } finally {
       setBusy(false)
     }
-  }, [ids, options])
+  }, [ids, options, format])
 
   if (!host) return null
 
@@ -110,12 +111,12 @@ export function ExportPopover({
           setSaved(null)
         }}
       >
-        导出 Markdown
+        导出笔记
       </button>
 
       {open && (
-        <div className="pop" role="dialog" aria-label="导出 Markdown">
-          <div className="pop__title">导出 Markdown</div>
+        <div className="pop" role="dialog" aria-label="导出笔记">
+          <div className="pop__title">导出笔记</div>
 
           <div className="pop__row">
             <span className="lb">范围</span>
@@ -136,6 +137,42 @@ export function ExportPopover({
               </button>
             </div>
           </div>
+
+          <div className="pop__row pop__row--stack">
+            <span className="lb">格式</span>
+            <div className="seg">
+              <button
+                type="button"
+                className={`seg__b${format === 'markdown' ? ' is-on' : ''}`}
+                aria-pressed={format === 'markdown'}
+                onClick={() => setFormat('markdown')}
+              >
+                Markdown
+              </button>
+              <button
+                type="button"
+                className={`seg__b${format === 'anki' ? ' is-on' : ''}`}
+                aria-pressed={format === 'anki'}
+                onClick={() => setFormat('anki')}
+              >
+                Anki CSV
+              </button>
+              <button
+                type="button"
+                className={`seg__b${format === 'html' ? ' is-on' : ''}`}
+                aria-pressed={format === 'html'}
+                onClick={() => setFormat('html')}
+              >
+                HTML 卡片
+              </button>
+            </div>
+          </div>
+
+          {format === 'anki' && (
+            <p className="hint2">
+              Anki 2.1.55 及以上会读首行的 #columns 元数据；更早的版本导入时需勾选「跳过头两行」。
+            </p>
+          )}
 
           <label className="check">
             <input
@@ -173,7 +210,7 @@ export function ExportPopover({
           {error && <p className="pop__warn">{error}</p>}
 
           <div className="pop__preview">
-            {preview.total === 0 ? '还没有可导出的笔记。' : preview.markdown}
+            {preview.total === 0 ? '还没有可导出的笔记。' : preview.content}
           </div>
 
           <div className="pop__foot">

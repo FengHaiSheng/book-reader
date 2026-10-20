@@ -1,13 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { BookStatus, BookSummary, LibrarySort, Tag } from '@shared/types'
+import type {
+  BookStatus,
+  BookSummary,
+  LibrarySort,
+  ReadingTarget,
+  SearchHitWithBook,
+  Tag
+} from '@shared/types'
 import { BookGrid } from '../features/library/BookGrid'
 import { BookList } from '../features/library/BookList'
 import { EmptyShelf } from '../features/library/EmptyShelf'
+import { LibrarySearchResults } from '../features/library/LibrarySearchResults'
 import { LibraryTitlebarTools } from '../features/library/LibraryTitlebarTools'
 import { LibraryToolbar } from '../features/library/LibraryToolbar'
 import { TagManager } from '../features/library/TagManager'
 import { TagPicker } from '../features/library/TagPicker'
 import { Modal } from '../shell/Modal'
+import { isSearchableQuery } from '../features/reader/search'
 import {
   filterBooks,
   parseView,
@@ -18,14 +27,20 @@ import {
 } from '../features/library/shelf'
 import { useImport } from '../features/library/useImport'
 
+/** 与主进程 searchAllChunks 的默认 LIMIT 一致；界面据此说明结果被截断 */
+const BODY_LIMIT = 60
+
 export function LibraryPage({
   onOpen,
+  onOpenAt,
   tags,
   tagFilter,
   statusFilter,
   onLibraryChanged
 }: {
   onOpen: (id: string) => void
+  /** 打开一条跨书搜索命中：走摘录定位，与「从书架点书」是两条路 */
+  onOpenAt: (target: ReadingTarget) => void
   tags: Tag[]
   tagFilter: number | null
   statusFilter: BookStatus | null
@@ -34,6 +49,12 @@ export function LibraryPage({
   const [books, setBooks] = useState<BookSummary[] | null>(null)
   const [view, setView] = useState<LibraryView>('grid')
   const [query, setQuery] = useState('')
+  /** 全库正文搜索自成一摊，与书名筛选的 query 无关：query 逐字过滤书名、零 IPC */
+  const [bodyQuery, setBodyQuery] = useState('')
+  const [bodyHits, setBodyHits] = useState<SearchHitWithBook[]>([])
+  const [bodyBusy, setBodyBusy] = useState(false)
+  const [bodyError, setBodyError] = useState<string | null>(null)
+  const [bodyOpen, setBodyOpen] = useState(false)
   const [sort, setSort] = useState<LibrarySort>('recent')
   const [dropping, setDropping] = useState(false)
   const [managing, setManaging] = useState(false)
@@ -97,6 +118,48 @@ export function LibraryPage({
     void run(() => window.api.library.pickFolder())
   }
 
+  /**
+   * 全库跨书搜索：只在显式触发（回车 / 点「搜正文」）时发一次 FTS，
+   * 关键词取书名筛选框里的当前文本 —— 输入本身依旧只过滤书名，一个 IPC 都不发。
+   */
+  async function runBodySearch(): Promise<void> {
+    const keyword = query.trim()
+
+    // 纯标点 / 空白切不出 token，查了必然是空 —— 与书内查找同一口径，先拦下来说明原因
+    if (!isSearchableQuery(keyword)) {
+      setBodyBusy(false)
+      setBodyHits([])
+      setBodyQuery('')
+      setBodyOpen(false)
+      setBodyError('关键词里没有可检索的字符（标点与空白切不出词）。')
+      return
+    }
+
+    setBodyBusy(true)
+    setBodyError(null)
+    try {
+      const hits = await window.api.library.searchAll(keyword, BODY_LIMIT)
+      setBodyHits(hits)
+      setBodyQuery(keyword)
+      setBodyOpen(true)
+    } catch (e) {
+      // 请求本身失败与「正文里没找到」是两回事，都要说清楚，不静默降级
+      setBodyError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBodyBusy(false)
+    }
+  }
+
+  /** Escape：书名筛选与正文结果一起清掉 */
+  function clearSearch(): void {
+    setQuery('')
+    setBodyQuery('')
+    setBodyHits([])
+    setBodyError(null)
+    setBodyOpen(false)
+    setBodyBusy(false)
+  }
+
   async function onDrop(event: React.DragEvent<HTMLDivElement>): Promise<void> {
     event.preventDefault()
     dragDepth.current = 0
@@ -147,6 +210,8 @@ export function LibraryPage({
       <LibraryTitlebarTools
         query={query}
         onQuery={setQuery}
+        onSearchBody={() => void runBodySearch()}
+        onEscape={clearSearch}
         busy={busy}
         onPick={onPick}
         managing={managing}
@@ -161,6 +226,25 @@ export function LibraryPage({
         view={view}
         onView={pickView}
       />
+
+      {(bodyQuery !== '' || bodyBusy || bodyError !== null) && (
+        <LibrarySearchResults
+          query={bodyQuery}
+          hits={bodyHits}
+          busy={bodyBusy}
+          error={bodyError}
+          open={bodyOpen}
+          onToggle={() => setBodyOpen(!bodyOpen)}
+          onOpen={(hit) =>
+            onOpenAt({
+              bookId: hit.bookId,
+              chapterId: hit.chapterId,
+              cfi: null,
+              excerpt: hit.text
+            })
+          }
+        />
+      )}
 
       <div className="library__status" role="status">
         {progress && <span className="import__progress">{progressText(progress)}</span>}

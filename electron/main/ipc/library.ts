@@ -7,7 +7,14 @@ import { appError, toAppError } from '@shared/errors'
 import { assignTag, createTag, deleteTag, listTags, renameTag } from '../library/tags'
 import { importEpub } from '../library/importer'
 import { bookDir } from '../library/paths'
-import { deleteBookRows, libraryStats, listBooks, listChapters, searchChunks } from '../library/repo'
+import {
+  deleteBookRows,
+  libraryStats,
+  listBooks,
+  listChapters,
+  searchAllChunks,
+  searchChunks
+} from '../library/repo'
 import { getDatabase } from '../store/db'
 
 export function registerLibraryIpc(): void {
@@ -143,6 +150,10 @@ export function registerLibraryIpc(): void {
 
   ipcMain.handle(CH.librarySearch, (_event, bookId: string, query: string, limit?: number) =>
     searchChunks(getDatabase(), bookId, query, limit)
+  )
+
+  ipcMain.handle(CH.librarySearchAll, (_event, query: string, limit?: number) =>
+    searchAllChunks(getDatabase(), query, limit)
   )
 
   ipcMain.handle(CH.libraryRemove, (_event, bookId: string) => {

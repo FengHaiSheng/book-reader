@@ -4,7 +4,8 @@ import type {
   ChapterRowView,
   ImportOutcome,
   LibraryStats,
-  SearchHit
+  SearchHit,
+  SearchHitWithBook
 } from '@shared/types'
 import { tagsByBook } from './tags'
 import { toIndexText, toMatchQuery, toSingleIndexText } from '../epub/bigram'
@@ -103,6 +104,33 @@ export function searchChunks(
 }
 
 /**
+ * 全库跨书搜索：与 searchChunks 同一套 MATCH，只是去掉 book_id 过滤，
+ * 并把书名一次带回来（结果要按书分组显示）。
+ *
+ * 截断靠 LIMIT —— 大库下 bm25 必须先算再排，省不掉排序成本，
+ * 所以上限明说出来（界面写「只显示相关度最高的 N 条」），不静默丢结果。
+ */
+export function searchAllChunks(
+  db: Database.Database,
+  query: string,
+  limit = 60
+): SearchHitWithBook[] {
+  const match = toMatchQuery(query)
+  if (!match) return []
+  return db
+    .prepare(
+      `SELECT c.id AS chunkId, c.chapter_id AS chapterId, c.heading_path AS headingPath,
+              c.text AS text, f.score AS score, c.book_id AS bookId, b.title AS bookTitle
+       FROM (SELECT rowid AS rid, bm25(chunks_fts) AS score FROM chunks_fts WHERE chunks_fts MATCH ?) f
+       JOIN chunks c ON c.id = f.rid
+       JOIN books b ON b.id = c.book_id
+       ORDER BY f.score
+       LIMIT ?`
+    )
+    .all(match, limit) as SearchHitWithBook[]
+}
+
+/**
  * 按 id 批量取回 chunk 的完整信息。
  *
  * 向量检索只给 id 与相似度，正文得回这里取。SQL 的 IN 不保证返回顺序，
@@ -191,6 +219,7 @@ export function deleteBookRows(db: Database.Database, bookId: string): void {
   db.prepare('DELETE FROM ai_messages WHERE book_id = ?').run(bookId)
   db.prepare('DELETE FROM ai_results WHERE book_id = ?').run(bookId)
   db.prepare('DELETE FROM highlights WHERE book_id = ?').run(bookId)
+  db.prepare('DELETE FROM bookmarks WHERE book_id = ?').run(bookId)
   db.prepare('DELETE FROM book_tags WHERE book_id = ?').run(bookId)
   db.prepare('DELETE FROM reading_progress WHERE book_id = ?').run(bookId)
   db.prepare('DELETE FROM chunks WHERE book_id = ?').run(bookId)

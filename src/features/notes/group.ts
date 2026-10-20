@@ -6,6 +6,8 @@ export type NotesFilter = {
   kind: NotesKind
   /** null 表示不限定书籍 */
   bookId: string | null
+  /** 关键字子串匹配（大小写不敏感）。trim 后为空则不筛 */
+  query: string
 }
 
 export const KIND_LABELS: Record<NotesKind, string> = {
@@ -43,15 +45,24 @@ export function groupByBook(notes: readonly HighlightWithBook[]): BookGroup[] {
   return groups
 }
 
+/**
+ * 走渲染层过滤而不是 SQL：`listAllHighlights` 已经把全部笔记一次性取回，
+ * 这里再复刻一遍 `kind / bookId / query` 的 SQL 只会多出第二种排序口径。
+ *
+ * 关键字用大小写不敏感的子串匹配，**不用正则** —— 用户输入一个 `(` 就会抛 SyntaxError。
+ * 匹配范围是划线与批注两处正文。
+ */
 export function applyFilter(
   notes: readonly HighlightWithBook[],
   filter: NotesFilter
 ): HighlightWithBook[] {
+  const query = filter.query.trim().toLowerCase()
   return notes.filter((note) => {
     if (filter.bookId !== null && note.bookId !== filter.bookId) return false
-    if (filter.kind === 'annotated') return note.note !== null
-    if (filter.kind === 'marked') return note.note === null
-    return true
+    if (filter.kind === 'annotated' && note.note === null) return false
+    if (filter.kind === 'marked' && note.note !== null) return false
+    if (query === '') return true
+    return note.text.toLowerCase().includes(query) || (note.note ?? '').toLowerCase().includes(query)
   })
 }
 

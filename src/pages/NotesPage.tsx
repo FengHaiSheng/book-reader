@@ -18,6 +18,7 @@ export function NotesPage({ onOpenAt }: { onOpenAt: (target: ReadingTarget) => v
   const [error, setError] = useState<string | null>(null)
   const [kind, setKind] = useState<NotesKind>('all')
   const [bookId, setBookId] = useState<string | null>(null)
+  const [query, setQuery] = useState('')
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [collapsed, setCollapsed] = useState<readonly string[]>([])
 
@@ -34,7 +35,10 @@ export function NotesPage({ onOpenAt }: { onOpenAt: (target: ReadingTarget) => v
     void load()
   }, [load])
 
-  const filtered = useMemo(() => applyFilter(notes, { kind, bookId }), [notes, kind, bookId])
+  const filtered = useMemo(
+    () => applyFilter(notes, { kind, bookId, query }),
+    [notes, kind, bookId, query]
+  )
   const groups = useMemo(() => groupByBook(filtered), [filtered])
   const books = useMemo(() => bookOptions(notes), [notes])
   const counts = useMemo(() => countsByKind(notes, bookId), [notes, bookId])
@@ -45,6 +49,7 @@ export function NotesPage({ onOpenAt }: { onOpenAt: (target: ReadingTarget) => v
 
   const changeKind = useCallback((next: NotesKind) => setKind(next), [])
   const changeBook = useCallback((next: string | null) => setBookId(next), [])
+  const changeQuery = useCallback((next: string) => setQuery(next), [])
 
   const allIds = useMemo(() => notes.map((note) => note.id), [notes])
   const filteredIds = useMemo(() => filtered.map((note) => note.id), [filtered])
@@ -79,8 +84,10 @@ export function NotesPage({ onOpenAt }: { onOpenAt: (target: ReadingTarget) => v
         books={books}
         kind={kind}
         bookId={bookId}
+        query={query}
         onKind={changeKind}
         onBook={changeBook}
+        onQuery={changeQuery}
       />
 
       <main className="notes-main">

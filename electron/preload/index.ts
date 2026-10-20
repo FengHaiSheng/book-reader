@@ -11,6 +11,8 @@ import type {
   AiResultView,
   AiStatus,
   BookDigestPayload,
+  Bookmark,
+  BookmarkInput,
   BookSummary,
   CachedTaskResults,
   ChapterRowView,
@@ -26,14 +28,18 @@ import type {
   IpcResult,
   LibraryStats,
   MindmapNode,
+  NotesExportFormat,
   NotesExportOptions,
   NotesExportPreview,
   NotesExportResult,
+  NotesFilePreview,
   ProgressInput,
   ProviderId,
   ReaderBook,
   ReadingPrefs,
+  ReadingStats,
   SearchHit,
+  SearchHitWithBook,
   Tag,
   TermsPayload
 } from '@shared/types'
@@ -82,6 +88,9 @@ const api = {
       ipcRenderer.invoke(CH.libraryChapters, bookId),
     search: (bookId: string, query: string, limit?: number): Promise<SearchHit[]> =>
       ipcRenderer.invoke(CH.librarySearch, bookId, query, limit),
+    /** 全库跨书搜索。结果已按相关度排好，顺序就是名次 */
+    searchAll: (query: string, limit?: number): Promise<SearchHitWithBook[]> =>
+      ipcRenderer.invoke(CH.librarySearchAll, query, limit),
     remove: (bookId: string): Promise<void> => ipcRenderer.invoke(CH.libraryRemove, bookId),
     tagsList: (): Promise<Tag[]> => ipcRenderer.invoke(CH.libraryTagsList),
     tagCreate: (name: string): Promise<Tag> => ipcRenderer.invoke(CH.libraryTagCreate, name),
@@ -103,6 +112,19 @@ const api = {
     saveProgress: (input: ProgressInput): Promise<void> =>
       ipcRenderer.invoke(CH.readerSaveProgress, input)
   },
+  bookmarks: {
+    list: (bookId: string): Promise<Bookmark[]> => ipcRenderer.invoke(CH.bookmarksList, bookId),
+    /** created 为 false 表示这一页已经有书签了，界面据此改按钮文案 */
+    add: (input: BookmarkInput): Promise<{ bookmark: Bookmark; created: boolean }> =>
+      ipcRenderer.invoke(CH.bookmarksAdd, input),
+    remove: (id: number): Promise<void> => ipcRenderer.invoke(CH.bookmarksRemove, id)
+  },
+  reading: {
+    stats: (): Promise<ReadingStats> => ipcRenderer.invoke(CH.readingStats),
+    /** 只送增量秒数；日期串由主进程生成 */
+    addSeconds: (seconds: number): Promise<void> =>
+      ipcRenderer.invoke(CH.readingAddSeconds, seconds)
+  },
   notes: {
     listChapter: (bookId: string, chapterId: number): Promise<Highlight[]> =>
       ipcRenderer.invoke(CH.notesListChapter, bookId, chapterId),
@@ -120,7 +142,18 @@ const api = {
     exportMarkdown: (
       ids: number[] | null,
       options: NotesExportOptions
-    ): Promise<NotesExportResult> => ipcRenderer.invoke(CH.notesExportMarkdown, ids, options)
+    ): Promise<NotesExportResult> => ipcRenderer.invoke(CH.notesExportMarkdown, ids, options),
+    /** 三格式共用的新通道：预览与落盘是同一份内容 */
+    previewFile: (
+      ids: number[] | null,
+      options: NotesExportOptions,
+      format: NotesExportFormat
+    ): Promise<NotesFilePreview> => ipcRenderer.invoke(CH.notesPreviewFile, ids, options, format),
+    exportFile: (
+      ids: number[] | null,
+      options: NotesExportOptions,
+      format: NotesExportFormat
+    ): Promise<NotesExportResult> => ipcRenderer.invoke(CH.notesExportFile, ids, options, format)
   },
   ai: {
     status: (bookId: string | null): Promise<AiStatus> => ipcRenderer.invoke(CH.aiStatus, bookId),

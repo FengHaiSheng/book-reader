@@ -107,3 +107,69 @@ test('跨书汇总、类型筛选、右栏上下文、回到原文', async () =>
 
   await app.close()
 })
+
+/**
+ * 搜索走渲染层过滤（全部笔记本来就已经一次性取回），匹配范围是划线与批注两处正文。
+ * 不能用正则：用户输入一个 `(` 就会抛 SyntaxError。
+ */
+test('笔记搜索：按批注与划线正文都能找，Esc 清空后全部恢复', async () => {
+  const userDataDir = mkdtempSync(join(tmpdir(), 'book-read-notes-find-'))
+  const epubPath = join(userDataDir, 'novel.epub')
+  await writeEpub(epubPath, novelFiles())
+
+  const app = await launchAppWithUserData(userDataDir)
+  const win = await app.firstWindow()
+
+  const bookId = await win.evaluate(
+    async (file) => (await (window as any).api.library.importPath(file)).bookId as string,
+    epubPath
+  )
+  const ids = await win.evaluate(async (id) => {
+    const chapters = await (window as any).api.library.chapters(id)
+    return chapters.filter((c: { href: string }) => c.href !== '').map((c: { id: number }) => c.id)
+  }, bookId)
+
+  // 一条带批注、一条纯高亮：搜索要同时覆盖「批注」与「划线正文」两处
+  await win.evaluate(
+    async ({ bookId, first, second }) => {
+      await (window as any).api.notes.create({
+        bookId,
+        chapterId: first,
+        startCfi: 'epubcfi(/6/4!/4/2/1:0)',
+        endCfi: 'epubcfi(/6/4!/4/2/1:6)',
+        text: '月亮升起来的时候，河面像一条银带。',
+        note: '开篇的定调',
+        color: 'yellow'
+      })
+      await (window as any).api.notes.create({
+        bookId,
+        chapterId: second,
+        startCfi: 'epubcfi(/6/6!/4/2/1:0)',
+        endCfi: 'epubcfi(/6/6!/4/2/1:6)',
+        text: '蝉声一直响到后半夜，月光把瓦片照得发白。',
+        color: 'blue'
+      })
+    },
+    { bookId, first: ids[0], second: ids[1] }
+  )
+
+  await win.locator('.nav-item:has-text("笔记")').click()
+  await expect(win.locator('.note')).toHaveCount(2)
+
+  // 搜批注：只留写了「开篇的定调」的那一条
+  await win.locator('.notes-side__search-input').fill('定调')
+  await expect(win.locator('.note')).toHaveCount(1)
+  await expect(win.locator('.note__memo')).toContainText('开篇的定调')
+
+  // 搜划线正文：「瓦片」只在那条纯高亮的原文里
+  await win.locator('.notes-side__search-input').fill('瓦片')
+  await expect(win.locator('.note')).toHaveCount(1)
+  await expect(win.locator('.note')).toContainText('蝉声一直响到后半夜')
+
+  // Esc 清空搜索框，筛选结果跟着恢复
+  await win.locator('.notes-side__search-input').press('Escape')
+  await expect(win.locator('.notes-side__search-input')).toHaveValue('')
+  await expect(win.locator('.note')).toHaveCount(2)
+
+  await app.close()
+})

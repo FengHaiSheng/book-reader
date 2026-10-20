@@ -1,7 +1,9 @@
 import { registerAiIpc } from './ai'
+import { registerBookmarksIpc } from './bookmarks'
 import { registerLibraryIpc } from './library'
 import { registerNotesIpc } from './notes'
 import { registerReaderIpc } from './reader'
+import { registerReadingIpc } from './reading'
 import { registerSecretsIpc } from './secrets'
 import { registerSettingsIpc } from './settings'
 import { registerShellIpc } from './shell'
@@ -12,6 +14,8 @@ export function registerIpc(): void {
   registerSecretsIpc()
   registerLibraryIpc()
   registerReaderIpc()
+  registerBookmarksIpc()
+  registerReadingIpc()
   registerNotesIpc()
   registerShellIpc()
   registerAiIpc()

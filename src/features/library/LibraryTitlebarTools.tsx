@@ -11,6 +11,8 @@ import { ImportButton } from './ImportButton'
 export function LibraryTitlebarTools({
   query,
   onQuery,
+  onSearchBody,
+  onEscape,
   busy,
   onPick,
   managing,
@@ -18,6 +20,10 @@ export function LibraryTitlebarTools({
 }: {
   query: string
   onQuery: (value: string) => void
+  /** 回车或点「搜正文」时显式发起一次全库正文搜索（输入本身只过滤书名，不发请求） */
+  onSearchBody: () => void
+  /** Escape 要同时清掉书名筛选与正文结果，所以不能只是清输入框 */
+  onEscape: () => void
   busy: boolean
   onPick: () => void
   managing: boolean
@@ -62,11 +68,21 @@ export function LibraryTitlebarTools({
           value={query}
           onChange={(event) => onQuery(event.target.value)}
           onKeyDown={(event) => {
-            if (event.key === 'Escape') onQuery('')
+            // 输入只过滤书名；正文搜索必须显式触发，所以 onChange 里绝不清正文结果，
+            // 否则用户边打字边看着结果消失，还看不出结果其实是旧的
+            if (event.key === 'Enter') {
+              event.preventDefault()
+              onSearchBody()
+            } else if (event.key === 'Escape') {
+              onEscape()
+            }
           }}
         />
         <kbd>{isMac ? '⌘K' : 'Ctrl K'}</kbd>
       </label>
+      <button type="button" className="tb-btn" onClick={onSearchBody}>
+        搜正文
+      </button>
       <span className="tb-sep" aria-hidden="true" />
       <ImportButton busy={busy} onPick={onPick} />
       <button type="button" className="tb-btn" aria-expanded={managing} onClick={onToggleTags}>

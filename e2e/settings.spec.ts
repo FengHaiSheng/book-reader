@@ -65,3 +65,32 @@ test('设置页能改每行字数并落库，且密钥以脱敏形态展示', as
     await closeQuietly(app)
   }
 })
+
+/**
+ * 统计这一组要经得起两件容易搞错的事：① 一天没读过时不能摆一排「0 分钟」（看起来像坏了）；
+ * ② 年历是五十三列，格子数必须够铺满一年，别因为少一天就整月错位。
+ */
+test('设置页有阅读统计：空态不摆 0，年历铺满一年，记上之后数字上升', async () => {
+  const app = await launchApp()
+  try {
+    const win = await app.firstWindow()
+    await win.getByRole('button', { name: '设置' }).click()
+
+    const group = win.locator('.settings__group:has-text("阅读统计")')
+    await expect(group).toBeVisible()
+    // 还没有任何记录：先给一句话，而不是三个 0
+    await expect(group.locator('.settings__hint').first()).toContainText('还没有数据')
+    // 一列一周、周一起头：53 周 × 7 = 371 格
+    expect(await win.locator('.stats__cell').count()).toBeGreaterThan(300)
+    // 口径要写在界面上，否则「读着读着停表了」会被当成 bug
+    await expect(group).toContainText('连续 5 分钟内有操作')
+
+    // 记一笔（走真实 IPC 与 sqlite），「今日」应当变成 10 分钟
+    await win.evaluate(() => (window as any).api.reading.addSeconds(600))
+    await win.reload()
+    await win.getByRole('button', { name: '设置' }).click()
+    await expect(win.locator('.stats__num').first()).toHaveText('10 分钟')
+  } finally {
+    await closeQuietly(app)
+  }
+})

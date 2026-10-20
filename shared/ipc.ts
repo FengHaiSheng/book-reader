@@ -14,9 +14,16 @@ export const CH = {
   libraryPickFolder: 'library:pickFolder',
   libraryChapters: 'library:chapters',
   librarySearch: 'library:search',
+  /** 全库跨书搜索：去掉 book_id 过滤，复用同一套 chunks_fts 索引 */
+  librarySearchAll: 'library:searchAll',
   libraryRemove: 'library:remove',
   readerOpen: 'reader:open',
   readerSaveProgress: 'reader:saveProgress',
+  bookmarksList: 'bookmarks:list',
+  bookmarksAdd: 'bookmarks:add',
+  bookmarksRemove: 'bookmarks:remove',
+  readingStats: 'reading:stats',
+  readingAddSeconds: 'reading:addSeconds',
   notesListChapter: 'notes:listChapter',
   notesListAll: 'notes:listAll',
   notesCreate: 'notes:create',
@@ -25,6 +32,9 @@ export const CH = {
   notesContext: 'notes:context',
   notesPreviewExport: 'notes:previewExport',
   notesExportMarkdown: 'notes:exportMarkdown',
+  /** 新导出通道：三格式共用，预览与落盘同一份内容 */
+  notesPreviewFile: 'notes:previewFile',
+  notesExportFile: 'notes:exportFile',
   shellOpenExternal: 'shell:openExternal',
   /** 主 → 渲染 的单向事件，不是 invoke */
   libraryImportProgress: 'library:importProgress',
@@ -77,6 +87,7 @@ export const API_SHAPE = {
     'stats',
     'chapters',
     'search',
+    'searchAll',
     'remove',
     'tagsList',
     'tagCreate',
@@ -86,7 +97,20 @@ export const API_SHAPE = {
     'onImportProgress'
   ],
   reader: ['open', 'saveProgress'],
-  notes: ['listChapter', 'listAll', 'create', 'update', 'remove', 'context', 'previewExport', 'exportMarkdown'],
+  bookmarks: ['list', 'add', 'remove'],
+  reading: ['stats', 'addSeconds'],
+  notes: [
+    'listChapter',
+    'listAll',
+    'create',
+    'update',
+    'remove',
+    'context',
+    'previewExport',
+    'exportMarkdown',
+    'previewFile',
+    'exportFile'
+  ],
   shell: ['openExternal'],
   ai: [
     'status',

@@ -81,7 +81,7 @@ describe('migrate', () => {
 
   it('v4 从 chunks.text 就地重切索引，补出单字列，不需要重新导入', () => {
     const { db, applied, ftsRows } = fakeDb(3, [{ id: 7, text: '河面上浮着一层薄薄的雾' }])
-    expect(migrate(db, migrations)).toBe(4)
+    expect(migrate(db, migrations)).toBe(5)
     expect(applied).toContain('exec:DROP TABLE IF EXISTS chunks_fts')
     expect(applied).toContain(
       "exec:CREATE VIRTUAL TABLE chunks_fts USING fts5(text_bigram, text_single, tokenize = 'unicode61')"
@@ -97,7 +97,24 @@ describe('migrate', () => {
 
   it('库里没有 chunk 时 v4 只是把表换成两列，不灌任何行', () => {
     const { db, ftsRows } = fakeDb(3, [])
-    expect(migrate(db, migrations)).toBe(4)
+    expect(migrate(db, migrations)).toBe(5)
     expect(ftsRows).toEqual([])
+  })
+
+  it('从 v4 升到 v5 只跑 v5，建书签与阅读时长两张表', () => {
+    const { db, applied, version } = fakeDb(4)
+    expect(migrate(db, migrations)).toBe(5)
+    const ddl = applied.filter((a) => a.startsWith('exec:')).join('\n')
+    expect(applied).not.toContain('exec:DROP TABLE IF EXISTS chunks_fts')
+    expect(ddl).toContain('CREATE TABLE bookmarks')
+    expect(ddl).toContain('CREATE UNIQUE INDEX idx_bookmarks_place')
+    expect(ddl).toContain('CREATE TABLE reading_time')
+    expect(version()).toBe(5)
+  })
+
+  it('已是 v5 时不重复执行任何迁移', () => {
+    const { db, applied } = fakeDb(5)
+    expect(migrate(db, migrations)).toBe(5)
+    expect(applied).toEqual([])
   })
 })

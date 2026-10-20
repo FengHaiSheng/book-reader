@@ -98,6 +98,7 @@ export default function App() {
           {page === 'library' && (
             <LibraryPage
               onOpen={openBook}
+              onOpenAt={setReading}
               tags={tags}
               tagFilter={tagFilter}
               statusFilter={statusFilter}
