@@ -79,7 +79,8 @@ export async function importEpub(
         fileSize: statSync(sourcePath).size,
         totalChars: totalChars(texts),
         chapterCount: chapterRows.filter((row) => row.orderIndex !== null).length,
-        addedAt: Date.now()
+        addedAt: Date.now(),
+        kind: 'text'
       }, chapters)
     })
     run()

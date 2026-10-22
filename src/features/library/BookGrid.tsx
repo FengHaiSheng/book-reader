@@ -69,7 +69,7 @@ export function BookGrid({
           </span>
         </li>
       ))}
-      <li className="book-grid__cell book-grid__drop">拖 epub / pdf 到这里</li>
+      <li className="book-grid__cell book-grid__drop">拖电子书到这里</li>
     </ul>
   )
 }

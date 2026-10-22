@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { migrate, type Migration, type MigrationDb } from '../electron/main/store/migrate'
+import { migrate, type MigrationDb } from '../electron/main/store/migrate'
 import { migrations } from '../electron/main/store/migrations'
 
 /** 记录调用的假数据库，替代真实 better-sqlite3（原生模块在 vitest 里加载不了） */
@@ -81,7 +81,7 @@ describe('migrate', () => {
 
   it('v4 从 chunks.text 就地重切索引，补出单字列，不需要重新导入', () => {
     const { db, applied, ftsRows } = fakeDb(3, [{ id: 7, text: '河面上浮着一层薄薄的雾' }])
-    expect(migrate(db, migrations)).toBe(5)
+    expect(migrate(db, migrations)).toBe(6)
     expect(applied).toContain('exec:DROP TABLE IF EXISTS chunks_fts')
     expect(applied).toContain(
       "exec:CREATE VIRTUAL TABLE chunks_fts USING fts5(text_bigram, text_single, tokenize = 'unicode61')"
@@ -97,24 +97,34 @@ describe('migrate', () => {
 
   it('库里没有 chunk 时 v4 只是把表换成两列，不灌任何行', () => {
     const { db, ftsRows } = fakeDb(3, [])
-    expect(migrate(db, migrations)).toBe(5)
+    expect(migrate(db, migrations)).toBe(6)
     expect(ftsRows).toEqual([])
   })
 
   it('从 v4 升到 v5 只跑 v5，建书签与阅读时长两张表', () => {
     const { db, applied, version } = fakeDb(4)
-    expect(migrate(db, migrations)).toBe(5)
+    expect(migrate(db, migrations)).toBe(6)
     const ddl = applied.filter((a) => a.startsWith('exec:')).join('\n')
     expect(applied).not.toContain('exec:DROP TABLE IF EXISTS chunks_fts')
     expect(ddl).toContain('CREATE TABLE bookmarks')
     expect(ddl).toContain('CREATE UNIQUE INDEX idx_bookmarks_place')
     expect(ddl).toContain('CREATE TABLE reading_time')
-    expect(version()).toBe(5)
+    expect(version()).toBe(6)
   })
 
-  it('已是 v5 时不重复执行任何迁移', () => {
-    const { db, applied } = fakeDb(5)
-    expect(migrate(db, migrations)).toBe(5)
+  it('从 v5 升到 v6 只给 books 加 kind 列，默认文字模式', () => {
+    const { db, applied, version } = fakeDb(5)
+    expect(migrate(db, migrations)).toBe(6)
+    expect(applied).toEqual([
+      "exec:ALTER TABLE books ADD COLUMN kind TEXT NOT NULL DEFAULT 'text';",
+      'pragma:6'
+    ])
+    expect(version()).toBe(6)
+  })
+
+  it('已是 v6 时不重复执行任何迁移', () => {
+    const { db, applied } = fakeDb(6)
+    expect(migrate(db, migrations)).toBe(6)
     expect(applied).toEqual([])
   })
 })

@@ -1,5 +1,6 @@
 import type Database from 'better-sqlite3'
 import type {
+  BookKind,
   BookSummary,
   ChapterRowView,
   ImportOutcome,
@@ -25,6 +26,8 @@ export type BookInsert = {
   totalChars: number
   chapterCount: number
   addedAt: number
+  /** 阅读模式，导入时按格式定死 */
+  kind: BookKind
 }
 
 export type ChapterInsert = { row: ChapterRow; chunks: ChunkDraft[]; headingPath: string }
@@ -161,9 +164,9 @@ export function insertBookGraph(
 ): void {
   db.prepare(
     `INSERT INTO books (id, title, author, publisher, language, isbn, cover_path, file_path,
-                        file_hash, file_size, added_at, total_chars, chapter_count, status)
+                        file_hash, file_size, added_at, total_chars, chapter_count, status, kind)
      VALUES (@id, @title, @author, @publisher, @language, @isbn, @coverPath, @filePath,
-             @fileHash, @fileSize, @addedAt, @totalChars, @chapterCount, 'unread')`
+             @fileHash, @fileSize, @addedAt, @totalChars, @chapterCount, 'unread', @kind)`
   ).run(book)
 
   const insertChapter = db.prepare(

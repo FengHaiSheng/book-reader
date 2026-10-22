@@ -16,11 +16,48 @@ export const PROVIDERS: { id: ProviderId; name: string; baseURL: string }[] = [
 ]
 
 /** 可导入的书籍格式。导入对话框、文件夹扫描与拖放筛选都按这一份判断。 */
-export const BOOK_EXTENSIONS = ['epub', 'pdf'] as const
+export const BOOK_EXTENSIONS = [
+  'epub',
+  'pdf',
+  'txt',
+  'mobi',
+  'azw',
+  'azw3',
+  'fb2',
+  'htmlz',
+  'cbz',
+  'cbr'
+] as const
+
+/**
+ * 解析后走哪条导入管线。
+ * mobi / azw 是 PalmDOC 容器，azw3 是 KF8 容器，二者解析器不同；
+ * cbz / cbr 是漫画压缩包，走图片阅读模式，其余按扩展名一一对应。
+ */
+export type BookFormat = 'epub' | 'pdf' | 'txt' | 'mobi' | 'kf8' | 'fb2' | 'htmlz' | 'cbz' | 'cbr'
+
+const FORMAT_BY_EXTENSION: Record<string, BookFormat> = {
+  epub: 'epub',
+  pdf: 'pdf',
+  txt: 'txt',
+  mobi: 'mobi',
+  azw: 'mobi',
+  azw3: 'kf8',
+  fb2: 'fb2',
+  htmlz: 'htmlz',
+  cbz: 'cbz',
+  cbr: 'cbr'
+}
+
+/** 不是可导入的格式时返回 null；扩展名大小写不敏感。 */
+export function bookFormatOf(filePath: string): BookFormat | null {
+  const dot = filePath.lastIndexOf('.')
+  if (dot < 0) return null
+  return FORMAT_BY_EXTENSION[filePath.slice(dot + 1).toLowerCase()] ?? null
+}
 
 export function isBookFile(filePath: string): boolean {
-  const lower = filePath.toLowerCase()
-  return BOOK_EXTENSIONS.some((ext) => lower.endsWith(`.${ext}`))
+  return bookFormatOf(filePath) !== null
 }
 
 /** 阅读偏好。每行字数是独立控件，不是字号的副产物。 */
@@ -48,6 +85,12 @@ export const DEFAULT_PREFS: ReadingPrefs = {
 
 export type BookStatus = 'unread' | 'reading' | 'finished'
 
+/**
+ * 阅读模式。text 走分栏排版，comic 走图片翻页。
+ * 导入时按格式写死，阅读端据此选整条链路，不在运行时猜。
+ */
+export type BookKind = 'text' | 'comic'
+
 export type BookSummary = {
   id: string
   title: string
@@ -58,7 +101,7 @@ export type BookSummary = {
   totalChars: number
   /** 阅读进度，0–1；没有进度时为 0 */
   percent: number
-  /** epub 文件字节数 */
+  /** 原始书籍文件字节数 */
   fileSize: number
   addedAt: number
   lastOpenedAt: number | null
@@ -69,7 +112,7 @@ export type BookSummary = {
 /** 书架的排序口径。recent 用「上次阅读，没有就加入时间」 */
 export type LibrarySort = 'recent' | 'title' | 'added'
 
-/** 侧栏「本地书库」的汇总。bytes 是全部 epub 文件大小之和 */
+/** 侧栏「本地书库」的汇总。bytes 是全部原文件大小之和 */
 export type LibraryStats = {
   total: number
   unread: number
@@ -164,7 +207,7 @@ export type ReaderChapter = {
   id: number
   parentId: number | null
   title: string
-  /** zip entry 名；目录里只有分组、没有正文的节点是空串 */
+  /** 章节入口：epub 的 zip entry 名，或导入时生成的 `chapters/NNNNN.html`；只有分组没有正文时为空串 */
   href: string
   depth: number
   /** 在 spine 中的下标，用来拼 CFI 的第一段；没有正文时为 null */
@@ -182,6 +225,8 @@ export type ReaderBook = {
   id: string
   title: string
   author: string | null
+  /** text：文字分栏阅读；comic：整页图片翻页 */
+  kind: BookKind
   chapters: ReaderChapter[]
   progress: ReaderProgress | null
 }
@@ -503,4 +548,39 @@ export type ImportProgressEvent = ImportProgress & {
   fileIndex: number
   fileCount: number
   fileName: string
+}
+
+/** 设置页「数据」组的占用统计。字节数，界面自己格式化 */
+export type DataStats = {
+  userDataDir: string
+  dbBytes: number
+  libraryBytes: number
+  backupBytes: number
+  logBytes: number
+  bookCount: number
+}
+
+export type BackupInfo = {
+  name: string
+  bytes: number
+  createdAt: number
+}
+
+export type ExportResult = {
+  canceled: boolean
+  filePath: string | null
+  entries: number
+  bytes: number
+}
+
+export type ImportAllResult = {
+  canceled: boolean
+  bookCount: number
+  entries: number
+  bytes: number
+}
+
+export type CleanupResult = {
+  freedBytes: number
+  removedLogs: number
 }

@@ -8,11 +8,15 @@ import type {
   ImportProgressEvent,
   IpcResult
 } from '@shared/types'
-import { isBookFile } from '@shared/types'
+import { BOOK_EXTENSIONS, bookFormatOf, isBookFile } from '@shared/types'
 import { appError, toAppError } from '@shared/errors'
 import { assignTag, createTag, deleteTag, listTags, renameTag } from '../library/tags'
 import { importEpub } from '../library/importer'
 import { importPdf } from '../library/pdf-importer'
+import { importTxt } from '../txt/importer'
+import { importFb2, importKindle } from '../kindle/importer'
+import { importHtmlz } from '../htmlz/importer'
+import { importComic } from '../comic/importer'
 import { bookDir } from '../library/paths'
 import {
   deleteBookRows,
@@ -35,9 +39,17 @@ export function registerLibraryIpc(): void {
           title: '选择图书文件',
           properties: ['openFile', 'multiSelections'],
           filters: [
-            { name: '电子书（EPUB / PDF）', extensions: ['epub', 'pdf'] },
+            {
+              name: '电子书与漫画（EPUB / PDF / TXT / Kindle / FB2 / HTMLZ / CBZ / CBR）',
+              extensions: [...BOOK_EXTENSIONS]
+            },
             { name: 'EPUB', extensions: ['epub'] },
-            { name: 'PDF', extensions: ['pdf'] }
+            { name: 'PDF', extensions: ['pdf'] },
+            { name: '纯文本', extensions: ['txt'] },
+            { name: 'Kindle（MOBI / AZW / AZW3）', extensions: ['mobi', 'azw', 'azw3'] },
+            { name: 'FB2', extensions: ['fb2'] },
+            { name: 'HTMLZ', extensions: ['htmlz'] },
+            { name: '漫画（CBZ / CBR）', extensions: ['cbz', 'cbr'] }
           ]
         })
         if (picked.canceled || picked.filePaths.length === 0) return { ok: true, value: null }
@@ -71,7 +83,10 @@ export function registerLibraryIpc(): void {
           .map((name) => join(dir, name))
         // 空文件夹不是「导入成功 0 本」：要让用户知道这个文件夹里没有可导入的书
         if (paths.length === 0) {
-          throw appError('FILE_MISSING', '这个文件夹里没有 epub 或 pdf 文件')
+          throw appError(
+            'FILE_MISSING',
+            '这个文件夹里没有可导入的电子书或漫画（EPUB / PDF / TXT / MOBI / AZW3 / FB2 / HTMLZ / CBZ / CBR）'
+          )
         }
 
         const sender = event.sender as Electron.WebContents
@@ -181,12 +196,11 @@ async function runImport(
   sender: Electron.WebContents,
   slot: ImportSlot
 ): Promise<ImportOutcome> {
-  const lower = filePath.toLowerCase()
-  if (!isBookFile(lower)) {
-    throw appError('EPUB_PARSE_FAILED', `${basename(filePath)} 不是 epub 或 pdf 文件`)
+  const format = bookFormatOf(filePath)
+  if (!format) {
+    throw appError('BOOK_PARSE_FAILED', `${basename(filePath)} 不是支持的电子书格式`)
   }
   const fileName = basename(filePath)
-  const isPdf = lower.endsWith('.pdf')
   try {
     const progress = (item: ImportProgress): void => {
       if (sender.isDestroyed()) return
@@ -198,9 +212,25 @@ async function runImport(
       }
       sender.send(CH.libraryImportProgress, event)
     }
-    return isPdf
-      ? await importPdf(getDatabase(), filePath, progress)
-      : await importEpub(getDatabase(), filePath, progress)
+    const db = getDatabase()
+    switch (format) {
+      case 'epub':
+        return await importEpub(db, filePath, progress)
+      case 'pdf':
+        return await importPdf(db, filePath, progress)
+      case 'txt':
+        return await importTxt(db, filePath, progress)
+      case 'mobi':
+      case 'kf8':
+        return await importKindle(db, filePath, format, progress)
+      case 'fb2':
+        return await importFb2(db, filePath, progress)
+      case 'htmlz':
+        return await importHtmlz(db, filePath, progress)
+      case 'cbz':
+      case 'cbr':
+        return await importComic(db, filePath, format, progress)
+    }
   } catch (error) {
     throw toAppError(error, `《${fileName}》导入失败`)
   }

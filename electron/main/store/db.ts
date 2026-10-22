@@ -12,11 +12,14 @@ export function openDatabase(userDataDir: string): Database.Database {
   if (instance) return instance
 
   const dbPath = join(userDataDir, 'db.sqlite')
-  const needsMigration = existsSync(dbPath)
-
-  if (needsMigration) backupBeforeMigrate(dbPath, userDataDir)
-
+  // 先记下「这次是不是全新的库」：new Database 会立刻把文件建出来
+  const existed = existsSync(dbPath)
   const db = new Database(dbPath)
+
+  // 只在「这次真的要升结构」时备份。每次启动都复制一份会让备份列表
+  // 变成启动次数，而不是升级前的快照。
+  if (existed && hasPendingMigrations(db)) backupBeforeMigrate(dbPath, userDataDir)
+
   db.pragma('journal_mode = WAL')
   db.pragma('foreign_keys = ON')
   migrate(asMigrationDb(db), migrations)
@@ -52,6 +55,11 @@ export function getDatabase(): Database.Database {
 export function closeDatabase(): void {
   instance?.close()
   instance = null
+}
+
+function hasPendingMigrations(db: Database.Database): boolean {
+  const current = Number(db.pragma('user_version', { simple: true }))
+  return migrations.some((m) => m.version > current)
 }
 
 /** 迁移前留一份备份，保留最近 3 份。用户的数据不该被一次迁移赌掉。 */

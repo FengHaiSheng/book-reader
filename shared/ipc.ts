@@ -36,6 +36,12 @@ export const CH = {
   notesPreviewFile: 'notes:previewFile',
   notesExportFile: 'notes:exportFile',
   shellOpenExternal: 'shell:openExternal',
+  dataStats: 'data:stats',
+  dataBackups: 'data:backups',
+  dataOpenFolder: 'data:openFolder',
+  dataExportAll: 'data:exportAll',
+  dataImportAll: 'data:importAll',
+  dataCleanup: 'data:cleanup',
   /** 主 → 渲染 的单向事件，不是 invoke */
   libraryImportProgress: 'library:importProgress',
   libraryImportPaths: 'library:importPaths',
@@ -112,6 +118,7 @@ export const API_SHAPE = {
     'exportFile'
   ],
   shell: ['openExternal'],
+  data: ['stats', 'backups', 'openFolder', 'exportAll', 'importAll', 'cleanup'],
   ai: [
     'status',
     'models',

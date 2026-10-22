@@ -195,5 +195,15 @@ export const migrations: Migration[] = [
         );
       `)
     }
+  },
+  {
+    version: 6,
+    up: (db) => {
+      /**
+       * 阅读模式：文字（分栏排版）还是漫画（整页图片）。
+       * 旧库里的书全部是文字格式，默认值 'text' 正好，不需要回填。
+       */
+      db.exec(`ALTER TABLE books ADD COLUMN kind TEXT NOT NULL DEFAULT 'text';`)
+    }
   }
 ]

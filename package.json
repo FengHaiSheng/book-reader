@@ -22,12 +22,16 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@lingo-reader/fb2-parser": "^0.4.6",
+    "@lingo-reader/mobi-parser": "^0.4.6",
     "better-sqlite3": "^13.0.3",
     "domhandler": "^6.0.1",
     "foliate-js": "^1.0.1",
     "htmlparser2": "^12.0.0",
+    "node-unrar-js": "^2.0.2",
     "pdfjs-dist": "^5.6.205",
-    "yauzl": "^3.4.0"
+    "yauzl": "^3.4.0",
+    "yazl": "^3.3.1"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",
@@ -45,7 +49,6 @@
     "react-dom": "^19.3.0",
     "typescript": "^5.9.3",
     "vite": "^7.3.6",
-    "vitest": "^5.0.3",
-    "yazl": "^3.3.1"
+    "vitest": "^5.0.3"
   }
 }

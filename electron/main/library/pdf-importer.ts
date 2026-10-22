@@ -87,7 +87,8 @@ export async function importPdf(
         fileSize: statSync(sourcePath).size,
         totalChars: totalChars(draft.texts),
         chapterCount: chapterRows.filter((row) => row.orderIndex !== null).length,
-        addedAt: Date.now()
+        addedAt: Date.now(),
+        kind: 'text'
       }, chapters)
     })
     run()

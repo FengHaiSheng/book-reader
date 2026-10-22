@@ -20,7 +20,7 @@ export function EmptyShelf({
         </div>
         <h2 className="empty__t">书架还是空的</h2>
         <p className="empty__p">
-          把 .epub 或 .pdf 文件拖到窗口任意位置即可导入。
+          把电子书或漫画文件拖到窗口任意位置即可导入。
           <br />
           支持一次多本，重复的书会自动跳过。
         </p>
@@ -35,7 +35,7 @@ export function EmptyShelf({
         <div className="empty__note">
           书籍与笔记只保存在这台电脑上，不会上传到任何服务器。
           <br />
-          目前支持 epub 与 pdf（PDF 需有文字层，扫描件暂不支持）。
+          支持 EPUB、PDF、TXT、MOBI / AZW / AZW3、FB2、HTMLZ 与漫画 CBZ / CBR（PDF 需有文字层，扫描件暂不支持）。
         </div>
       </div>
     </div>

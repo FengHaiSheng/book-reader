@@ -32,11 +32,9 @@ import { IDLE_MS, creditMs } from '../reading/tracker'
 import { setUnrecordedMs } from '../reading/failures'
 import { TocPanel } from './TocPanel'
 import { TypographyPanel } from './TypographyPanel'
+import { ComicReader } from './ComicReader'
+import { BAR_PAD_LEFT } from './chrome'
 import { AiPanel, type AiSeed } from '../ai/AiPanel'
-
-/** macOS 上是原生红绿灯占着左上角，标题栏内容要让位 */
-const IS_MAC = navigator.userAgent.includes('Mac')
-const BAR_PAD_LEFT = IS_MAC ? 78 : 12
 
 /** 引用回跳失败时的口径：说清「没定位到」，不假装成功 */
 const CITATION_MISS = '没能在这章正文里定位到这段原文（正文与检索用的文本对不上）。'
@@ -195,7 +193,14 @@ export function ReaderPage({
     })
   }, [prefs, size, windowWidth])
 
-  const canLoad = book !== null && prefs !== null && layout !== null
+  /** 漫画走独立的图片阅读器；文字格式继续用分栏分页这条链路 */
+  const isComic = book?.kind === 'comic'
+  const comicModeRef = useRef(false)
+  useEffect(() => {
+    comicModeRef.current = isComic
+  }, [isComic])
+
+  const canLoad = book !== null && prefs !== null && (isComic || layout !== null)
 
   // 必须排在载入章节的 effect 之前：同一个 commit 里 ref 先写、再被读到
   useEffect(() => {
@@ -207,7 +212,7 @@ export function ReaderPage({
 
   // ⑥ 取本章标注。换章、换书都要重取，翻页不用——标注是章级的
   useEffect(() => {
-    if (!book || !chapter) {
+    if (!book || !chapter || isComic) {
       setHighlights([])
       return
     }
@@ -223,7 +228,7 @@ export function ReaderPage({
     return () => {
       alive = false
     }
-  }, [book, chapter])
+  }, [book, chapter, isComic])
 
   // ⑦ 画高亮。文档换了、本章标注变了都要重画；翻页不用，Range 跟着 DOM 走，与 translateX 无关
   useEffect(() => {
@@ -307,7 +312,7 @@ export function ReaderPage({
     const readingPrefs = prefsRef.current
     const iframe = iframeRef.current
     const chapter = book ? readable[chapterIndex] : undefined
-    if (!canLoad || !book || !pagination || !readingPrefs || !iframe || !chapter) return
+    if (!canLoad || !book || !pagination || !readingPrefs || !iframe || !chapter || isComic) return
 
     let cancelled = false
     let blobUrl: string | null = null
@@ -363,7 +368,7 @@ export function ReaderPage({
       // Blob URL 不撤销就是内存泄漏，一章一个
       if (blobUrl) URL.revokeObjectURL(blobUrl)
     }
-  }, [canLoad, book, readable, chapterIndex])
+  }, [canLoad, book, readable, chapterIndex, isComic])
 
   // ④ 版式变化：先尺寸 → 再文档内样式 → 再重排 → 最后上报页数。这个顺序是硬约束
   useEffect(() => {
@@ -769,8 +774,12 @@ export function ReaderPage({
       now,
       lastTickAt: lastTickRef.current,
       lastActivityAt: activityRef.current,
-      // 分页器不在位（换章载入中）时不算：那一段屏幕上根本没有正文
-      active: visibleRef.current && focusedRef.current && paginatorRef.current !== null,
+      // 分页器不在位（换章载入中）时不算：那一段屏幕上根本没有正文；
+      // 漫画没有分页器，只要书开着，翻页与阅读同样在计时
+      active:
+        visibleRef.current &&
+        focusedRef.current &&
+        (paginatorRef.current !== null || comicModeRef.current),
       idleMs: IDLE_MS
     })
     lastTickRef.current = now
@@ -1126,6 +1135,8 @@ export function ReaderPage({
   const onKeyRef = useRef<(event: KeyboardEvent) => void>(() => {})
   useEffect(() => {
     onKeyRef.current = (event) => {
+      // 漫画阅读器有自己的键盘处理（翻页、Esc 退出），这里整条让开，避免双重响应
+      if (comicModeRef.current) return
       // ⌘F / Ctrl+F 打开查找。必须排在修饰键总闸之前，否则会被下一句直接吞掉
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'f') {
         event.preventDefault()
@@ -1186,6 +1197,18 @@ export function ReaderPage({
         </div>
         <p className="reader__status">这本书不在书库里，可能已经被删除了。</p>
       </div>
+    )
+  }
+
+  // 漫画走整页图片阅读。进度、主题、时长已经由上面这套开书流程准备好，
+  // 差别只在于“正文”从分栏变成了一张一张的图片
+  if (book?.kind === 'comic') {
+    return (
+      <ComicReader
+        book={book}
+        startChapterId={readable[chapterIndex]?.id ?? null}
+        onExit={exit}
+      />
     )
   }
 

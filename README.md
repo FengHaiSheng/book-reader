@@ -43,7 +43,8 @@
 
 ### 阅读
 
-- **只支持 epub**：导入时把书复制进书库，原文件之后移动或删除都不影响阅读
+- **主流电子书格式**：EPUB、PDF、TXT、MOBI / AZW / AZW3、FB2、HTMLZ，以及漫画 CBZ / CBR。导入时把原文件复制进书库，之后移动或删除都不影响阅读
+- **漫画独立阅读模式**：CBZ / CBR 按图片页整页显示，单页 / 双页切换，方向键、空格与点左右半屏都能翻页
 - **sha256 去重**：同一本书不会被导入第二遍
 - **分页与定位**：CSS 多栏横向翻页，进度与高亮以 CFI 为准，改字号重排后位置依然准
 - **排版全可调**：字体（宋 / 黑）、字号 15–24、**每行字数 24–48**、行距 1.5–2.2、亮 / 暗主题
@@ -76,7 +77,7 @@
 
 ### 明确不做
 
-账号与云同步、多端、向量数据库、自动更新、朗读 / TTS、epub 之外的格式（mobi / pdf / txt）、AI 自动分析整本书。纯本地是产品定位，不是还没做。
+账号与云同步、多端、向量数据库、自动更新、朗读 / TTS、扫描版 PDF 的 OCR、AI 自动分析整本书。纯本地是产品定位，不是还没做。
 
 ---
 
@@ -118,7 +119,7 @@
 
 ### 首次启动
 
-不联网、不需要注册登录。导入一本 epub 就能开始读；AI 功能是可选增强，随时在「设置 → 模型」里配置。
+不联网、不需要注册登录。导入一本书就能开始读；AI 功能是可选增强，随时在「设置 → 模型」里配置。
 
 ---
 
@@ -126,9 +127,11 @@
 
 装好之后，从打开到读完一本书，只需要四步。
 
-### 1. 导入一本 epub
+### 1. 导入一本书
 
-打开「书架」，把 epub 文件拖进窗口（末尾的拖放区就是终点，可以一次拖多本），或点「导入」选择文件。书会被**复制进书库**，之后原文件移动或删除都不影响阅读；同一本书重复导入会自动去重。
+打开「书架」，把书拖进窗口（末尾的拖放区就是终点，可以一次拖多本），或点「导入」选择文件。支持 EPUB、PDF、TXT、MOBI / AZW / AZW3、FB2、HTMLZ 与漫画 CBZ / CBR。书会被**复制进书库**，之后原文件移动或删除都不影响阅读；同一本书重复导入会自动去重。
+
+除 EPUB / PDF 与漫画外的格式会在导入时解析成可重排的 XHTML 章节，图片复制到书目录的 `media/` 下，阅读、划词、全文搜索与 AI 能力与其他格式完全一致。漫画不生成章节 HTML：每一页就是一条章节，`href` 指向 `media/00001.jpg`，用整页图片模式阅读；漫画没有文字层，因此不参与全文检索与 AI。
 
 ### 2. 打开来读
 
@@ -139,6 +142,8 @@
 - 行距 1.5–2.2、亮 / 暗主题
 
 改完排版位置不丢——进度和高亮都以 CFI 为准，重新分页后依然会回到原处。窗口拉到 ≥1900px 会自动切成对开双页。
+
+漫画（CBZ / CBR）打开后是整页图片：`←` `→`、空格、PageUp / PageDown 翻页，点左半屏上一页、右半屏下一页；右上角可切单页 / 双页，窗口够宽时默认双页。进度按页码保存，排版面板与查找对漫画不适用。
 
 ### 3. 留下高亮与笔记
 
@@ -195,7 +200,7 @@ npm start
 
 ### 打包
 
-打包用 [electron-builder](https://www.electron.build/)，配置在 `electron-builder.yml`。两个必须解包到 asar 之外的东西：`better-sqlite3` 的原生 `.node`（`dlopen` 不认 asar 虚拟路径），以及 epub 抽取 worker（要被 `worker_threads` 加载）。
+打包用 [electron-builder](https://www.electron.build/)，配置在 `electron-builder.yml`。两个必须解包到 asar 之外的东西：`better-sqlite3` 的原生 `.node`（`dlopen` 不认 asar 虚拟路径），以及抽取 worker（epub / pdf / kindle，都要被 `worker_threads` 加载）。
 
 应用图标是手绘的 `build/icon.svg`（配色取自设计 token：纸 `#FCFAF6`、墨 `#2B2723`、朱红 `#B4462F`），栅格化成 1024×1024 的 `build/icon.png`：
 
@@ -243,13 +248,13 @@ sk-••••••••3f7a
 
 ## 技术栈与架构
 
-Electron + React + TypeScript，仅支持 epub，不用 LangChain（这一层逻辑很薄，框架的抽象成本大于收益）。
+Electron + React + TypeScript，支持 epub / pdf 与常见文字类电子书格式，不用 LangChain（这一层逻辑很薄，框架的抽象成本大于收益）。
 
 | 进程 | 职责 | 明确不做 |
 |---|---|---|
 | 渲染进程（React） | 只负责 UI 与交互状态 | 不碰 fs、不碰 sqlite、不持有密钥、不发 AI 请求 |
 | preload | 用 `contextBridge` 暴露**具名白名单方法** | 不提供通用 `invoke(channel, args)` 透传 |
-| 主进程（Node） | 文件读写、epub 解析、SQLite、AI Provider 调用、密钥管理 | 不承载业务 UI 逻辑 |
+| 主进程（Node） | 文件读写、书籍解析（EPUB / PDF / TXT / MOBI / AZW3 / FB2 / HTMLZ / CBZ / CBR）、SQLite、AI Provider 调用、密钥管理 | 不承载业务 UI 逻辑 |
 
 安全基线：`contextIsolation: true` + `nodeIntegration: false` + `sandbox: true`；自定义 `epub://` 协议注册时校验路径前缀，拒绝 `..` 穿越；**禁止执行书内脚本**（CSP `script-src 'none'`）——epub 是外来文件，执行它等于允许任意代码在渲染进程里跑；书内外链一律交给系统浏览器。
 
@@ -263,6 +268,10 @@ electron/
     ipc/            # IPC 路由，每个域一个模块，方法名即白名单
     library/        # 书库：导入、删除、去重、封面缓存
     epub/           # zip 读取、OPF 解析、纯文本抽取、chunk 划分、中文 bigram
+    pdf/            # 文字抽取与书签分章（worker 线程）
+    txt/            # 编码识别与中文章节标题切分
+    kindle/         # MOBI / AZW / AZW3 / FB2 解包（worker 线程）
+    htmlz/          # 单文件 HTML 包的分章与资源改写
     store/          # better-sqlite3 封装、迁移、查询
     ai/             # Provider 抽象、检索、任务提示词、并发与中断
     secrets/        # safeStorage 密钥读写
@@ -292,7 +301,7 @@ docs/superpowers/   # 设计文档与实现计划
 ```
 db.sqlite          # 书库、目录、章节、chunk、进度、高亮、笔记、AI 结果
 secrets.json       # 加密后的密钥密文（与数据库分开，导出时天然不含）
-library/<bookId>/  # book.epub + cover.jpg
+library/<bookId>/  # book.<原扩展名> + cover.<ext>；文字格式另有 chapters/ 与 media/，漫画只有 media/
 backups/           # 迁移前的数据库备份，保留最近 3 份
 logs/              # 按天切分，保留 7 天
 ```

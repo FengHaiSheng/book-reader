@@ -21,7 +21,10 @@ asarUnpack:
   - '**/*.node'
   - out/main/epub-worker.js
   - out/main/pdf-worker.js
+  - out/main/kindle-worker.js
   - node_modules/pdfjs-dist/**
+  # node-unrar-js 在运行时用 __dirname 定位 unrar.wasm，解包后按普通文件读最稳
+  - node_modules/node-unrar-js/**
 
 mac:
   category: public.app-category.books

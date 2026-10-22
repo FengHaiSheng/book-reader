@@ -99,15 +99,15 @@ test('导入畸形 epub：报可读错误且不留脏数据', async () => {
   await app.close()
 })
 
-test('非 epub / pdf 文件被挡在门口', async () => {
-  const userDataDir = mkdtempSync(join(tmpdir(), 'book-read-import-txt-'))
-  const txtPath = join(userDataDir, 'note.txt')
-  writeFileSync(txtPath, '这不是一本书')
+test('不支持的格式被挡在门口', async () => {
+  const userDataDir = mkdtempSync(join(tmpdir(), 'book-read-import-unsupported-'))
+  const markdownPath = join(userDataDir, 'note.md')
+  writeFileSync(markdownPath, '这不是一本书')
 
   const app = await launchAppWithUserData(userDataDir)
   const win = await app.firstWindow()
   await expect(
-    win.evaluate((file) => (window as any).api.library.importPath(file), txtPath)
-  ).rejects.toThrow(/不是 epub 或 pdf 文件/)
+    win.evaluate((file) => (window as any).api.library.importPath(file), markdownPath)
+  ).rejects.toThrow(/不是支持的电子书格式/)
   await app.close()
 })

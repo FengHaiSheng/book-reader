@@ -171,7 +171,9 @@ export function LibraryPage({
       .filter((path) => isBookFile(path))
 
     if (paths.length === 0) {
-      setNotice('拖进来的文件里没有 .epub 或 .pdf')
+      setNotice(
+        '拖进来的文件里没有可导入的电子书或漫画（EPUB / PDF / TXT / MOBI / AZW3 / FB2 / HTMLZ / CBZ / CBR）'
+      )
       return
     }
     await run(() => window.api.library.importPaths(paths))

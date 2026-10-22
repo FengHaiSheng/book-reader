@@ -14,9 +14,14 @@ import type {
   Bookmark,
   BookmarkInput,
   BookSummary,
+  BackupInfo,
   CachedTaskResults,
   ChapterRowView,
   ChapterSummaryPayload,
+  CleanupResult,
+  DataStats,
+  ExportResult,
+  ImportAllResult,
   Highlight,
   HighlightContext,
   HighlightInput,
@@ -216,6 +221,16 @@ const api = {
   shell: {
     openExternal: (url: string): Promise<void> =>
       ipcRenderer.invoke(CH.shellOpenExternal, url)
+  },
+  data: {
+    stats: (): Promise<DataStats> => ipcRenderer.invoke(CH.dataStats),
+    backups: (): Promise<BackupInfo[]> => ipcRenderer.invoke(CH.dataBackups),
+    /** 返回 shell.openPath 的错误串；空串表示打开成功 */
+    openFolder: (kind: 'library' | 'backup' | 'userData', name?: string): Promise<string> =>
+      ipcRenderer.invoke(CH.dataOpenFolder, kind, name),
+    exportAll: (): Promise<ExportResult> => ipcRenderer.invoke(CH.dataExportAll),
+    importAll: (): Promise<ImportAllResult> => ipcRenderer.invoke(CH.dataImportAll),
+    cleanup: (): Promise<CleanupResult> => ipcRenderer.invoke(CH.dataCleanup)
   }
 }
 

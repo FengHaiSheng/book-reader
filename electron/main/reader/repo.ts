@@ -8,8 +8,8 @@ import { touchOpened } from '../library/repo'
  * 顺带更新 last_opened_at：书架按它排序，点开一本书就应该在书架上顶。
  */
 export function openBook(db: Database.Database, bookId: string, now: number): ReaderBook | null {
-  const book = db.prepare('SELECT id, title, author FROM books WHERE id = ?').get(bookId) as
-    | { id: string; title: string; author: string | null }
+  const book = db.prepare('SELECT id, title, author, kind FROM books WHERE id = ?').get(bookId) as
+    | { id: string; title: string; author: string | null; kind: 'text' | 'comic' }
     | undefined
   if (!book) return null
 
@@ -19,6 +19,7 @@ export function openBook(db: Database.Database, bookId: string, now: number): Re
     id: book.id,
     title: book.title,
     author: book.author,
+    kind: book.kind === 'comic' ? 'comic' : 'text',
     chapters: listReaderChapters(db, bookId),
     progress: readProgress(db, bookId)
   }

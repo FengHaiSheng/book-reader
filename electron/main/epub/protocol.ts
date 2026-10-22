@@ -41,11 +41,17 @@ export function handleEpubProtocol(): void {
     // 封面不进 zip：导入时已经抽成文件了，直接读（spec §3.3 的「只有封面例外」）
     if (target.entry === COVER_ENTRY) return serveCover(target.bookId)
 
-    // PDF 导入时生成的章节 HTML 也落在书目录里；路径形状固定，不接受任意文件名。
+    // 非 epub 格式导入时生成的章节 HTML 也落在书目录里；路径形状固定，不接受任意文件名。
     // 文件不存在时继续走 zip，避免 epub 里恰好有同名 entry 时被这里挡住
-    if (PDF_PAGE_ENTRY.test(target.entry)) {
-      const page = servePdfPage(target.bookId, target.entry)
+    if (GENERATED_PAGE_ENTRY.test(target.entry)) {
+      const page = serveGeneratedPage(target.bookId, target.entry)
       if (page) return page
+    }
+
+    // 解析器把封面、插图、样式写到 media/ 下；文件名同样是限定形状
+    if (MEDIA_ENTRY.test(target.entry)) {
+      const media = serveMedia(target.bookId, target.entry)
+      if (media) return media
     }
 
     // 有扩展名的一律走白名单，认不出就拒绝：书内的 .js 靠这条挡住
@@ -78,15 +84,22 @@ export function handleEpubProtocol(): void {
 
 const COVER_FILE = /^cover\.[a-z0-9]+$/i
 
-/** PDF 章节固定写成 `pdf/00001.html`，位数与导入时 padStart(5) 一致 */
-const PDF_PAGE_ENTRY = /^pdf\/\d{5}\.html$/
+/** 生成的章节固定写成 `<prefix>/00001.html`，位数与导入时 padStart(5) 一致 */
+const GENERATED_PAGE_ENTRY = /^(?:pdf|chapters)\/\d{5}\.html$/
 
 /**
- * 读导入时生成到 `library/<bookId>/pdf/` 的章节。
+ * media/ 下只接受「单层文件名 + 扩展名」。
+ * 解析器落盘时扩展名可能是 .bin（例如 MOBI 里带的是 JPEG），所以不按扩展名白名单卡，
+ * 读出来之后按文件头认 MIME。
+ */
+const MEDIA_ENTRY = /^media\/[A-Za-z0-9_-]+\.[A-Za-z0-9]+$/
+
+/**
+ * 读导入时生成到 `library/<bookId>/<entry>` 的章节。
  *
  * 文件名由上面的正则限死，entry 不参与任意路径拼接，出不了这本书的目录。
  */
-function servePdfPage(bookId: string, entry: string): Response | null {
+function serveGeneratedPage(bookId: string, entry: string): Response | null {
   try {
     const bytes = readFileSync(join(bookDir(bookId), entry))
     return new Response(new Uint8Array(bytes), {
@@ -97,6 +110,25 @@ function servePdfPage(bookId: string, entry: string): Response | null {
         'Content-Security-Policy': CHAPTER_CSP
       }
     })
+  } catch {
+    return null
+  }
+}
+
+/** 读 `library/<bookId>/media/` 里的插图、字体、音视频。 */
+function serveMedia(bookId: string, entry: string): Response | null {
+  try {
+    const bytes = readFileSync(join(bookDir(bookId), entry))
+    const name = entry.slice(entry.lastIndexOf('/') + 1)
+    const mime = sniffImageMime(bytes) ?? mimeFor(name)
+    if (!mime) return new Response(null, { status: 403 })
+
+    const headers: Record<string, string> = {
+      'Content-Type': mime,
+      'Access-Control-Allow-Origin': '*'
+    }
+    if (mime === 'application/xhtml+xml') headers['Content-Security-Policy'] = CHAPTER_CSP
+    return new Response(new Uint8Array(bytes), { headers })
   } catch {
     return null
   }
