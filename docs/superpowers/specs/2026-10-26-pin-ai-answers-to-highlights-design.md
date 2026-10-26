@@ -1,7 +1,7 @@
 # 把 AI 回答记到划线 · 设计文档
 
 - 日期：2026-10-26
-- 状态：已确认，待写实现计划
+- 状态：已确认，实现计划见 [plans/2026-10-26-pin-ai-answers-to-highlights.md](../plans/2026-10-26-pin-ai-answers-to-highlights.md)
 - 范围：仅「划词产生的 AI 回答 → 挂到划线」；不含合上书看小结、不含阅读器左栏本章划线列表
 - 配套：
   - [读书软件设计文档](./2026-09-29-book-reader-design.md) —— 进程模型、标注模型、AI 硬规则
