@@ -932,7 +932,7 @@ EOF
 
 参考 `e2e/notes.spec.ts` 的临时 userData 与开窗方式。
 
-- [ ] **Step 1: 编写用例（经 IPC，不依赖真实模型）**
+- [x] **Step 1: 编写用例（经 IPC，不依赖真实模型）**
 
 ```ts
 test('pinAi 找或建划线，清空对话后笔记仍在，删划线级联', async () => {
@@ -953,17 +953,17 @@ test('缺 CFI 且无同文划线时 pinAi 失败且不留脏划线', async () =>
 
 可选 UI 断言：若 e2e 已有进入阅读器 + mock AI 的路径则点按钮；否则 IPC 覆盖规格 §9 即可（与仓库「AI 真调用不进 CI」一致）。
 
-- [ ] **Step 2: 跑 e2e**
+- [x] **Step 2: 跑 e2e**
 
 Run: `npm run e2e -- e2e/pin-ai.spec.ts`  
 Expected: PASS
 
-- [ ] **Step 3: 跑边界冒烟（API_SHAPE）**
+- [x] **Step 3: 跑边界冒烟（API_SHAPE）**
 
 Run: `npm run e2e -- e2e/boundary.spec.ts`  
 Expected: PASS（preload 形状含新方法）
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add e2e/pin-ai.spec.ts
@@ -975,7 +975,7 @@ EOF
 )"
 ```
 
-- [ ] **Step 5: 更新规格状态行**
+- [x] **Step 5: 更新规格状态行**
 
 将 `docs/superpowers/specs/2026-10-26-pin-ai-answers-to-highlights-design.md` 头部状态改为：`已确认，实现计划见 plans/2026-10-26-pin-ai-answers-to-highlights.md`。
 
