@@ -159,7 +159,7 @@ EOF
 - Create: `electron/main/notes/pin.ts`
 - Create: `tests/notes-pin.test.ts`
 
-- [ ] **Step 1: 写失败单测**
+- [x] **Step 1: 写失败单测**
 
 ```ts
 // tests/notes-pin.test.ts
@@ -189,12 +189,12 @@ describe('chooseHighlightForPin', () => {
 })
 ```
 
-- [ ] **Step 2: 跑测确认失败**
+- [x] **Step 2: 跑测确认失败**
 
-Run: `npm test -- tests/notes-pin.test.ts`  
+Run: `npm test -- tests/notes-pin.test.ts`
 Expected: FAIL（模块不存在）
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 ```ts
 // electron/main/notes/pin.ts
@@ -217,12 +217,12 @@ export function chooseHighlightForPin(
 }
 ```
 
-- [ ] **Step 4: 跑测确认通过**
+- [x] **Step 4: 跑测确认通过**
 
-Run: `npm test -- tests/notes-pin.test.ts`  
+Run: `npm test -- tests/notes-pin.test.ts`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add electron/main/notes/pin.ts tests/notes-pin.test.ts
