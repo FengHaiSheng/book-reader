@@ -774,7 +774,7 @@ EOF
 - Modify: `src/features/ai/AiMessage.tsx`
 - Modify: `src/features/reader/ReaderPage.tsx`（seed 带 CFI；`onPinned`）
 
-- [ ] **Step 1: 扩展 seed 与 Turn**
+- [x] **Step 1: 扩展 seed 与 Turn**
 
 `AiSeed`：
 
@@ -804,7 +804,7 @@ export type AiSeed =
   pinError?: string | null
 ```
 
-- [ ] **Step 2: ReaderPage `askFromSelection` 带上 CFI**
+- [x] **Step 2: ReaderPage `askFromSelection` 带上 CFI**
 
 ```ts
       setAiSeed(
@@ -826,13 +826,13 @@ export type AiSeed =
       )
 ```
 
-- [ ] **Step 3: AiPanel 在 `send` 时把 pinMeta 写到助手回合**
+- [x] **Step 3: AiPanel 在 `send` 时把 pinMeta 写到助手回合**
 
 维护 `pendingPinRef`：seed 为 prefill/send 时写入 `{ text, startCfi, endCfi, source }`；`send(...)` 创建助手 turn 时读出并挂上 `pinMeta`，用完不清掉整块直到该次 send 用过（prefill 在用户真正 submit 时用 `excerpt` + pendingPinRef）。
 
 自由提问（无 excerpt、无 pendingPin）：助手 turn **不设** `pinMeta` → 无按钮。
 
-- [ ] **Step 4: `AiMessage` 渲染按钮**
+- [x] **Step 4: `AiMessage` 渲染按钮**
 
 Props：`onPin?: (turn: Turn) => void`。当 `turn.role === 'assistant' && turn.state === 'done' && turn.pinMeta`：
 
@@ -850,7 +850,7 @@ Props：`onPin?: (turn: Turn) => void`。当 `turn.role === 'assistant' && turn.
       )}
 ```
 
-- [ ] **Step 5: AiPanel `pinTurn`**
+- [x] **Step 5: AiPanel `pinTurn`**
 
 ```ts
   const pinTurn = async (turn: Turn): Promise<void> => {
@@ -897,7 +897,7 @@ Props：`onPin?: (turn: Turn) => void`。当 `turn.role === 'assistant' && turn.
 
 `AiPanel` props 增加 `onPinned?: (highlight: Highlight) => void`。
 
-- [ ] **Step 6: ReaderPage 合并新高亮**
+- [x] **Step 6: ReaderPage 合并新高亮**
 
 ```ts
   const onPinned = useCallback((highlight: Highlight) => {
@@ -911,7 +911,7 @@ Props：`onPin?: (turn: Turn) => void`。当 `turn.role === 'assistant' && turn.
 
 传给 `AiPanel`。历史回填的 turn 无 `pinMeta`，不显示按钮（符合规格）。
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/features/ai/AiPanel.tsx src/features/ai/AiMessage.tsx src/features/reader/ReaderPage.tsx

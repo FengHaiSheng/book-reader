@@ -1038,8 +1038,20 @@ export function ReaderPage({
       if (!selection) return
       setAiSeed(
         task === 'ask'
-          ? { kind: 'prefill', task: 'ask', text: selection.text }
-          : { kind: 'send', task, text: selection.text }
+          ? {
+              kind: 'prefill',
+              task: 'ask',
+              text: selection.text,
+              startCfi: selection.startCfi,
+              endCfi: selection.endCfi
+            }
+          : {
+              kind: 'send',
+              task,
+              text: selection.text,
+              startCfi: selection.startCfi,
+              endCfi: selection.endCfi
+            }
       )
       setAiOpen(true)
       setSelection(null)
@@ -1048,6 +1060,14 @@ export function ReaderPage({
     },
     [selection]
   )
+
+  const onPinned = useCallback((highlight: Highlight) => {
+    setHighlights((list) =>
+      list.some((item) => item.id === highlight.id)
+        ? list.map((item) => (item.id === highlight.id ? highlight : item))
+        : [...list, highlight]
+    )
+  }, [])
 
   const changeActiveColor = useCallback(
     async (color: HighlightColor) => {
@@ -1363,6 +1383,7 @@ export function ReaderPage({
             onPanelWidth={(width) => applyPrefs({ aiPanelWidth: width })}
             onSeedConsumed={() => setAiSeed(null)}
             onCitation={goToCitation}
+            onPinned={onPinned}
             onClose={() => setAiOpen(false)}
           />
         )}

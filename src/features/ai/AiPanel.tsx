@@ -1,13 +1,26 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { AiEstimate, AiStatus, Citation } from '@shared/types'
+import type { AiEstimate, AiStatus, Citation, Highlight } from '@shared/types'
 import { AiIndexBar } from './AiIndexBar'
 import { AiMessage, type Turn } from './AiMessage'
 import { AiTasks, estimateLine, type TaskKey } from './AiTasks'
 
-/** 划词浮条递给面板的东西。prefill 只填引用，send 立刻发出去 */
+/** 划词浮条递给面板的东西。prefill 只填引用，send 立刻发出去；CFI 留给「记到划线」 */
 export type AiSeed =
-  | { kind: 'prefill'; task: 'ask'; text: string }
-  | { kind: 'send'; task: 'explain' | 'translate'; text: string }
+  | { kind: 'prefill'; task: 'ask'; text: string; startCfi: string; endCfi: string }
+  | {
+      kind: 'send'
+      task: 'explain' | 'translate'
+      text: string
+      startCfi: string
+      endCfi: string
+    }
+
+type PendingPin = {
+  text: string
+  startCfi: string
+  endCfi: string
+  source: 'explain' | 'translate' | 'ask'
+}
 
 /** 面板的两个视图。对话是默认面：用户打开面板多半是想问点什么 */
 type Tab = 'chat' | 'analysis'
@@ -34,6 +47,7 @@ export function AiPanel({
   onPanelWidth,
   onSeedConsumed,
   onCitation,
+  onPinned,
   onClose
 }: {
   bookId: string
@@ -47,6 +61,8 @@ export function AiPanel({
   onPanelWidth: (width: number) => void
   onSeedConsumed: () => void
   onCitation?: (citation: Citation) => void
+  /** 记到划线成功后把高亮合并进阅读器本章列表 */
+  onPinned?: (highlight: Highlight) => void
   onClose: () => void
 }) {
   const [status, setStatus] = useState<AiStatus | null>(null)
@@ -70,6 +86,8 @@ export function AiPanel({
   const inflightRef = useRef<Set<string>>(new Set())
   /** 打字会连发多次预估，只认最后一次的结果 */
   const estimateSeq = useRef(0)
+  /** 划词种子带来的 CFI；send 时挂到助手回合，用过后清空 */
+  const pendingPinRef = useRef<PendingPin | null>(null)
 
   const scopeKey = chapterId === null ? 'book' : `chapter:${chapterId}`
 
@@ -86,6 +104,7 @@ export function AiPanel({
     setTurns([])
     setHistoryLoaded(false)
     setError(null)
+    pendingPinRef.current = null
     refreshStatus()
     setHasSummary(false)
     // 这次调用只为一个副作用：openBook 内部会更新「最近打开」时间。
@@ -147,6 +166,19 @@ export function AiPanel({
       const requestId = crypto.randomUUID()
       const say = task === 'ask' ? (input.question ?? '') : task === 'explain' ? '解释这段原文' : '翻译这段原文'
 
+      // 有选段原文且有划词 CFI 才挂 pinMeta；自由提问不显示「记到划线」
+      const pending = pendingPinRef.current
+      const pinMeta =
+        pending && input.excerpt
+          ? {
+              text: input.excerpt,
+              startCfi: pending.startCfi,
+              endCfi: pending.endCfi,
+              source: task
+            }
+          : undefined
+      if (pending && input.excerpt) pendingPinRef.current = null
+
       inflightRef.current.add(requestId)
       setError(null)
       setTab('chat')
@@ -169,7 +201,8 @@ export function AiPanel({
           state: 'queued',
           usage: null,
           citations: [],
-          degraded: []
+          degraded: [],
+          ...(pinMeta ? { pinMeta } : {})
         }
       ])
 
@@ -216,6 +249,12 @@ export function AiPanel({
     if (!seed) return
     onSeedConsumed()
     setTab('chat')
+    pendingPinRef.current = {
+      text: seed.text,
+      startCfi: seed.startCfi,
+      endCfi: seed.endCfi,
+      source: seed.task
+    }
     if (seed.kind === 'prefill') {
       setExcerpt(seed.text)
       inputRef.current?.focus()
@@ -224,6 +263,50 @@ export function AiPanel({
     setExcerpt(null)
     void send(seed.task, { excerpt: seed.text })
   }, [seed, send, onSeedConsumed])
+
+  const pinTurn = useCallback(
+    async (turn: Turn): Promise<void> => {
+      if (!turn.pinMeta || chapterId === null) return
+      try {
+        const result = await window.api.notes.pinAi({
+          bookId,
+          chapterId,
+          text: turn.pinMeta.text,
+          content: turn.text,
+          source: turn.pinMeta.source,
+          startCfi: turn.pinMeta.startCfi,
+          endCfi: turn.pinMeta.endCfi
+        })
+        setTurns((list) =>
+          list.map((item) =>
+            item.id === turn.id
+              ? {
+                  ...item,
+                  pinned: true,
+                  pinError: null,
+                  pinNote: result.reusedEarliestDuplicate
+                    ? '已挂到本章最早的一条相同划线'
+                    : null
+                }
+              : item
+          )
+        )
+        onPinned?.(result.highlight)
+      } catch (e) {
+        setTurns((list) =>
+          list.map((item) =>
+            item.id === turn.id
+              ? {
+                  ...item,
+                  pinError: e instanceof Error ? e.message : '没能记到划线'
+                }
+              : item
+          )
+        )
+      }
+    },
+    [bookId, chapterId, onPinned]
+  )
 
   const busy = turns.some(
     (turn) => turn.role === 'assistant' && (turn.state === 'queued' || turn.state === 'streaming')
@@ -434,7 +517,16 @@ export function AiPanel({
                 </p>
               )}
               {turns.map((turn) => (
-                <AiMessage key={turn.id} turn={turn} onCitation={onCitation} />
+                <AiMessage
+                  key={turn.id}
+                  turn={turn}
+                  onCitation={onCitation}
+                  onPin={
+                    turn.role === 'assistant' && turn.state === 'done' && turn.pinMeta
+                      ? (item) => void pinTurn(item)
+                      : undefined
+                  }
+                />
               ))}
             </>
           )}
@@ -451,7 +543,10 @@ export function AiPanel({
                 type="button"
                 className="ai-quote__x"
                 aria-label="去掉引用的原文"
-                onClick={() => setExcerpt(null)}
+                onClick={() => {
+                  setExcerpt(null)
+                  pendingPinRef.current = null
+                }}
               >
                 ×
               </button>

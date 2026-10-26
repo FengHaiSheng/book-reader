@@ -1883,6 +1883,20 @@ html[data-theme='dark'] .seg__b.is-on {
   color: var(--accent-mark);
 }
 
+.ai-msg__pin {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.ai-msg__pin-note {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--ink-muted);
+}
+
 /* 引用上标：一个能点回原文的小按钮，而不是纯文本 */
 .ai-cite {
   min-width: 16px;

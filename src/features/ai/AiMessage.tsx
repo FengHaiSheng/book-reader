@@ -21,15 +21,28 @@ export type Turn = {
   degraded: AiDegrade[]
   /** state 为 failed 时的中文说明，与 text 并存（已经流出来的半截回答不删） */
   error?: string
+  /** 划词种子带来的定位；历史回填无此项 → 不显示「记到划线」 */
+  pinMeta?: {
+    text: string
+    startCfi: string
+    endCfi: string
+    source: 'explain' | 'translate' | 'ask'
+  }
+  pinned?: boolean
+  pinNote?: string | null
+  pinError?: string | null
 }
 
 export function AiMessage({
   turn,
-  onCitation
+  onCitation,
+  onPin
 }: {
   turn: Turn
   /** 不传就不给引用加跳转——历史记录没有引用映射，只能当普通文字 */
   onCitation?: (citation: Citation) => void
+  /** 仅完成态且带 pinMeta 的助手回答会接到；历史回合不传 */
+  onPin?: (turn: Turn) => void
 }) {
   if (turn.role === 'user') {
     return (
@@ -84,6 +97,18 @@ export function AiMessage({
             ? `本次用量：输入 ${turn.usage.inputTokens} / 输出 ${turn.usage.outputTokens} token`
             : '本次用量未返回'}
         </p>
+      )}
+
+      {turn.pinMeta && turn.state === 'done' && onPin && (
+        <div className="ai-msg__pin">
+          <button type="button" className="btn" onClick={() => onPin(turn)}>
+            {turn.pinned ? '已记下' : '记到划线'}
+          </button>
+          {turn.pinNote && <p className="ai-msg__pin-note">{turn.pinNote}</p>}
+          {turn.pinError && (
+            <p className="ai-msg__status ai-msg__status--error">{turn.pinError}</p>
+          )}
+        </div>
       )}
     </div>
   )
