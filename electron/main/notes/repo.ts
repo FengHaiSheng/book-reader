@@ -1,6 +1,7 @@
 import type Database from 'better-sqlite3'
 import { appError } from '@shared/errors'
 import {
+  DEFAULT_HIGHLIGHT_COLOR,
   MAX_HIGHLIGHT_CHARS,
   normalizeColor,
   normalizeNote,
@@ -8,16 +9,66 @@ import {
 } from '@shared/highlights'
 import type {
   Highlight,
+  HighlightAiNote,
   HighlightContext,
   HighlightInput,
   HighlightPatch,
-  HighlightWithBook
+  HighlightWithBook,
+  PinAiToHighlightInput,
+  PinAiToHighlightResult
 } from '@shared/types'
 import { sliceContext } from './context'
+import { chooseHighlightForPin } from './pin'
 
 const COLUMNS = `h.id, h.book_id AS bookId, h.chapter_id AS chapterId,
   h.start_cfi AS startCfi, h.end_cfi AS endCfi, h.text, h.note, h.color,
   h.created_at AS createdAt, h.updated_at AS updatedAt`
+
+const AI_NOTE_COLUMNS = `id, highlight_id AS highlightId, content, source, created_at AS createdAt`
+
+export function listAiNotesForHighlight(
+  db: Database.Database,
+  highlightId: number
+): HighlightAiNote[] {
+  return db
+    .prepare(
+      `SELECT ${AI_NOTE_COLUMNS} FROM highlight_ai_notes
+       WHERE highlight_id = ? ORDER BY created_at, id`
+    )
+    .all(highlightId) as HighlightAiNote[]
+}
+
+export function listAiNotesForHighlights(
+  db: Database.Database,
+  highlightIds: readonly number[]
+): HighlightAiNote[] {
+  if (highlightIds.length === 0) return []
+  const placeholders = highlightIds.map(() => '?').join(',')
+  return db
+    .prepare(
+      `SELECT ${AI_NOTE_COLUMNS} FROM highlight_ai_notes
+       WHERE highlight_id IN (${placeholders})
+       ORDER BY highlight_id, created_at, id`
+    )
+    .all(...highlightIds) as HighlightAiNote[]
+}
+
+function attachAiNotes<T extends { id: number }>(
+  db: Database.Database,
+  rows: T[]
+): (T & { aiNotes: HighlightAiNote[] })[] {
+  const notes = listAiNotesForHighlights(
+    db,
+    rows.map((row) => row.id)
+  )
+  const byId = new Map<number, HighlightAiNote[]>()
+  for (const note of notes) {
+    const list = byId.get(note.highlightId) ?? []
+    list.push(note)
+    byId.set(note.highlightId, list)
+  }
+  return rows.map((row) => ({ ...row, aiNotes: byId.get(row.id) ?? [] }))
+}
 
 /** 阅读器只要本章的：一章一个 iframe，注册别章的 Range 没有意义 */
 export function listChapterHighlights(
@@ -25,16 +76,20 @@ export function listChapterHighlights(
   bookId: string,
   chapterId: number
 ): Highlight[] {
-  return db
+  const rows = db
     .prepare(
       `SELECT ${COLUMNS} FROM highlights h WHERE h.book_id = ? AND h.chapter_id = ? ORDER BY h.id`
     )
-    .all(bookId, chapterId) as Highlight[]
+    .all(bookId, chapterId) as Omit<Highlight, 'aiNotes'>[]
+  return attachAiNotes(db, rows)
 }
 
 export function getHighlight(db: Database.Database, id: number): Highlight | null {
-  const row = db.prepare(`SELECT ${COLUMNS} FROM highlights h WHERE h.id = ?`).get(id)
-  return (row as Highlight | undefined) ?? null
+  const row = db.prepare(`SELECT ${COLUMNS} FROM highlights h WHERE h.id = ?`).get(id) as
+    | Omit<Highlight, 'aiNotes'>
+    | undefined
+  if (!row) return null
+  return attachAiNotes(db, [row])[0]!
 }
 
 export function createHighlight(
@@ -116,14 +171,14 @@ export function listAllHighlights(db: Database.Database): HighlightWithBook[] {
        LEFT JOIN chapters c ON c.id = h.chapter_id
        ORDER BY b.added_at DESC, c.order_index, h.id`
     )
-    .all() as (Highlight & {
+    .all() as (Omit<Highlight, 'aiNotes'> & {
     bookTitle: string
     chapterTitle: string | null
     chapterOrdinal: number
     chapterTotal: number
   })[]
 
-  return rows.map((row) => {
+  const mapped = rows.map((row) => {
     const total = Math.max(1, row.chapterTotal)
     const ordinal = Math.max(1, row.chapterOrdinal)
     return {
@@ -137,12 +192,98 @@ export function listAllHighlights(db: Database.Database): HighlightWithBook[] {
       color: row.color,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
-      aiNotes: [],
       bookTitle: row.bookTitle,
       chapterTitle: row.chapterTitle,
       percent: Math.min(1, (ordinal - 1) / total)
     }
   })
+
+  return attachAiNotes(db, mapped)
+}
+
+export function insertAiNote(
+  db: Database.Database,
+  input: { highlightId: number; content: string; source: HighlightAiNote['source'] },
+  now: number
+): HighlightAiNote {
+  const content = input.content.trim()
+  if (content === '') throw appError('DB_ERROR', '没有可记下的回答内容')
+  const info = db
+    .prepare(
+      `INSERT INTO highlight_ai_notes (highlight_id, content, source, created_at)
+       VALUES (?, ?, ?, ?)`
+    )
+    .run(input.highlightId, content, input.source, now)
+  const row = db
+    .prepare(`SELECT ${AI_NOTE_COLUMNS} FROM highlight_ai_notes WHERE id = ?`)
+    .get(Number(info.lastInsertRowid)) as HighlightAiNote | undefined
+  if (!row) throw appError('DB_ERROR', 'AI 笔记写入后读不回来')
+  return row
+}
+
+export function deleteAiNote(db: Database.Database, id: number): void {
+  db.prepare('DELETE FROM highlight_ai_notes WHERE id = ?').run(id)
+}
+
+/**
+ * 找或建划线 + 插入一条 AI 笔记。整段包在事务里。
+ * 缺 CFI 且无同文划线 → 可读错误，不建无定位脏数据。
+ */
+export function pinAiToHighlight(
+  db: Database.Database,
+  input: PinAiToHighlightInput,
+  now: number
+): PinAiToHighlightResult {
+  const text = normalizeSpan(input.text).slice(0, MAX_HIGHLIGHT_CHARS)
+  if (text === '') throw appError('DB_ERROR', '选中的内容为空，没有可标注的文字')
+
+  const run = db.transaction((): PinAiToHighlightResult => {
+    const same = db
+      .prepare(
+        `SELECT id FROM highlights
+         WHERE book_id = ? AND chapter_id = ? AND text = ?
+         ORDER BY id`
+      )
+      .all(input.bookId, input.chapterId, text) as { id: number }[]
+
+    const choice = chooseHighlightForPin(same)
+    let highlightId: number
+    let reusedEarliestDuplicate = false
+
+    if (choice.kind === 'reuse') {
+      highlightId = choice.id
+      reusedEarliestDuplicate = choice.reusedEarliestDuplicate
+    } else {
+      if (!input.startCfi || !input.endCfi) {
+        throw appError('DB_ERROR', '没法定位到原文，请先划线后再记')
+      }
+      const created = createHighlight(
+        db,
+        {
+          bookId: input.bookId,
+          chapterId: input.chapterId,
+          startCfi: input.startCfi,
+          endCfi: input.endCfi,
+          text,
+          note: null,
+          color: input.color ?? DEFAULT_HIGHLIGHT_COLOR
+        },
+        now
+      )
+      highlightId = created.id
+    }
+
+    const aiNote = insertAiNote(
+      db,
+      { highlightId, content: input.content, source: input.source },
+      now
+    )
+    const highlight = getHighlight(db, highlightId)
+    if (!highlight) throw appError('DB_ERROR', '划线读不回来')
+    return { highlight, aiNote, reusedEarliestDuplicate }
+  })
+
+  return run()
 }
 
 /**
