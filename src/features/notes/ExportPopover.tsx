@@ -200,6 +200,14 @@ export function ExportPopover({
             附上原文上下文
             <span className="hint2">前后各一段</span>
           </label>
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={options.includeAiNotes}
+              onChange={() => toggle('includeAiNotes')}
+            />
+            包含 AI 笔记
+          </label>
 
           {options.includeContext && preview.unlocated > 0 && (
             <p className="pop__warn">
