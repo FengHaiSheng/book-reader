@@ -23,7 +23,8 @@ const ENTRIES: ExportEntry[] = [
       before: '那种安静，他后来很少遇到了。',
       matched: '不是有什么必须处理的事情，只是那个动作本身已经长进了肌肉里。',
       after: '要把它拔出来，得费些力气。'
-    }
+    },
+    aiNotes: []
   },
   {
     bookTitle: '思考，快与慢',
@@ -31,7 +32,8 @@ const ENTRIES: ExportEntry[] = [
     percent: 0.82,
     text: '我们对自己的无知视而不见。',
     note: null,
-    context: null
+    context: null,
+    aiNotes: []
   }
 ]
 
@@ -78,6 +80,33 @@ describe('buildMarkdown', () => {
     expect(md).toContain('共 0 条 · 跨 0 本书')
     expect(md).not.toContain('## ')
   })
+
+  it('打开 includeAiNotes 时在批注后输出 AI 段', () => {
+    const withAi: ExportEntry[] = [
+      {
+        ...ENTRIES[0]!,
+        aiNotes: [{ source: 'explain', content: '这句话是在说习惯性动作。' }]
+      }
+    ]
+    const md = buildMarkdown(
+      withAi,
+      { includeNotes: true, includeLocation: true, includeContext: false, includeAiNotes: true },
+      AT
+    )
+    expect(md).toContain('**AI 笔记（解释）**：这句话是在说习惯性动作。')
+  })
+
+  it('关掉 includeAiNotes 时不输出 AI 段', () => {
+    const withAi: ExportEntry[] = [
+      { ...ENTRIES[0]!, aiNotes: [{ source: 'ask', content: '不该出现' }] }
+    ]
+    const md = buildMarkdown(
+      withAi,
+      { includeNotes: true, includeLocation: true, includeContext: false, includeAiNotes: false },
+      AT
+    )
+    expect(md).not.toContain('AI 笔记')
+  })
 })
 
 const ALL_ON = { includeNotes: true, includeLocation: true, includeContext: true, includeAiNotes: false }
@@ -122,7 +151,8 @@ describe('buildAnkiCsv', () => {
       percent: 0.1,
       text: 'a,b "c"\nd',
       note: null,
-      context: null
+      context: null,
+      aiNotes: []
     }
     const csv = buildAnkiCsv([tricky], { includeNotes: false, includeLocation: false, includeContext: false, includeAiNotes: false })
     expect(csv).toContain('"a,b ""c""\nd"')
@@ -159,7 +189,8 @@ describe('buildHtmlCards', () => {
         before: '<前>',
         matched: '命中&',
         after: '<后>'
-      }
+      },
+      aiNotes: []
     }
     const html = buildHtmlCards([tricky], ALL_ON, AT)
     expect(html).not.toContain('<script>')

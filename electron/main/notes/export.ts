@@ -1,5 +1,6 @@
 import type Database from 'better-sqlite3'
 import type {
+  HighlightAiNote,
   HighlightContext,
   NotesExportFormat,
   NotesExportOptions,
@@ -16,6 +17,13 @@ export type ExportEntry = {
   note: string | null
   /** 只有 includeContext 为 true 时才需要填，其余情况传 null */
   context: HighlightContext | null
+  aiNotes: { source: HighlightAiNote['source']; content: string }[]
+}
+
+const AI_SOURCE_LABEL: Record<HighlightAiNote['source'], string> = {
+  explain: '解释',
+  translate: '翻译',
+  ask: '问答'
 }
 
 /**
@@ -53,6 +61,12 @@ export function buildMarkdown(
 
     if (options.includeNotes && entry.note) {
       lines.push(`**我的批注**：${entry.note}`, '')
+    }
+
+    if (options.includeAiNotes && entry.aiNotes.length > 0) {
+      for (const ai of entry.aiNotes) {
+        lines.push(`**AI 笔记（${AI_SOURCE_LABEL[ai.source]}）**：${ai.content}`, '')
+      }
     }
 
     if (options.includeContext) {
@@ -115,7 +129,8 @@ export function collectEntries(
     percent: item.percent,
     text: item.text,
     note: item.note,
-    context: options.includeContext ? highlightContext(db, item.id) : null
+    context: options.includeContext ? highlightContext(db, item.id) : null,
+    aiNotes: item.aiNotes.map((n) => ({ source: n.source, content: n.content }))
   }))
 }
 
@@ -170,6 +185,7 @@ const ANKI_TAG = '读书笔记'
 export function buildAnkiCsv(entries: readonly ExportEntry[], options: NotesExportOptions): string {
   const columns = ['Front', 'Back', 'Tags', 'Book', 'Chapter', 'Location']
   if (options.includeContext) columns.push('Context')
+  if (options.includeAiNotes) columns.push('AI')
 
   const lines = ['#separator:Comma', `#columns:${columns.join(',')}`, columns.join(',')]
 
@@ -183,6 +199,13 @@ export function buildAnkiCsv(entries: readonly ExportEntry[], options: NotesExpo
       options.includeLocation ? `全书 ${Math.round(entry.percent * 100)}%` : ''
     ]
     if (options.includeContext) cells.push(contextPlain(entry.context))
+    if (options.includeAiNotes) {
+      cells.push(
+        entry.aiNotes
+          .map((ai) => `【${AI_SOURCE_LABEL[ai.source]}】${ai.content}`)
+          .join('\n')
+      )
+    }
     lines.push(cells.map(csvCell).join(','))
   }
 
@@ -223,6 +246,13 @@ export function buildHtmlCards(
     ]
     if (options.includeNotes && entry.note) {
       parts.push(`    <p class="note">${escapeHtml(entry.note)}</p>`)
+    }
+    if (options.includeAiNotes && entry.aiNotes.length > 0) {
+      for (const ai of entry.aiNotes) {
+        parts.push(
+          `    <p class="ai-note"><strong>AI 笔记（${escapeHtml(AI_SOURCE_LABEL[ai.source])}）</strong>：${escapeHtml(ai.content)}</p>`
+        )
+      }
     }
     const context = entry.context
     if (options.includeContext && context && context.located) {
