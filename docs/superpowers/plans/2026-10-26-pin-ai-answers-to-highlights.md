@@ -515,7 +515,7 @@ EOF
 - Modify: `electron/main/ipc/notes.ts`
 - Modify: `electron/preload/index.ts`
 
-- [ ] **Step 1: 注册三个 handler**
+- [x] **Step 1: 注册三个 handler**
 
 ```ts
 import {
@@ -544,7 +544,7 @@ import type { PinAiToHighlightInput } from '@shared/types'
   })
 ```
 
-- [ ] **Step 2: preload `notes` 对象追加**
+- [x] **Step 2: preload `notes` 对象追加**
 
 ```ts
     pinAi: (input: PinAiToHighlightInput): Promise<PinAiToHighlightResult> =>
@@ -557,7 +557,7 @@ import type { PinAiToHighlightInput } from '@shared/types'
 
 补上对应 type import。`ExportPopover` 等处构造 `NotesExportOptions` 时一律带上 `includeAiNotes: true`（默认开，与规格一致）。
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add electron/main/ipc/notes.ts electron/preload/index.ts
