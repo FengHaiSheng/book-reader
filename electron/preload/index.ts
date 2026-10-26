@@ -23,6 +23,7 @@ import type {
   ExportResult,
   ImportAllResult,
   Highlight,
+  HighlightAiNote,
   HighlightContext,
   HighlightInput,
   HighlightPatch,
@@ -38,6 +39,8 @@ import type {
   NotesExportPreview,
   NotesExportResult,
   NotesFilePreview,
+  PinAiToHighlightInput,
+  PinAiToHighlightResult,
   ProgressInput,
   ProviderId,
   ReaderBook,
@@ -139,6 +142,12 @@ const api = {
     update: (id: number, patch: HighlightPatch): Promise<Highlight | null> =>
       ipcRenderer.invoke(CH.notesUpdate, id, patch),
     remove: (id: number): Promise<void> => ipcRenderer.invoke(CH.notesRemove, id),
+    pinAi: (input: PinAiToHighlightInput): Promise<PinAiToHighlightResult> =>
+      ipcRenderer.invoke(CH.notesPinAi, input),
+    listAiNotes: (highlightId: number): Promise<HighlightAiNote[]> =>
+      ipcRenderer.invoke(CH.notesListAiNotes, highlightId),
+    removeAiNote: (id: number): Promise<void> =>
+      ipcRenderer.invoke(CH.notesRemoveAiNote, id),
     context: (id: number): Promise<HighlightContext> => ipcRenderer.invoke(CH.notesContext, id),
     previewExport: (
       ids: number[] | null,

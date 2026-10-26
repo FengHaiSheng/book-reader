@@ -7,14 +7,18 @@ import type {
   HighlightPatch,
   NotesExportFormat,
   NotesExportOptions,
-  NotesExportResult
+  NotesExportResult,
+  PinAiToHighlightInput
 } from '@shared/types'
 import {
   createHighlight,
+  deleteAiNote,
   deleteHighlight,
   highlightContext,
+  listAiNotesForHighlight,
   listAllHighlights,
   listChapterHighlights,
+  pinAiToHighlight,
   updateHighlight
 } from '../notes/repo'
 import { EXPORT_FORMATS, fileStamp, previewExport, previewFile } from '../notes/export'
@@ -43,6 +47,22 @@ export function registerNotesIpc(): void {
 
   ipcMain.handle(CH.notesRemove, (_event, id: number) => {
     deleteHighlight(getDatabase(), id)
+  })
+
+  ipcMain.handle(CH.notesPinAi, (_event, input: PinAiToHighlightInput) => {
+    try {
+      return pinAiToHighlight(getDatabase(), input, Date.now())
+    } catch (error) {
+      throw new Error(toAppError(error, '没能记到划线').message)
+    }
+  })
+
+  ipcMain.handle(CH.notesListAiNotes, (_event, highlightId: number) =>
+    listAiNotesForHighlight(getDatabase(), highlightId)
+  )
+
+  ipcMain.handle(CH.notesRemoveAiNote, (_event, id: number) => {
+    deleteAiNote(getDatabase(), id)
   })
 
   ipcMain.handle(CH.notesContext, (_event, id: number) => highlightContext(getDatabase(), id))
