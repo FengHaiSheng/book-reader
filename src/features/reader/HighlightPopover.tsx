@@ -3,7 +3,7 @@ import { HIGHLIGHT_COLORS, HIGHLIGHT_COLOR_LABELS, type HighlightColor } from '@
 import type { Highlight } from '@shared/types'
 
 /** 浮层最大高度，ReaderPage 用它把落点夹在正文区里，避免贴底被裁 */
-export const POPOVER_MAX_HEIGHT = 240
+export const POPOVER_MAX_HEIGHT = 320
 
 export function HighlightPopover({
   highlight,
@@ -11,6 +11,7 @@ export function HighlightPopover({
   y,
   onColor,
   onSaveNote,
+  onRemoveAiNote,
   onRemove,
   onClose
 }: {
@@ -19,6 +20,7 @@ export function HighlightPopover({
   y: number
   onColor: (color: HighlightColor) => void
   onSaveNote: (note: string | null) => void
+  onRemoveAiNote: (id: number) => void
   onRemove: () => void
   onClose: () => void
 }) {
@@ -85,6 +87,29 @@ export function HighlightPopover({
           }
         }}
       />
+
+      {highlight.aiNotes.length > 0 && (
+        <ul className="note__ai-list">
+          {highlight.aiNotes.map((ai) => (
+            <li key={ai.id} className="note__ai">
+              <span className="note__ai-src">
+                {ai.source === 'explain' ? '解释' : ai.source === 'translate' ? '翻译' : '问答'}
+              </span>
+              <p className="note__ai-body">{ai.content}</p>
+              <button
+                type="button"
+                className="act"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  onRemoveAiNote(ai.id)
+                }}
+              >
+                删除
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
 
       <div className="annot__foot">
         <button

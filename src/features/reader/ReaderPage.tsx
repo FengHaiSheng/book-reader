@@ -1084,6 +1084,18 @@ export function ReaderPage({
     setActive(null)
   }, [active])
 
+  const removeAiNote = useCallback(async (aiNoteId: number) => {
+    await window.api.notes.removeAiNote(aiNoteId)
+    const strip = (h: Highlight): Highlight => ({
+      ...h,
+      aiNotes: h.aiNotes.filter((n) => n.id !== aiNoteId)
+    })
+    setHighlights((list) => list.map(strip))
+    setActive((current) =>
+      current ? { ...current, highlight: strip(current.highlight) } : current
+    )
+  }, [])
+
   /**
    * 退出前把偏好与阅读位置都补一次。
    *
@@ -1334,6 +1346,7 @@ export function ReaderPage({
               y={active.y}
               onColor={(color) => void changeActiveColor(color)}
               onSaveNote={(note) => void saveActiveNote(note)}
+              onRemoveAiNote={(id) => void removeAiNote(id)}
               onRemove={() => void removeActive()}
               onClose={() => setActive(null)}
             />

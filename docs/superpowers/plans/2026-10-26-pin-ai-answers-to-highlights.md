@@ -731,11 +731,11 @@ EOF
 - Modify: `src/features/reader/HighlightPopover.tsx`
 - Modify: `src/features/reader/ReaderPage.tsx`（传入删除回调并刷新 state）
 
-- [ ] **Step 1: 浮层增加列表**
+- [x] **Step 1: 浮层增加列表**
 
 Props 增加 `onRemoveAiNote: (id: number) => void`。在 textarea 与 foot 之间渲染与 NoteCard 同结构的列表（可复用同一 class）。`POPOVER_MAX_HEIGHT` 若列表易被裁切，改为 `320` 并让 `.annot` 内部 `overflow-y: auto`。
 
-- [ ] **Step 2: ReaderPage 删除后更新 `highlights` 与 `active`**
+- [x] **Step 2: ReaderPage 删除后更新 `highlights` 与 `active`**
 
 ```ts
   const removeAiNote = useCallback(async (aiNoteId: number) => {
@@ -753,7 +753,7 @@ Props 增加 `onRemoveAiNote: (id: number) => void`。在 textarea 与 foot 之�
 
 传给 `HighlightPopover`。
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/features/reader/HighlightPopover.tsx src/features/reader/ReaderPage.tsx src/styles/base.css
