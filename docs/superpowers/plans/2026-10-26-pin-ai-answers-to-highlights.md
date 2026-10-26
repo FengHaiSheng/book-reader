@@ -243,7 +243,7 @@ EOF
 
 说明：vitest 不能加载 Electron ABI 的 better-sqlite3，本任务的行为由 Task 10 e2e 验收；实现时保持与现有 `createHighlight` 错误口径一致。
 
-- [ ] **Step 1: 在 `repo.ts` 增加 AI 笔记读写与附着**
+- [x] **Step 1: 在 `repo.ts` 增加 AI 笔记读写与附着**
 
 在文件顶部 import 中追加类型与 `chooseHighlightForPin`、`DEFAULT_HIGHLIGHT_COLOR`（从 `@shared/highlights`）、`PinAiToHighlightInput` / `PinAiToHighlightResult` / `HighlightAiNote`。
 
@@ -295,14 +295,14 @@ function attachAiNotes<T extends { id: number }>(
 }
 ```
 
-- [ ] **Step 2: 改 `getHighlight` / `listChapterHighlights` / `listAllHighlights` / `createHighlight` 返回值一律带 `aiNotes`**
+- [x] **Step 2: 改 `getHighlight` / `listChapterHighlights` / `listAllHighlights` / `createHighlight` 返回值一律带 `aiNotes`**
 
 `getHighlight`：查到行后 `attachAiNotes(db, [row])[0]`。  
 `listChapterHighlights`：`return attachAiNotes(db, rows)`。  
 `listAllHighlights`：在现有 `rows.map(...)` 得到的数组上再 `attachAiNotes`（注意 map 出的对象已无 `aiNotes`，附着即可）。  
 `createHighlight`：返回前附着（新建时必为 `[]`）。
 
-- [ ] **Step 3: 实现 insert / delete / pin**
+- [x] **Step 3: 实现 insert / delete / pin**
 
 ```ts
 export function insertAiNote(
@@ -393,7 +393,7 @@ export function pinAiToHighlight(
 
 注意：`createHighlight` 若内部已 `attachAiNotes`，事务内嵌套调用没问题；不要在 `pinAiToHighlight` 外再开一层事务。
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add electron/main/notes/repo.ts electron/main/notes/pin.ts
