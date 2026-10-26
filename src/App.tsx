@@ -1,7 +1,13 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { BookStatus, LibraryStats, ReadingPrefs, ReadingTarget, Tag } from '@shared/types'
 import { TitleBar } from './shell/TitleBar'
 import { Sidebar, type PageId } from './shell/Sidebar'
+import {
+  ReadingChromeProvider,
+  type ReadingChromeValue
+} from './shell/ReadingChromeContext'
+import { ExitReadingModal } from './shell/ExitReadingModal'
+import { SIDEBAR_COLLAPSED_WIDTH, SIDEBAR_WIDTH } from './shell/sidebarWidth'
 import { LibraryPage } from './pages/LibraryPage'
 import { NotesPage } from './pages/NotesPage'
 import { SettingsPage } from './pages/SettingsPage'
@@ -21,6 +27,13 @@ export default function App() {
   const [tagFilter, setTagFilter] = useState<number | null>(null)
   const [statusFilter, setStatusFilter] = useState<BookStatus | null>(null)
   const [stats, setStats] = useState<LibraryStats | null>(null)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [exitDialog, setExitDialog] = useState<{ to: PageId | null } | null>(null)
+  const [readingChrome, setReadingChrome] = useState<ReadingChromeValue | null>(null)
+  const flushExitRef = useRef<(() => void) | null>(null)
+  const registerFlushExit = useCallback((fn: (() => void) | null) => {
+    flushExitRef.current = fn
+  }, [])
 
   // 稳定引用是必须的：target 进了 ReaderPage 开书 effect 的依赖，
   // 每次渲染给一个新对象会让开书 effect 反复重跑，读一次书要重开好几次
@@ -73,42 +86,85 @@ export default function App() {
     })
   }, [])
 
-  // 阅读器是沉浸式全屏（spec §4.1），它自带标题栏与返回入口，不叠在外壳里
-  if (reading) {
-    return (
-      <ReaderPage bookId={reading.bookId} target={reading} onExit={() => setReading(null)} />
-    )
-  }
+  // 进入阅读自动收起；退出时由确认回调强制展开
+  useEffect(() => {
+    if (reading) setSidebarCollapsed(true)
+  }, [reading])
+
+  const requestExit = useCallback((to: PageId | null) => {
+    setExitDialog((current) => (current !== null ? current : { to }))
+  }, [])
+
+  const confirmExit = useCallback(() => {
+    if (exitDialog === null) return
+    flushExitRef.current?.()
+    const to = exitDialog.to
+    setReading(null)
+    setReadingChrome(null)
+    flushExitRef.current = null
+    if (to !== null) setPage(to)
+    setSidebarCollapsed(false)
+    setExitDialog(null)
+  }, [exitDialog])
+
+  const shellSidebarWidth =
+    reading !== null && sidebarCollapsed ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_WIDTH
 
   return (
-    <div className="app">
-      <TitleBar title={TITLES[page]} />
-      <div className="body">
-        <Sidebar
-          current={page}
-          onSelect={setPage}
-          tags={page === 'library' ? tags : null}
-          tagFilter={tagFilter}
-          onPickTag={setTagFilter}
-          statusFilter={statusFilter}
-          onPickStatus={setStatusFilter}
-          stats={stats}
-        />
-        <main className="content">
-          {page === 'library' && (
-            <LibraryPage
-              onOpen={openBook}
-              onOpenAt={setReading}
-              tags={tags}
-              tagFilter={tagFilter}
-              statusFilter={statusFilter}
-              onLibraryChanged={onLibraryChanged}
-            />
-          )}
-          {page === 'notes' && <NotesPage onOpenAt={setReading} />}
-          {page === 'settings' && <SettingsPage />}
-        </main>
+    <ReadingChromeProvider value={readingChrome}>
+      <div className="app">
+        {reading === null && <TitleBar title={TITLES[page]} />}
+        <div className="body">
+          <Sidebar
+            current={page}
+            reading={reading !== null}
+            collapsed={reading !== null && sidebarCollapsed}
+            onToggleCollapsed={() => setSidebarCollapsed((value) => !value)}
+            onSelect={(id) => (reading !== null ? requestExit(id) : setPage(id))}
+            tags={reading === null && page === 'library' ? tags : null}
+            tagFilter={tagFilter}
+            onPickTag={setTagFilter}
+            statusFilter={statusFilter}
+            onPickStatus={setStatusFilter}
+            stats={stats}
+          />
+          <main className={`content${reading !== null ? ' content--reading' : ''}`}>
+            {reading !== null ? (
+              <ReaderPage
+                bookId={reading.bookId}
+                target={reading}
+                shellSidebarWidth={shellSidebarWidth}
+                exitConfirmOpen={exitDialog !== null}
+                onRequestExit={() => requestExit(null)}
+                registerFlushExit={registerFlushExit}
+                onChromeChange={setReadingChrome}
+              />
+            ) : (
+              <>
+                {page === 'library' && (
+                  <LibraryPage
+                    onOpen={openBook}
+                    onOpenAt={setReading}
+                    tags={tags}
+                    tagFilter={tagFilter}
+                    statusFilter={statusFilter}
+                    onLibraryChanged={onLibraryChanged}
+                  />
+                )}
+                {page === 'notes' && <NotesPage onOpenAt={setReading} />}
+                {page === 'settings' && <SettingsPage />}
+              </>
+            )}
+          </main>
+        </div>
+        {exitDialog !== null && (
+          <ExitReadingModal
+            to={exitDialog.to}
+            onCancel={() => setExitDialog(null)}
+            onConfirm={confirmExit}
+          />
+        )}
       </div>
-    </div>
+    </ReadingChromeProvider>
   )
 }

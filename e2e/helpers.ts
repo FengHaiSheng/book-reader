@@ -1,7 +1,7 @@
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { _electron as electron, type ElectronApplication } from 'playwright'
+import { _electron as electron, type ElectronApplication, type Page } from 'playwright'
 
 /**
  * 每次启动都用一个全新的临时 userData 目录，保证测试之间互不污染，
@@ -137,4 +137,16 @@ export async function aiPrompts(app: ElectronApplication): Promise<string[]> {
   return app.evaluate(
     () => (globalThis as unknown as { __aiStub?: { prompts?: string[] } }).__aiStub?.prompts ?? []
   )
+}
+
+/** 阅读中经侧栏离开：点「书架」→ 确认「离开」 */
+export async function exitReading(win: Page): Promise<void> {
+  await win.getByRole('navigation', { name: '主导航' }).getByRole('button', { name: '书架' }).click()
+  await win.getByRole('button', { name: '离开' }).click()
+}
+
+/** 阅读侧栏默认收起；操作目录/书签前先展开 */
+export async function ensureSidebarExpanded(win: Page): Promise<void> {
+  const expand = win.getByRole('button', { name: '展开侧栏' })
+  if (await expand.isVisible()) await expand.click()
 }

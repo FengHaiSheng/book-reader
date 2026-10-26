@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from '@playwright/test'
 import { writeEpub } from '../fixtures/make-epub'
-import { launchAppWithUserData } from './helpers'
+import { exitReading, launchAppWithUserData } from './helpers'
 
 /** 8×12 的合法 PNG：与 fixtures 里封面用的是同一张，浏览器能解码 */
 const PAGE = Buffer.from(
@@ -91,7 +91,7 @@ test('导入 CBZ：过滤杂项、自然排序、图片能读回、漫画模式�
 
   // 进度是防抖落库，等它写完再回书架
   await win.waitForTimeout(700)
-  await win.getByRole('button', { name: '返回书架' }).click()
+  await exitReading(win)
   await expect(win.locator('.reader--comic')).toHaveCount(0)
 
   // 重新打开回到上次读到的那一页

@@ -10,7 +10,7 @@ import {
   secureFiles,
   writeEpub
 } from '../fixtures/make-epub'
-import { launchAppWithUserData } from './helpers'
+import { ensureSidebarExpanded, exitReading, launchAppWithUserData } from './helpers'
 
 test('打开一本书返回目录与空进度，存进去的进度能读回来，删书连进度一起清', async () => {
   const userDataDir = mkdtempSync(join(tmpdir(), 'book-read-reader-'))
@@ -144,6 +144,7 @@ test('目录换章、翻到章尾进下一章，进度在重启后仍在', async
   await openFirstBook(win)
   await expect(win.locator('.reader__chapter')).toHaveText('第一章 河边')
   await waitForChapterLoaded(win)
+  await ensureSidebarExpanded(win)
 
   // 目录换章：第二章只有一页
   await win.getByRole('button', { name: '第二章 夏夜' }).click()
@@ -176,7 +177,7 @@ test('目录换章、翻到章尾进下一章，进度在重启后仍在', async
   }
   await expect(win.locator('.reader__page')).toHaveText('2 / ' + total)
   await win.waitForTimeout(900)
-  await win.getByRole('button', { name: '返回书架' }).click()
+  await exitReading(win)
   await expect(win.locator('.reader')).toBeHidden()
 
   // 重启：位置必须还在第一章第 2 页
@@ -218,8 +219,8 @@ test('每页存进度再打开都回到原页，段落中间起排的页也不�
     if (page > 1) await win.getByRole('button', { name: '下一页' }).click()
     await expect(win.locator('.reader__page')).toHaveText(`${page} / ${total}`)
 
-    // 「返回书架」会立刻落库，不必等 600ms 的防抖
-    await win.getByRole('button', { name: '返回书架' }).click()
+    // 经侧栏确认离开会立刻 flush 落库，不必等 600ms 的防抖
+    await exitReading(win)
     await openFirstBook(win)
     await expect(win.locator('.reader__chapter')).toHaveText('第一章 河边')
     await waitForChapterLoaded(win)
@@ -363,6 +364,8 @@ test('窗口变窄时排版降级，界面明说而不是静默处理', async ()
   await openFirstBook(win)
   await expect(win.locator('.reader__chapter')).toHaveText('第一章 河边')
   await waitForChapterLoaded(win)
+  // 展开侧栏（248）再压窗口：收起时正文太宽，900 宽压不出「每行字数」降级
+  await ensureSidebarExpanded(win)
 
   // 默认 1440 宽：34 字放得下，不该有任何降级提示
   await expect(win.locator('.reader__degrade')).toBeHidden()
@@ -405,7 +408,7 @@ test('Aa 面板改字号立刻生效，重进应用后仍然是新值', async ()
 
   // 等过 300ms 的防抖窗口，再退出
   await win.waitForTimeout(500)
-  await win.getByRole('button', { name: '返回书架' }).click()
+  await exitReading(win)
   await expect(win.locator('.reader')).toBeHidden()
   await app.close()
 

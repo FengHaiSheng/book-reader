@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from '@playwright/test'
 import { nestedTocFiles, novelFiles, writeEpub } from '../fixtures/make-epub'
-import { launchAppWithUserData } from './helpers'
+import { exitReading, launchAppWithUserData } from './helpers'
 
 test('跨书汇总、类型筛选、右栏上下文、回到原文', async () => {
   const userDataDir = mkdtempSync(join(tmpdir(), 'book-read-notes-'))
@@ -55,7 +55,7 @@ test('跨书汇总、类型筛选、右栏上下文、回到原文', async () =>
   await win.locator('.sel-toolbar__btn:has-text("笔记")').click()
   await win.locator('.annot__note').fill('开篇就把手机瘾写出来了')
   await win.locator('button:has-text("保存批注")').click()
-  await win.locator('button:has-text("返回书架")').click()
+  await exitReading(win)
 
   // 第二本：《深入理解定位》，直接用 API 建一条纯高亮（原文取自夹具）
   const techChapterId = await win.evaluate(async (id) => {
@@ -96,7 +96,7 @@ test('跨书汇总、类型筛选、右栏上下文、回到原文', async () =>
   await expect(win.locator('.reader__chapter')).toHaveText('第一章 河边')
 
   // 回笔记页确认删掉后计数跟着变
-  await win.locator('button:has-text("返回书架")').click()
+  await exitReading(win)
   await win.locator('.nav-item:has-text("笔记")').click()
   await win.locator('.notes-side__item:has-text("全部笔记")').click()
   await win.locator('.note').first().locator('button:has-text("删除")').click()

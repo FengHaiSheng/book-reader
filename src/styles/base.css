@@ -72,6 +72,81 @@ button {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  min-height: 0;
+}
+
+.sidebar--collapsed {
+  flex: 0 0 56px;
+  padding-left: var(--s1);
+  padding-right: var(--s1);
+  align-items: stretch;
+}
+
+.sidebar--collapsed .nav-item {
+  justify-content: center;
+  padding: 0;
+}
+
+.nav-item__glyph {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.sidebar__toggle {
+  flex: 0 0 32px;
+  margin-top: var(--s2);
+  border-radius: var(--r-sm);
+  color: var(--ink-muted);
+  font-size: 14px;
+  transition: background var(--ease), color var(--ease);
+}
+
+.sidebar__toggle:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.sidebar--collapsed .sidebar__toggle {
+  width: 100%;
+}
+
+.sidebar__toc {
+  flex: 1;
+  min-height: 0;
+  margin-top: var(--s3);
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--line);
+  padding-top: var(--s2);
+}
+
+/* 目录嵌在壳层侧栏里：不再自占 248，也不另画右边框 */
+.sidebar__toc .toc {
+  flex: 1;
+  min-height: 0;
+  border-right: 0;
+  background: transparent;
+  padding-top: 0;
+}
+
+.content--reading {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.exit-reading__text {
+  margin: var(--s2) var(--s2) var(--s4);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+.exit-reading__acts {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--s2);
+  padding: 0 var(--s2) var(--s2);
 }
 
 .nav-item {
@@ -359,7 +434,9 @@ html[data-theme='dark'] .seg__b.is-on {
 }
 
 .reader {
-  height: 100vh;
+  /* 嵌在壳层 main 里时用 100% 填满；main.content--reading 已占满 body 高度 */
+  height: 100%;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   background: var(--shell);
@@ -3177,7 +3254,7 @@ html[data-theme='dark'] .tag-dot {
   }
 }
 
-/* ── 阅读器左栏：目录 / 书签两个页签（宽度不变，仍是 TOC_WIDTH） ───────── */
+/* ── 目录 / 书签两个页签（嵌在壳层侧栏展开态） ─────────────────────────── */
 
 .toc__tabs {
   flex: 0 0 auto;

@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReaderBook } from '@shared/types'
-import { BAR_PAD_LEFT } from './chrome'
 
 /** 翻页后延迟落库：连着翻十页不该发十次 IPC */
 const SAVE_DEBOUNCE_MS = 500
@@ -14,12 +13,16 @@ const SAVE_DEBOUNCE_MS = 500
 export function ComicReader({
   book,
   startChapterId,
-  onExit
+  exitConfirmOpen = false,
+  onRequestExit
 }: {
   book: ReaderBook
   /** 上次读到的那一页（chapter id）；找不到就从头开始 */
   startChapterId: number | null
-  onExit: () => void
+  /** 离开确认已打开时 Esc 只关确认 */
+  exitConfirmOpen?: boolean
+  /** 请求离开阅读（由壳层弹出确认） */
+  onRequestExit: () => void
 }) {
   /** 每页就是一条 chapter，href 指向 media/ 下的图片 */
   const pages = useMemo(() => book.chapters.filter((item) => item.href !== ''), [book])
@@ -107,13 +110,14 @@ export function ComicReader({
         event.preventDefault()
         setIndex(Math.max(total - 1, 0))
       } else if (event.key === 'Escape') {
+        if (exitConfirmOpen) return
         event.preventDefault()
-        onExit()
+        onRequestExit()
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [turn, total, onExit])
+  }, [turn, total, onRequestExit, exitConfirmOpen])
 
   /** 点左半边上一页、右半边下一页：鼠标单手也能读 */
   const onStageClick = (event: React.MouseEvent<HTMLDivElement>): void => {
@@ -127,10 +131,7 @@ export function ComicReader({
 
   return (
     <div className="reader reader--comic">
-      <div className="reader__bar" style={{ paddingLeft: BAR_PAD_LEFT }}>
-        <button type="button" className="btn" onClick={onExit}>
-          返回书架
-        </button>
+      <div className="reader__bar">
         <span className="reader__title">{book.title}</span>
         <span className="reader__spacer" />
         <button

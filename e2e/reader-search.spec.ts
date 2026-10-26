@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from '@playwright/test'
 import { longBookFiles, writeEpub } from '../fixtures/make-epub'
-import { launchAppWithUserData } from './helpers'
+import { ensureSidebarExpanded, launchAppWithUserData } from './helpers'
 
 /** 书架默认是网格视图，切到列表再点「打开」，与既有的阅读器用例保持同一条路径 */
 async function openFirstBook(win: import('playwright').Page): Promise<void> {
@@ -44,12 +44,13 @@ test('书内查找：独立查找条不占左栏，点结果跳章并闪一下�
   await win.reload()
   await openFirstBook(win)
   await expect(win.locator('.reader__chapter')).toHaveText('第一章 河边')
+  await ensureSidebarExpanded(win)
   await expect(win.locator('.toc')).toBeVisible()
 
   await win.keyboard.press('Meta+f')
   await expect(win.locator('.findbar')).toBeVisible()
   await expect(win.locator('.findbar__input')).toBeFocused()
-  // 查找条贴工具条下方，目录照旧留在左栏 —— 这次改的就是这一点
+  // 查找条贴工具条下方；目录在壳层侧栏展开态
   await expect(win.locator('.toc')).toBeVisible()
 
   // 「蝉声」只在第二章出现，正好用来验证跨章跳转

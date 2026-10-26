@@ -30,11 +30,10 @@ import { isSearchableQuery } from './search'
 import { bookPercent } from './progress'
 import { IDLE_MS, creditMs } from '../reading/tracker'
 import { setUnrecordedMs } from '../reading/failures'
-import { TocPanel } from './TocPanel'
 import { TypographyPanel } from './TypographyPanel'
 import { ComicReader } from './ComicReader'
-import { BAR_PAD_LEFT } from './chrome'
 import { AiPanel, type AiSeed } from '../ai/AiPanel'
+import type { ReadingChromeValue } from '../../shell/ReadingChromeContext'
 
 /** 引用回跳失败时的口径：说清「没定位到」，不假装成功 */
 const CITATION_MISS = '没能在这章正文里定位到这段原文（正文与检索用的文本对不上）。'
@@ -78,12 +77,25 @@ function chapterBaseHref(bookId: string, entry: string): string {
 export function ReaderPage({
   bookId,
   target,
-  onExit
+  shellSidebarWidth,
+  exitConfirmOpen = false,
+  onRequestExit,
+  registerFlushExit,
+  onChromeChange
 }: {
   bookId: string
   /** 从笔记「回到原文」进来时指定落点；从书架进来传 null，沿用上次进度 */
   target?: ReadingTarget | null
-  onExit: () => void
+  /** 壳层侧栏当前占用宽度，供 AI 面板算上限 */
+  shellSidebarWidth: number
+  /** 离开确认已打开时 Esc 只关确认，不再二次 requestExit */
+  exitConfirmOpen?: boolean
+  /** 请求离开阅读（由壳层弹出确认） */
+  onRequestExit: () => void
+  /** 确认离开前由壳层调用的 flush（偏好 / 进度 / 时长） */
+  registerFlushExit: (fn: (() => void) | null) => void
+  /** 把目录/书签交给壳层侧栏；卸载时清 null */
+  onChromeChange: (value: ReadingChromeValue | null) => void
 }) {
   const [book, setBook] = useState<ReaderBook | null>(null)
   const [prefs, setPrefs] = useState<ReadingPrefs | null>(null)
@@ -155,7 +167,7 @@ export function ReaderPage({
 
   /**
    * 版式只在这里算。`windowWidth` 与 `size` 分开传：断点说的是窗口宽度，
-   * 而正文区因为左栏被占掉，比窗口窄。
+   * 而正文区因为壳层侧栏被占掉，比窗口窄。
    */
   const layoutRef = useRef<ReaderLayout | null>(null)
   const prefsRef = useRef<ReadingPrefs | null>(null)
@@ -167,17 +179,23 @@ export function ReaderPage({
    * 拖动面板时同样只能在这个区间里拖，所以拖不出「挤窄正文」的宽度。
    */
   const aiRange = useMemo(
-    () => aiPanelRange({ windowWidth, prefs: prefs ?? DEFAULT_PREFS }),
-    [prefs, windowWidth]
+    () =>
+      aiPanelRange({
+        windowWidth,
+        prefs: prefs ?? DEFAULT_PREFS,
+        shellSidebarWidth
+      }),
+    [prefs, windowWidth, shellSidebarWidth]
   )
   const aiWidth = useMemo(
     () =>
       computeAiPanelWidth({
         windowWidth,
         prefs: prefs ?? DEFAULT_PREFS,
-        preferred: prefs?.aiPanelWidth ?? DEFAULT_PREFS.aiPanelWidth
+        preferred: prefs?.aiPanelWidth ?? DEFAULT_PREFS.aiPanelWidth,
+        shellSidebarWidth
       }),
-    [prefs, windowWidth]
+    [prefs, windowWidth, shellSidebarWidth]
   )
 
   /** 只有带正文的节点才进阅读流：目录里的分组节点 href 是空串 */
@@ -1117,18 +1135,22 @@ export function ReaderPage({
   }, [])
 
   /**
-   * 退出前把偏好与阅读位置都补一次。
+   * 离开前把偏好与阅读位置都补一次。
    *
-   * 两者都是防抖写库，用户改完字号立刻按返回（或直接关窗）会落在防抖窗口里，
-   * 不补这一次就白改了。
+   * 两者都是防抖写库，用户改完字号立刻离开（或直接关窗）会落在防抖窗口里，
+   * 不补这一次就白改了。确认对话框点「离开」时由壳层调用；卸载时再兜一次。
    */
-  const exit = useCallback(() => {
+  const flushExit = useCallback(() => {
     flushPrefs()
     saveNow()
     // 攒着的那一段时长也要结掉：退出后没有计时器再替它上报了
     void flushReadingRef.current()
-    onExit()
-  }, [flushPrefs, saveNow, onExit])
+  }, [flushPrefs, saveNow])
+
+  useEffect(() => {
+    registerFlushExit(flushExit)
+    return () => registerFlushExit(null)
+  }, [registerFlushExit, flushExit])
 
   // 卸载时补一次：防抖窗口内直接关窗，偏好改动与没上报的时长都不能丢
   useEffect(
@@ -1138,6 +1160,38 @@ export function ReaderPage({
     },
     [flushPrefs]
   )
+
+  // 把目录/书签交给壳层侧栏（兄弟节点，不能靠 React 树向上冒泡）
+  useEffect(() => {
+    if (missing || !book || book.kind === 'comic') {
+      onChromeChange(null)
+      return () => onChromeChange(null)
+    }
+    onChromeChange({
+      chapters: book.chapters,
+      currentChapterId: readable[chapterIndex]?.id ?? null,
+      onSelectChapter: goToChapterById,
+      marks: bookmarks,
+      currentMark: currentBookmark,
+      onAddMark: () => void addBookmark(),
+      onRemoveMark: (id) => void removeBookmark(id),
+      onSelectMark: goToBookmark,
+      showToc: true
+    })
+    return () => onChromeChange(null)
+  }, [
+    missing,
+    book,
+    readable,
+    chapterIndex,
+    bookmarks,
+    currentBookmark,
+    goToChapterById,
+    addBookmark,
+    removeBookmark,
+    goToBookmark,
+    onChromeChange
+  ])
 
   /**
    * 拦下正文里的每一次链接点击。
@@ -1199,8 +1253,9 @@ export function ReaderPage({
         event.preventDefault()
         turn(-1)
       } else if (event.key === 'Escape') {
+        if (exitConfirmOpen) return
         event.preventDefault()
-        exit()
+        onRequestExit()
       }
     }
   })
@@ -1222,10 +1277,8 @@ export function ReaderPage({
   if (missing) {
     return (
       <div className="reader">
-        <div className="reader__bar" style={{ paddingLeft: BAR_PAD_LEFT }}>
-          <button type="button" className="btn" onClick={onExit}>
-            返回书架
-          </button>
+        <div className="reader__bar">
+          <span className="reader__title">找不到这本书</span>
         </div>
         <p className="reader__status">这本书不在书库里，可能已经被删除了。</p>
       </div>
@@ -1239,17 +1292,15 @@ export function ReaderPage({
       <ComicReader
         book={book}
         startChapterId={readable[chapterIndex]?.id ?? null}
-        onExit={exit}
+        exitConfirmOpen={exitConfirmOpen}
+        onRequestExit={onRequestExit}
       />
     )
   }
 
   return (
     <div className="reader">
-      <div className="reader__bar" style={{ paddingLeft: BAR_PAD_LEFT }}>
-        <button type="button" className="btn" onClick={exit}>
-          返回书架
-        </button>
+      <div className="reader__bar">
         <span className="reader__title">{book?.title ?? '正在打开…'}</span>
         <span className="reader__chapter">{readable[chapterIndex]?.title ?? ''}</span>
         <span className="reader__spacer" />
@@ -1325,16 +1376,6 @@ export function ReaderPage({
         </p>
       )}
       <div className="reader__body">
-        <TocPanel
-          chapters={book?.chapters ?? []}
-          currentId={readable[chapterIndex]?.id ?? null}
-          onSelect={goToChapterById}
-          marks={bookmarks}
-          currentMark={currentBookmark}
-          onAddMark={() => void addBookmark()}
-          onRemoveMark={(id) => void removeBookmark(id)}
-          onSelectMark={goToBookmark}
-        />
         {/* 阅读区整块是纸，上留白由舞台给，正文块在纸面上上下居中 */}
         <div className="reader__stage" ref={stageRef} style={{ paddingTop: PAGE_PAD_Y }}>
           {error && <p className="reader__status">{error}</p>}

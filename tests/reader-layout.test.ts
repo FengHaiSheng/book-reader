@@ -95,16 +95,16 @@ describe('computeLayout', () => {
 })
 
 describe('computeAiPanelWidth', () => {
-  const width = (windowWidth: number, preferred = 720): number =>
-    computeAiPanelWidth({ windowWidth, prefs, preferred })
+  const width = (windowWidth: number, preferred = 720, shellSidebarWidth = 248): number =>
+    computeAiPanelWidth({ windowWidth, prefs, preferred, shellSidebarWidth })
 
   it('窗口够宽就给到最大宽度 720', () => {
-    // 2560：目录 248 + 对开正文（96 + 646×2 + 48 = 1436）之后还剩 875，够 720
+    // 2560：壳层侧栏 248 + 对开正文（96 + 646×2 + 48 = 1436）之后还剩 875，够 720
     expect(width(2560)).toBe(720)
   })
 
   it('窗口不够宽就先把面板收窄，正文列保持每行字数', () => {
-    // 1400：目录 248 + 单栏正文（96 + 646 = 742）之后只剩 409
+    // 1400：侧栏 248 + 单栏正文（96 + 646 = 742）之后只剩 409
     expect(width(1400)).toBe(409)
     // 面板正好占掉纸面的富余宽度，正文区仍是满版心
     const layout = computeLayout({
@@ -115,6 +115,11 @@ describe('computeAiPanelWidth', () => {
     })
     expect(layout.charsPerLine).toBe(34)
     expect(layout.clamped).toBe(false)
+  })
+
+  it('阅读侧栏收起时面板能更宽', () => {
+    // 1400：侧栏 56 + 正文 742 → 剩 601
+    expect(width(1400, 720, 56)).toBe(601)
   })
 
   it('窄到连下限都放不下时止步于下限，正文被压窄由界面明说', () => {

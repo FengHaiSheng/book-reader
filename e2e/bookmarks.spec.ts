@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from '@playwright/test'
 import { longBookFiles, writeEpub } from '../fixtures/make-epub'
-import { launchAppWithUserData } from './helpers'
+import { ensureSidebarExpanded, launchAppWithUserData } from './helpers'
 
 /** 书架默认是网格视图，切到列表再点「打开」，与既有阅读器用例保持同一条路径 */
 async function openFirstBook(win: import('playwright').Page): Promise<void> {
@@ -47,6 +47,7 @@ test('书签：加、判重不增、跳回、删，重启后仍在', async () =>
   await openFirstBook(win)
   await expect(win.locator('.reader__chapter')).toHaveText('第一章 河边')
   await waitForChapterLoaded(win)
+  await ensureSidebarExpanded(win)
 
   // 书签页签初始是空的，写入按钮写着「加书签」
   await win.locator('.toc__tab', { hasText: '书签' }).click()
@@ -100,6 +101,7 @@ test('书签：加、判重不增、跳回、删，重启后仍在', async () =>
   win = await app.firstWindow()
   await openFirstBook(win)
   await expect(win.locator('.reader__chapter')).toHaveText('第一章 河边')
+  await ensureSidebarExpanded(win)
   await win.locator('.toc__tab', { hasText: '书签' }).click()
   await expect(win.locator('.marks__item')).toHaveCount(1)
 

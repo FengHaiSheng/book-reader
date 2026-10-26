@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from '@playwright/test'
 import { longBookFiles, writeEpub } from '../fixtures/make-epub'
-import { aiCallCount, installAiStub, launchAppWithUserData } from './helpers'
+import { aiCallCount, exitReading, installAiStub, launchAppWithUserData } from './helpers'
 
 async function openFirstBook(win: import('playwright').Page): Promise<void> {
   await win.getByRole('button', { name: '列表' }).click()
@@ -25,7 +25,7 @@ async function todaySeconds(win: import('playwright').Page): Promise<number> {
 /**
  * 读一段、退出、结算。
  *
- * 退出时 `exit()` 会补一次 flush，所以「返回书架」之后库里就应该有数了 ——
+ * 退出时确认离开会补一次 flush，所以离开之后库里就应该有数了 ——
  * 上报是异步 IPC，用 poll 等它落库，不等固定时长。
  */
 async function readAndLeave(win: import('playwright').Page, ms: number): Promise<void> {
@@ -35,7 +35,7 @@ async function readAndLeave(win: import('playwright').Page, ms: number): Promise
   // 按键既是翻页也是「有操作」的信号（超过 5 分钟不动会停表）
   await win.keyboard.press('ArrowRight')
   await win.waitForTimeout(ms)
-  await win.getByRole('button', { name: '返回书架' }).click()
+  await exitReading(win)
   await expect(win.locator('.reader')).toBeHidden()
 }
 

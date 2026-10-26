@@ -1,4 +1,5 @@
 import { PREFS_LIMITS, type ReadingPrefs } from '@shared/types'
+import { SIDEBAR_BORDER } from '../../shell/sidebarWidth'
 
 /**
  * 纸面留白。这一圈是**屏幕空间**的留白，不参与分栏 —— 也就是说 iframe（正文区）
@@ -21,13 +22,6 @@ export const SPREAD_WIDTH = 1900
 export const NARROW_FONT_SIZE = 17
 /** 版心宽的兜底下限，避免退化输入算出负数或 0 */
 const MIN_COLUMN_WIDTH = 120
-
-/**
- * 阅读器左栏（目录）宽度，与 base.css 里 `.toc` 的 `flex-basis` 一致，
- * 再加上它右侧那 1px 分隔线。算 AI 面板能占多少时要按它扣，改 CSS 必须同步改这里。
- */
-export const TOC_WIDTH = 248
-const TOC_BORDER = 1
 
 export type ReaderLayout = {
   /** 一屏几栏 */
@@ -60,7 +54,7 @@ export type ReaderLayout = {
  * - windowWidth 决定 .uicraft.md 的自适应断点（对开、字号降级）—— 那一列说的是**窗口**；
  * - containerWidth 是正文区（纸面）的真实宽度，决定版心宽能分到多少。
  *
- * 为什么必须分开：阅读器左栏占掉 248px，窗口 1900 时正文区只有 1652。
+ * 为什么必须分开：壳层侧栏占掉一块宽度，窗口 1900 时正文区更窄。
  * 若拿正文区去比 SPREAD_WIDTH，窗口再宽也上不了对开。
  */
 export function computeLayout(input: {
@@ -115,7 +109,7 @@ export function readingAreaWidth(prefs: ReadingPrefs, windowWidth: number): numb
 /**
  * AI 面板当下能占的宽度区间。
  *
- * 上限不是写死的 720，而是「窗口扣掉目录栏、再扣掉正文所需宽度」之后剩下的那一块：
+ * 上限不是写死的 720，而是「窗口扣掉壳层侧栏、再扣掉正文所需宽度」之后剩下的那一块：
  * 窗口够宽时上限就是 720（面板吃满自己的最大宽度），窗口不够宽时上限跟着变小，
  * 正文列始终不被压窄 —— 面板先退让，正文优先（.uicraft.md 的自适应策略第一条）。
  * 窄到连下限都放不下时上限就是下限，那种情况下正文只能被压窄，界面按硬规则 2 明说。
@@ -123,10 +117,15 @@ export function readingAreaWidth(prefs: ReadingPrefs, windowWidth: number): numb
 export function aiPanelRange(input: {
   windowWidth: number
   prefs: ReadingPrefs
+  /** 壳层侧栏当前占用宽度（阅读收起 56，展开/非阅读 248） */
+  shellSidebarWidth: number
 }): { min: number; max: number } {
   const [min, cap] = PREFS_LIMITS.aiPanelWidth
   const room =
-    input.windowWidth - TOC_WIDTH - TOC_BORDER - readingAreaWidth(input.prefs, input.windowWidth)
+    input.windowWidth -
+    input.shellSidebarWidth -
+    SIDEBAR_BORDER -
+    readingAreaWidth(input.prefs, input.windowWidth)
   return { min, max: Math.max(min, Math.min(cap, room)) }
 }
 
@@ -140,6 +139,7 @@ export function computeAiPanelWidth(input: {
   windowWidth: number
   prefs: ReadingPrefs
   preferred: number
+  shellSidebarWidth: number
 }): number {
   const { min, max } = aiPanelRange(input)
   return Math.max(min, Math.min(max, input.preferred))

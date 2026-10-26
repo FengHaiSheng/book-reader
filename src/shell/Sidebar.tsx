@@ -1,12 +1,15 @@
 import type { BookStatus, LibraryStats, Tag } from '@shared/types'
 import { formatBytes } from '../features/library/shelf'
+import { TocPanel } from '../features/reader/TocPanel'
+import { IS_MAC, SIDEBAR_PAD_TOP } from '../features/reader/chrome'
+import { useReadingChrome } from './ReadingChromeContext'
 
 export type PageId = 'library' | 'notes' | 'settings'
 
-const NAV: { id: PageId; label: string }[] = [
-  { id: 'library', label: '书架' },
-  { id: 'notes', label: '笔记' },
-  { id: 'settings', label: '设置' }
+const NAV: { id: PageId; label: string; glyph: string }[] = [
+  { id: 'library', label: '书架', glyph: '书' },
+  { id: 'notes', label: '笔记', glyph: '笔' },
+  { id: 'settings', label: '设置', glyph: '设' }
 ]
 
 /** 书库状态筛选。null 是「全部」，与 tagFilter 的 null 语义一致 */
@@ -20,6 +23,9 @@ const STATUSES: { id: BookStatus | null; label: string }[] = [
 export function Sidebar({
   current,
   onSelect,
+  reading,
+  collapsed,
+  onToggleCollapsed,
   tags,
   tagFilter,
   onPickTag,
@@ -29,6 +35,10 @@ export function Sidebar({
 }: {
   current: PageId
   onSelect: (id: PageId) => void
+  /** 正在阅读：隐藏书库筛选，可折叠，可挂目录 */
+  reading: boolean
+  collapsed: boolean
+  onToggleCollapsed?: () => void
   /** null 表示当前页面没有上下文列表；空数组是「还没建过标签」 */
   tags?: Tag[] | null
   tagFilter?: number | null
@@ -37,6 +47,10 @@ export function Sidebar({
   onPickStatus?: (status: BookStatus | null) => void
   stats?: LibraryStats | null
 }) {
+  const chrome = useReadingChrome()
+  const showLibraryExtras = !reading && tags != null
+  const showToc = reading && !collapsed && chrome?.showToc === true
+
   const countOf = (status: BookStatus | null): number | null => {
     if (!stats) return null
     if (status === 'reading') return stats.reading
@@ -45,21 +59,56 @@ export function Sidebar({
     return stats.total
   }
 
-  return (
-    <nav className="sidebar">
-      {NAV.map((item) => (
-        <button
-          key={item.id}
-          type="button"
-          className={`nav-item${current === item.id ? ' nav-item--active' : ''}`}
-          aria-current={current === item.id ? 'page' : undefined}
-          onClick={() => onSelect(item.id)}
-        >
-          {item.label}
-        </button>
-      ))}
+  const className = [
+    'sidebar',
+    reading ? 'sidebar--reading' : '',
+    collapsed ? 'sidebar--collapsed' : ''
+  ]
+    .filter(Boolean)
+    .join(' ')
 
-      {tags ? (
+  return (
+    <nav
+      className={className}
+      style={reading && IS_MAC ? { paddingTop: SIDEBAR_PAD_TOP } : undefined}
+      aria-label="主导航"
+    >
+      {NAV.map((item) => {
+        const active = !reading && current === item.id
+        return (
+          <button
+            key={item.id}
+            type="button"
+            className={`nav-item${active ? ' nav-item--active' : ''}`}
+            aria-current={active ? 'page' : undefined}
+            aria-label={item.label}
+            title={item.label}
+            onClick={() => onSelect(item.id)}
+          >
+            {collapsed ? (
+              <span className="nav-item__glyph" aria-hidden="true">
+                {item.glyph}
+              </span>
+            ) : (
+              item.label
+            )}
+          </button>
+        )
+      })}
+
+      {reading && onToggleCollapsed ? (
+        <button
+          type="button"
+          className="sidebar__toggle"
+          aria-label={collapsed ? '展开侧栏' : '收起侧栏'}
+          title={collapsed ? '展开侧栏' : '收起侧栏'}
+          onClick={onToggleCollapsed}
+        >
+          {collapsed ? '»' : '«'}
+        </button>
+      ) : null}
+
+      {showLibraryExtras ? (
         <div className="sidebar__body">
           <div className="sidebar__section">书库</div>
           <ul className="side-list">
@@ -110,7 +159,22 @@ export function Sidebar({
         </div>
       ) : null}
 
-      {tags ? (
+      {showToc && chrome ? (
+        <div className="sidebar__toc">
+          <TocPanel
+            chapters={chrome.chapters}
+            currentId={chrome.currentChapterId}
+            onSelect={chrome.onSelectChapter}
+            marks={chrome.marks}
+            currentMark={chrome.currentMark}
+            onAddMark={chrome.onAddMark}
+            onRemoveMark={chrome.onRemoveMark}
+            onSelectMark={chrome.onSelectMark}
+          />
+        </div>
+      ) : null}
+
+      {showLibraryExtras ? (
         <div className="sidebar__foot">
           <b>本地书库</b>
           <br />
