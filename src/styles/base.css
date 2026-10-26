@@ -1166,6 +1166,37 @@ html[data-theme='dark'] .seg__b.is-on {
   letter-spacing: 0.06em;
 }
 
+.note__ai-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  margin: 0 0 var(--s2);
+  padding: 0;
+  list-style: none;
+}
+
+.note__ai {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: var(--s2);
+  align-items: start;
+}
+
+.note__ai-src {
+  color: var(--ink-muted);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  line-height: 1.7;
+}
+
+.note__ai-body {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 13px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
 .note__editor {
   display: flex;
   flex-direction: column;

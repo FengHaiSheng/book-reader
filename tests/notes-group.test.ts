@@ -33,11 +33,24 @@ const NOTES = [
   note(3, 'b2', '思考，快与慢', false)
 ]
 
+const WITH_AI: HighlightWithBook = {
+  ...note(4, 'b1', '深度工作', false),
+  aiNotes: [{ id: 1, highlightId: 4, content: 'x', source: 'explain', createdAt: 1 }]
+}
+
+const ANNOTATED_ONLY = note(5, 'b1', '深度工作', true)
+
 describe('applyFilter', () => {
   it('只按类型筛', () => {
     expect(applyFilter(NOTES, { kind: 'annotated', bookId: null, query: '' }).map((n) => n.id)).toEqual([1])
     expect(applyFilter(NOTES, { kind: 'marked', bookId: null, query: '' }).map((n) => n.id)).toEqual([2, 3])
     expect(applyFilter(NOTES, { kind: 'all', bookId: null, query: '' })).toHaveLength(3)
+  })
+
+  it('withAi 与 annotated 互不误伤', () => {
+    const mixed = [WITH_AI, ANNOTATED_ONLY]
+    expect(applyFilter(mixed, { kind: 'withAi', bookId: null, query: '' }).map((n) => n.id)).toEqual([4])
+    expect(applyFilter(mixed, { kind: 'annotated', bookId: null, query: '' }).map((n) => n.id)).toEqual([5])
   })
 
   it('类型与书籍同时生效', () => {
@@ -70,11 +83,20 @@ describe('applyFilter', () => {
 
 describe('countsByKind', () => {
   it('不选书时是全局计数', () => {
-    expect(countsByKind(NOTES, null)).toEqual({ all: 3, marked: 2, annotated: 1 })
+    expect(countsByKind(NOTES, null)).toEqual({ all: 3, marked: 2, annotated: 1, withAi: 0 })
   })
 
   it('选了书，类型计数也只算这本书', () => {
-    expect(countsByKind(NOTES, 'b1')).toEqual({ all: 2, marked: 1, annotated: 1 })
+    expect(countsByKind(NOTES, 'b1')).toEqual({ all: 2, marked: 1, annotated: 1, withAi: 0 })
+  })
+
+  it('withAi 只计有 AI 笔记的条目，不含仅有批注', () => {
+    expect(countsByKind([WITH_AI, ANNOTATED_ONLY], null)).toEqual({
+      all: 2,
+      marked: 1,
+      annotated: 1,
+      withAi: 1
+    })
   })
 })
 

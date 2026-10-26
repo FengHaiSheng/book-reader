@@ -19,7 +19,8 @@ export function NoteCard({
   onSelect,
   onOpen,
   onSaveNote,
-  onRemove
+  onRemove,
+  onRemoveAiNote
 }: {
   note: HighlightWithBook
   selected: boolean
@@ -29,6 +30,7 @@ export function NoteCard({
   onOpen: () => void
   onSaveNote: (note: string | null) => void
   onRemove: () => void
+  onRemoveAiNote: (aiNoteId: number) => void
 }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(note.note ?? '')
@@ -105,6 +107,29 @@ export function NoteCard({
             {note.note}
           </div>
         )
+      )}
+
+      {note.aiNotes.length > 0 && (
+        <ul className="note__ai-list">
+          {note.aiNotes.map((ai) => (
+            <li key={ai.id} className="note__ai">
+              <span className="note__ai-src">
+                {ai.source === 'explain' ? '解释' : ai.source === 'translate' ? '翻译' : '问答'}
+              </span>
+              <p className="note__ai-body">{ai.content}</p>
+              <button
+                type="button"
+                className="act"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  onRemoveAiNote(ai.id)
+                }}
+              >
+                删除
+              </button>
+            </li>
+          ))}
+        </ul>
       )}
 
       <div className="note__foot">

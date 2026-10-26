@@ -1,6 +1,6 @@
 import { KIND_LABELS, type BookOption, type NoteCounts, type NotesKind } from './group'
 
-const KINDS: NotesKind[] = ['all', 'marked', 'annotated']
+const KINDS: NotesKind[] = ['all', 'marked', 'annotated', 'withAi']
 
 export function NotesFilters({
   counts,

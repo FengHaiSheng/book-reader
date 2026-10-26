@@ -1,6 +1,6 @@
 import type { HighlightWithBook } from '@shared/types'
 
-export type NotesKind = 'all' | 'marked' | 'annotated'
+export type NotesKind = 'all' | 'marked' | 'annotated' | 'withAi'
 
 export type NotesFilter = {
   kind: NotesKind
@@ -13,7 +13,8 @@ export type NotesFilter = {
 export const KIND_LABELS: Record<NotesKind, string> = {
   all: '全部笔记',
   marked: '仅高亮',
-  annotated: '仅有批注'
+  annotated: '仅有批注',
+  withAi: '有 AI 笔记'
 }
 
 export type BookGroup = {
@@ -61,12 +62,18 @@ export function applyFilter(
     if (filter.bookId !== null && note.bookId !== filter.bookId) return false
     if (filter.kind === 'annotated' && note.note === null) return false
     if (filter.kind === 'marked' && note.note !== null) return false
+    if (filter.kind === 'withAi' && note.aiNotes.length === 0) return false
     if (query === '') return true
     return note.text.toLowerCase().includes(query) || (note.note ?? '').toLowerCase().includes(query)
   })
 }
 
-export type NoteCounts = { all: number; marked: number; annotated: number }
+export type NoteCounts = {
+  all: number
+  marked: number
+  annotated: number
+  withAi: number
+}
 
 /** 侧栏的计数跟着书籍这一维走：选了某本书，类型计数也只算这本书 */
 export function countsByKind(
@@ -77,7 +84,8 @@ export function countsByKind(
   return {
     all: scoped.length,
     marked: scoped.filter((note) => note.note === null).length,
-    annotated: scoped.filter((note) => note.note !== null).length
+    annotated: scoped.filter((note) => note.note !== null).length,
+    withAi: scoped.filter((note) => note.aiNotes.length > 0).length
   }
 }
 

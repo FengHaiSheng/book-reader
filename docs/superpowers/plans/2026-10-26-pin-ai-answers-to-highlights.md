@@ -580,7 +580,7 @@ EOF
 - Modify: `src/features/notes/NoteCard.tsx`
 - Modify: `src/pages/NotesPage.tsx`
 
-- [ ] **Step 1: 扩展 `NotesKind` 与过滤**
+- [x] **Step 1: 扩展 `NotesKind` 与过滤**
 
 ```ts
 export type NotesKind = 'all' | 'marked' | 'annotated' | 'withAi'
@@ -609,14 +609,14 @@ export type NoteCounts = {
 `countsByKind` 增加 `withAi: scoped.filter((n) => n.aiNotes.length > 0).length`。  
 「仅有批注」仍只看 `note !== null`，不看 `aiNotes`。
 
-- [ ] **Step 2: 更新 `notes-group.test.ts` 夹具**
+- [x] **Step 2: 更新 `notes-group.test.ts` 夹具**
 
 `note(...)` 工厂补 `aiNotes: []`；新增带 `aiNotes: [{ id: 1, highlightId: id, content: 'x', source: 'explain', createdAt: 1 }]` 的用例，断言 `withAi` 与 `annotated` 互不误伤。
 
 Run: `npm test -- tests/notes-group.test.ts`  
 Expected: PASS
 
-- [ ] **Step 3: `NoteCard` 展示并可删 AI 笔记**
+- [x] **Step 3: `NoteCard` 展示并可删 AI 笔记**
 
 Props 增加 `onRemoveAiNote: (aiNoteId: number) => void`。在手写批注展示区下方：
 
@@ -662,11 +662,11 @@ Props 增加 `onRemoveAiNote: (aiNoteId: number) => void`。在手写批注展�
 
 `NotesFilters` 的 `KINDS` 数组纳入 `'withAi'`（已从 `KIND_LABELS` 驱动文案）。
 
-- [ ] **Step 4: 最小样式**
+- [x] **Step 4: 最小样式**
 
 在 `src/styles/base.css` 已有 `.note__*` 附近增加 `.note__ai-list` / `.note__ai` / `.note__ai-src` / `.note__ai-body`：来源用小号墨色标签，正文与批注同等可读，勿新引入卡片阴影或紫系装饰。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/features/notes/group.ts src/features/notes/NotesFilters.tsx src/features/notes/NoteCard.tsx src/pages/NotesPage.tsx src/styles/base.css tests/notes-group.test.ts

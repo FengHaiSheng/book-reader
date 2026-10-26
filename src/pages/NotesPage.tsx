@@ -65,6 +65,17 @@ export function NotesPage({ onOpenAt }: { onOpenAt: (target: ReadingTarget) => v
     setNotes((list) => list.filter((item) => item.id !== id))
   }, [])
 
+  const removeAiNote = useCallback(async (highlightId: number, aiNoteId: number) => {
+    await window.api.notes.removeAiNote(aiNoteId)
+    setNotes((list) =>
+      list.map((item) =>
+        item.id === highlightId
+          ? { ...item, aiNotes: item.aiNotes.filter((n) => n.id !== aiNoteId) }
+          : item
+      )
+    )
+  }, [])
+
   const openNote = useCallback(
     (note: HighlightWithBook) => {
       onOpenAt({ bookId: note.bookId, chapterId: note.chapterId, cfi: note.startCfi })
@@ -135,6 +146,7 @@ export function NotesPage({ onOpenAt }: { onOpenAt: (target: ReadingTarget) => v
                       onOpen={() => openNote(note)}
                       onSaveNote={(text) => void saveNote(note.id, text)}
                       onRemove={() => void removeNote(note.id)}
+                      onRemoveAiNote={(aiNoteId) => void removeAiNote(note.id, aiNoteId)}
                     />
                   ))}
               </section>
