@@ -685,7 +685,7 @@ EOF
 **Files:**
 - Modify: `src/features/notes/ExportPopover.tsx`
 
-- [ ] **Step 1: 默认选项与复选框**
+- [x] **Step 1: 默认选项与复选框**
 
 ```ts
   const [options, setOptions] = useState<NotesExportOptions>({
@@ -711,7 +711,7 @@ EOF
 
 `toggle` 已是 `keyof NotesExportOptions`，无需改签名。
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add src/features/notes/ExportPopover.tsx
