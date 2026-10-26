@@ -413,7 +413,7 @@ EOF
 - Modify: `electron/main/notes/export.ts`
 - Modify: `tests/notes-export.test.ts`
 
-- [ ] **Step 1: 扩展 `ExportEntry` 与选项默认用法**
+- [x] **Step 1: 扩展 `ExportEntry` 与选项默认用法**
 
 ```ts
 export type ExportEntry = {
@@ -443,7 +443,7 @@ const AI_SOURCE_LABEL: Record<HighlightAiNote['source'], string> = {
 }
 ```
 
-- [ ] **Step 2: 改 `buildMarkdown` — 在「我的批注」之后**
+- [x] **Step 2: 改 `buildMarkdown` — 在「我的批注」之后**
 
 ```ts
     if (options.includeAiNotes && entry.aiNotes.length > 0) {
@@ -457,7 +457,7 @@ const AI_SOURCE_LABEL: Record<HighlightAiNote['source'], string> = {
 - HTML：批注后增加带标签的段落；  
 - Anki：若 `includeAiNotes`，增加一列 `AI`，单元格内用换行拼接 `【解释】…`；旧测试未开此列时保持列数不变——即 **仅当 `includeAiNotes === true` 时加列**。
 
-- [ ] **Step 3: 更新单测夹具与断言**
+- [x] **Step 3: 更新单测夹具与断言**
 
 所有现有 `ENTRIES` 条目补 `aiNotes: []`。所有 `NotesExportOptions` 字面量补 `includeAiNotes: false`（保持旧断言语义）。新增：
 
@@ -490,12 +490,12 @@ const AI_SOURCE_LABEL: Record<HighlightAiNote['source'], string> = {
   })
 ```
 
-- [ ] **Step 4: 跑测**
+- [x] **Step 4: 跑测**
 
 Run: `npm test -- tests/notes-export.test.ts`  
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add electron/main/notes/export.ts tests/notes-export.test.ts
