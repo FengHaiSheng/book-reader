@@ -239,6 +239,28 @@ export type ProgressInput = {
   percent: number
 }
 
+export type HighlightAiNoteSource = 'explain' | 'translate' | 'ask'
+
+export type HighlightAiNote = {
+  id: number
+  highlightId: number
+  content: string
+  source: HighlightAiNoteSource
+  createdAt: number
+}
+
+export type PinAiToHighlightInput = {
+  bookId: string
+  chapterId: number
+  text: string
+  content: string
+  source: HighlightAiNoteSource
+  /** 本章无同文划线时必填；缺则主进程拒建 */
+  startCfi?: string
+  endCfi?: string
+  color?: HighlightColor
+}
+
 export type Highlight = {
   id: number
   bookId: string
@@ -252,6 +274,14 @@ export type Highlight = {
   color: HighlightColor
   createdAt: number
   updatedAt: number
+  /** 挂在这条划线上的 AI 笔记；无则为 [] */
+  aiNotes: HighlightAiNote[]
+}
+
+export type PinAiToHighlightResult = {
+  highlight: Highlight
+  aiNote: HighlightAiNote
+  reusedEarliestDuplicate: boolean
 }
 
 export type HighlightInput = {
@@ -330,6 +360,7 @@ export type NotesExportOptions = {
   includeNotes: boolean
   includeLocation: boolean
   includeContext: boolean
+  includeAiNotes: boolean
 }
 
 export type NotesExportPreview = {

@@ -37,7 +37,7 @@ const ENTRIES: ExportEntry[] = [
 
 describe('buildMarkdown', () => {
   it('带书名分节、引文用引用块、批注单独一段', () => {
-    const md = buildMarkdown(ENTRIES, { includeNotes: true, includeLocation: true, includeContext: false }, AT)
+    const md = buildMarkdown(ENTRIES, { includeNotes: true, includeLocation: true, includeContext: false, includeAiNotes: false }, AT)
     expect(md).toContain('# 读书笔记')
     expect(md).toContain('## 深度工作')
     expect(md).toContain('## 思考，快与慢')
@@ -49,38 +49,38 @@ describe('buildMarkdown', () => {
   })
 
   it('关掉批注与位置后，只有书名与引文', () => {
-    const md = buildMarkdown(ENTRIES, { includeNotes: false, includeLocation: false, includeContext: false }, AT)
+    const md = buildMarkdown(ENTRIES, { includeNotes: false, includeLocation: false, includeContext: false, includeAiNotes: false }, AT)
     expect(md).not.toContain('我的批注')
     expect(md).not.toContain('全书 38%')
     expect(md).toContain('> 我们对自己的无知视而不见。')
   })
 
   it('附上下文时把命中那一段加粗，前后文各一段', () => {
-    const md = buildMarkdown(ENTRIES, { includeNotes: false, includeLocation: false, includeContext: true }, AT)
+    const md = buildMarkdown(ENTRIES, { includeNotes: false, includeLocation: false, includeContext: true, includeAiNotes: false }, AT)
     expect(md).toContain('> 那种安静，他后来很少遇到了。')
     expect(md).toContain('> **不是有什么必须处理的事情，只是那个动作本身已经长进了肌肉里。**')
     expect(md).toContain('> 要把它拔出来，得费些力气。')
   })
 
   it('没定位到上下文的条目不生成空引用块，也不留「undefined」', () => {
-    const md = buildMarkdown(ENTRIES, { includeNotes: false, includeLocation: false, includeContext: true }, AT)
+    const md = buildMarkdown(ENTRIES, { includeNotes: false, includeLocation: false, includeContext: true, includeAiNotes: false }, AT)
     expect(md).not.toContain('undefined')
     expect(md).not.toContain('> \n')
   })
 
   it('表头写明条数与书名数', () => {
-    const md = buildMarkdown(ENTRIES, { includeNotes: true, includeLocation: true, includeContext: false }, AT)
+    const md = buildMarkdown(ENTRIES, { includeNotes: true, includeLocation: true, includeContext: false, includeAiNotes: false }, AT)
     expect(md).toContain('共 2 条 · 跨 2 本书')
   })
 
   it('空列表只出表头，不抛错', () => {
-    const md = buildMarkdown([], { includeNotes: true, includeLocation: true, includeContext: false }, AT)
+    const md = buildMarkdown([], { includeNotes: true, includeLocation: true, includeContext: false, includeAiNotes: false }, AT)
     expect(md).toContain('共 0 条 · 跨 0 本书')
     expect(md).not.toContain('## ')
   })
 })
 
-const ALL_ON = { includeNotes: true, includeLocation: true, includeContext: true }
+const ALL_ON = { includeNotes: true, includeLocation: true, includeContext: true, includeAiNotes: false }
 
 function csvLines(content: string): string[] {
   return content.replace(/^\uFEFF/, '').split('\r\n').filter((line) => line !== '')
@@ -88,7 +88,7 @@ function csvLines(content: string): string[] {
 
 describe('buildAnkiCsv', () => {
   it('带 BOM 与 Anki 元数据两行，表头与数据列数一致', () => {
-    const csv = buildAnkiCsv(ENTRIES, { includeNotes: true, includeLocation: true, includeContext: false })
+    const csv = buildAnkiCsv(ENTRIES, { includeNotes: true, includeLocation: true, includeContext: false, includeAiNotes: false })
     expect(csv.startsWith('\uFEFF')).toBe(true)
 
     const lines = csvLines(csv)
@@ -109,7 +109,7 @@ describe('buildAnkiCsv', () => {
   })
 
   it('关掉批注与位置时对应格子留空，不编内容', () => {
-    const csv = buildAnkiCsv(ENTRIES, { includeNotes: false, includeLocation: false, includeContext: false })
+    const csv = buildAnkiCsv(ENTRIES, { includeNotes: false, includeLocation: false, includeContext: false, includeAiNotes: false })
     const lines = csvLines(csv)
     // 第 1 条：Front=原文，Back 空（没开批注），Tags=读书笔记，Book=深度工作，Chapter 有，Location 空
     expect(lines[3]).toBe('不是有什么必须处理的事情，只是那个动作本身已经长进了肌肉里。,,读书笔记,深度工作,第二章 注意力的形状,')
@@ -124,12 +124,12 @@ describe('buildAnkiCsv', () => {
       note: null,
       context: null
     }
-    const csv = buildAnkiCsv([tricky], { includeNotes: false, includeLocation: false, includeContext: false })
+    const csv = buildAnkiCsv([tricky], { includeNotes: false, includeLocation: false, includeContext: false, includeAiNotes: false })
     expect(csv).toContain('"a,b ""c""\nd"')
   })
 
   it('空列表只有元数据与表头', () => {
-    const csv = buildAnkiCsv([], { includeNotes: true, includeLocation: true, includeContext: false })
+    const csv = buildAnkiCsv([], { includeNotes: true, includeLocation: true, includeContext: false, includeAiNotes: false })
     expect(csvLines(csv)).toHaveLength(3)
   })
 })

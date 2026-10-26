@@ -24,7 +24,8 @@ export function ExportPopover({
   const [options, setOptions] = useState<NotesExportOptions>({
     includeNotes: true,
     includeLocation: true,
-    includeContext: false
+    includeContext: false,
+    includeAiNotes: true
   })
   const [preview, setPreview] = useState<NotesFilePreview>(EMPTY)
   const [error, setError] = useState<string | null>(null)

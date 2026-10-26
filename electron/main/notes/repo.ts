@@ -137,6 +137,7 @@ export function listAllHighlights(db: Database.Database): HighlightWithBook[] {
       color: row.color,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
+      aiNotes: [],
       bookTitle: row.bookTitle,
       chapterTitle: row.chapterTitle,
       percent: Math.min(1, (ordinal - 1) / total)

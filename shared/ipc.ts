@@ -35,6 +35,9 @@ export const CH = {
   /** 新导出通道：三格式共用，预览与落盘同一份内容 */
   notesPreviewFile: 'notes:previewFile',
   notesExportFile: 'notes:exportFile',
+  notesPinAi: 'notes:pinAi',
+  notesListAiNotes: 'notes:listAiNotes',
+  notesRemoveAiNote: 'notes:removeAiNote',
   shellOpenExternal: 'shell:openExternal',
   dataStats: 'data:stats',
   dataBackups: 'data:backups',
@@ -115,7 +118,10 @@ export const API_SHAPE = {
     'previewExport',
     'exportMarkdown',
     'previewFile',
-    'exportFile'
+    'exportFile',
+    'pinAi',
+    'listAiNotes',
+    'removeAiNote'
   ],
   shell: ['openExternal'],
   data: ['stats', 'backups', 'openFolder', 'exportAll', 'importAll', 'cleanup'],

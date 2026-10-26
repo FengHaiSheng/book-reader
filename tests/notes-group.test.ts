@@ -20,6 +20,7 @@ function note(id: number, bookId: string, bookTitle: string, hasNote: boolean): 
     color: 'yellow',
     createdAt: id,
     updatedAt: id,
+    aiNotes: [],
     bookTitle,
     chapterTitle: `第 ${id} 章`,
     percent: 0.5

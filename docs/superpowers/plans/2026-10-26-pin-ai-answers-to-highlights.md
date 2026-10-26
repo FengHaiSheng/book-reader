@@ -40,7 +40,7 @@
 - Modify: `shared/ipc.ts`
 - Modify: `electron/main/store/migrations.ts`
 
-- [ ] **Step 1: 扩展 `shared/types.ts`**
+- [x] **Step 1: 扩展 `shared/types.ts`**
 
 在 `Highlight` 定义附近追加，并把 `Highlight` / `HighlightWithBook` 接上 `aiNotes`：
 
@@ -104,7 +104,7 @@ export type NotesExportOptions = {
 }
 ```
 
-- [ ] **Step 2: 扩展 `shared/ipc.ts`**
+- [x] **Step 2: 扩展 `shared/ipc.ts`**
 
 在 `CH` 里 `notesExportFile` 附近追加：
 
@@ -116,7 +116,7 @@ export type NotesExportOptions = {
 
 `API_SHAPE.notes` 数组末尾追加 `'pinAi' | 'listAiNotes' | 'removeAiNote'` 三个字符串（保持与其它项同样的字面量风格）。
 
-- [ ] **Step 3: 迁移 v7**
+- [x] **Step 3: 迁移 v7**
 
 在 `migrations` 数组末尾追加（当前最高为 6）：
 
@@ -139,7 +139,7 @@ export type NotesExportOptions = {
   }
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add shared/types.ts shared/ipc.ts electron/main/store/migrations.ts

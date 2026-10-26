@@ -205,5 +205,21 @@ export const migrations: Migration[] = [
        */
       db.exec(`ALTER TABLE books ADD COLUMN kind TEXT NOT NULL DEFAULT 'text';`)
     }
+  },
+  {
+    version: 7,
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE highlight_ai_notes (
+          id           INTEGER PRIMARY KEY AUTOINCREMENT,
+          highlight_id INTEGER NOT NULL REFERENCES highlights(id) ON DELETE CASCADE,
+          content      TEXT NOT NULL,
+          source       TEXT NOT NULL,
+          created_at   INTEGER NOT NULL
+        );
+        CREATE INDEX idx_highlight_ai_notes_highlight
+          ON highlight_ai_notes(highlight_id, created_at);
+      `)
+    }
   }
 ]
