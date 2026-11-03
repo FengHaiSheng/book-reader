@@ -364,22 +364,19 @@ test('窗口变窄时排版降级，界面明说而不是静默处理', async ()
   await openFirstBook(win)
   await expect(win.locator('.reader__chapter')).toHaveText('第一章 河边')
   await waitForChapterLoaded(win)
-  // 展开侧栏（248）再压窗口：收起时正文太宽，900 宽压不出「每行字数」降级
   await ensureSidebarExpanded(win)
 
-  // 默认 1440 宽：34 字放得下，不该有任何降级提示
+  // 默认 1440 宽：高于 NARROW_WIDTH，不该有字号降级提示
   await expect(win.locator('.reader__degrade')).toBeHidden()
 
-  // 900 仍高于 NARROW_WIDTH(840)：只该压「每行字数」，不该降字号。
-  // 用 900 而不是贴着 840，是为了躲开 macOS 上窗口边框带来的几像素误差。
+  // 压到 NARROW_WIDTH 以下才降字号。用 800 而不是贴着 840，躲开窗口边框误差。
   await app.evaluate(({ BrowserWindow }) => {
-    BrowserWindow.getAllWindows()[0]!.setSize(900, 700)
+    BrowserWindow.getAllWindows()[0]!.setSize(800, 700)
   })
 
   const notice = win.locator('.reader__degrade')
   await expect(notice).toBeVisible()
-  await expect(notice).toContainText('字／行')
-  await expect(notice).not.toContainText('字号已从')
+  await expect(notice).toContainText('字号已从')
 
   await app.close()
 })

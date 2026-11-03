@@ -1,16 +1,27 @@
 import { useEffect, useState } from 'react'
-import { DEFAULT_PREFS, type ReadingPrefs } from '@shared/types'
+import { DEFAULT_PREFS, PREFS_LIMITS, clampPrefs, type ReadingPrefs } from '@shared/types'
 
 const FIELDS: {
-  key: keyof ReadingPrefs
+  key: 'fontSize' | 'lineHeight'
   label: string
   min: number
   max: number
   step: number
 }[] = [
-  { key: 'fontSize', label: '字号', min: 15, max: 24, step: 1 },
-  { key: 'charsPerLine', label: '每行字数', min: 24, max: 48, step: 1 },
-  { key: 'lineHeight', label: '行距', min: 1.5, max: 2.2, step: 0.05 }
+  {
+    key: 'fontSize',
+    label: '字号',
+    min: PREFS_LIMITS.fontSize[0],
+    max: PREFS_LIMITS.fontSize[1],
+    step: 1
+  },
+  {
+    key: 'lineHeight',
+    label: '行距',
+    min: PREFS_LIMITS.lineHeight[0],
+    max: PREFS_LIMITS.lineHeight[1],
+    step: 0.05
+  }
 ]
 
 export function ReadingSection() {
@@ -21,7 +32,7 @@ export function ReadingSection() {
       const raw = all.prefs
       if (!raw) return setPrefs({ ...DEFAULT_PREFS })
       try {
-        setPrefs({ ...DEFAULT_PREFS, ...(JSON.parse(raw) as Partial<ReadingPrefs>) })
+        setPrefs(clampPrefs(JSON.parse(raw) as Partial<ReadingPrefs>))
       } catch {
         setPrefs({ ...DEFAULT_PREFS })
       }
@@ -31,8 +42,9 @@ export function ReadingSection() {
   if (!prefs) return <p className="settings__hint">加载中…</p>
 
   function commit(next: ReadingPrefs) {
-    setPrefs(next)
-    void window.api.settings.set('prefs', JSON.stringify(next))
+    const clean = clampPrefs(next)
+    setPrefs(clean)
+    void window.api.settings.set('prefs', JSON.stringify(clean))
   }
 
   return (

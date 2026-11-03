@@ -56,8 +56,10 @@ export function readerFontStack(font: ReadingPrefs['font']): string {
 /**
  * 注入章节文档的样式。
  *
- * 只覆盖「阅读相关」的东西：字号、行距、颜色、字体、分栏。
- * 书的排版（段落缩进、居中、标题层级、图片尺寸）一律不动 —— spec §3.4 要求书自己的样式优先。
+ * 覆盖「阅读相关」：字号、行距、颜色、字体、分栏。
+ * 书的排版（段落缩进、居中、标题层级、图片尺寸）尽量不动。
+ * 字号必须 !important：真实 epub 常在 body / p / .calibre 上写死 px/pt，
+ * 不压住的话拖滑块只改得到我们的声明，肉眼字号不变。
  */
 export function buildReaderCss(layout: ReaderLayout, prefs: ReadingPrefs): string {
   const { bg, ink } = PAPER[prefs.theme]
@@ -70,6 +72,8 @@ export function buildReaderCss(layout: ReaderLayout, prefs: ReadingPrefs): strin
   overflow: hidden;
   background: ${bg};
   color: ${ink};
+  /* rem 根：书里用 rem 的字号也会跟着用户设定走 */
+  font-size: ${layout.fontSize}px !important;
 }
 body {
   /* 分栏容器的宽度必须正好是版心宽。书自带的样式（calibre 生成的 .calibreN 就是
@@ -84,13 +88,18 @@ body {
   column-gap: ${COLUMN_GAP}px;
   /* auto 而不是默认的 balance：按页高往下排，排满自动开下一栏 */
   column-fill: auto;
-  font-family: ${readerFontStack(prefs.font)};
-  font-size: ${layout.fontSize}px;
-  line-height: ${prefs.lineHeight};
+  font-family: ${readerFontStack(prefs.font)} !important;
+  font-size: ${layout.fontSize}px !important;
+  line-height: ${prefs.lineHeight} !important;
   color: ${ink};
   background: ${bg};
   text-align: justify;
   overflow-wrap: break-word;
+}
+/* 正文节点继承 body 字号。不碰 h1–h6，保留书的标题层级比例 */
+p, li, blockquote, dd, dt, td, th, pre, code, div, span, a, em, i, b, strong {
+  font-size: inherit !important;
+  line-height: inherit !important;
 }
 img, svg, video {
   max-width: 100%;

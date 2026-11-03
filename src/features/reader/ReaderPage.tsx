@@ -32,6 +32,7 @@ import { IDLE_MS, creditMs } from '../reading/tracker'
 import { setUnrecordedMs } from '../reading/failures'
 import { TypographyPanel } from './TypographyPanel'
 import { ComicReader } from './ComicReader'
+import { readerBarPadLeft } from './chrome'
 import { AiPanel, type AiSeed } from '../ai/AiPanel'
 import type { ReadingChromeValue } from '../../shell/ReadingChromeContext'
 
@@ -175,23 +176,21 @@ export function ReaderPage({
 
   /**
    * AI 面板宽度。偏好里存的是「用户想要多宽」，实际宽度还要看窗口当下给不给得起：
-   * 够宽就给到他想要的最大值（上限 720），不够宽就先把面板收窄，正文列不被压窄。
-   * 拖动面板时同样只能在这个区间里拖，所以拖不出「挤窄正文」的宽度。
+   * 够宽就给到他想要的最大值（上限 720），不够宽就先把面板收窄，正文保住最小宽后吃满剩余。
+   * 拖动面板时同样只能在这个区间里拖。
    */
   const aiRange = useMemo(
     () =>
       aiPanelRange({
         windowWidth,
-        prefs: prefs ?? DEFAULT_PREFS,
         shellSidebarWidth
       }),
-    [prefs, windowWidth, shellSidebarWidth]
+    [windowWidth, shellSidebarWidth]
   )
   const aiWidth = useMemo(
     () =>
       computeAiPanelWidth({
         windowWidth,
-        prefs: prefs ?? DEFAULT_PREFS,
         preferred: prefs?.aiPanelWidth ?? DEFAULT_PREFS.aiPanelWidth,
         shellSidebarWidth
       }),
@@ -1274,11 +1273,13 @@ export function ReaderPage({
     return () => doc.removeEventListener('keydown', handler)
   }, [docVersion])
 
+  const barPad = readerBarPadLeft(shellSidebarWidth)
+
   if (missing) {
     return (
       <div className="reader">
-        <div className="reader__bar">
-          <span className="reader__title">找不到这本书</span>
+        <div className="reader__bar" style={{ paddingLeft: barPad }}>
+          <span className="reader__spacer" />
         </div>
         <p className="reader__status">这本书不在书库里，可能已经被删除了。</p>
       </div>
@@ -1292,6 +1293,7 @@ export function ReaderPage({
       <ComicReader
         book={book}
         startChapterId={readable[chapterIndex]?.id ?? null}
+        shellSidebarWidth={shellSidebarWidth}
         exitConfirmOpen={exitConfirmOpen}
         onRequestExit={onRequestExit}
       />
@@ -1300,9 +1302,11 @@ export function ReaderPage({
 
   return (
     <div className="reader">
-      <div className="reader__bar">
-        <span className="reader__title">{book?.title ?? '正在打开…'}</span>
-        <span className="reader__chapter">{readable[chapterIndex]?.title ?? ''}</span>
+      <div className="reader__bar" style={{ paddingLeft: barPad }}>
+        {/* 章名仅供读屏与 e2e；顶栏左/中故意留空，避免与侧栏/红绿灯抢位 */}
+        <span className="reader__chapter reader__chapter--sr">
+          {readable[chapterIndex]?.title ?? ''}
+        </span>
         <span className="reader__spacer" />
         <button type="button" className="btn" onClick={() => turn(-1)}>
           上一页
@@ -1349,10 +1353,9 @@ export function ReaderPage({
           onClose={closeFind}
         />
       )}
-      {layout?.clamped && (
+      {layout?.fontSizeClamped && (
         <p className="reader__degrade" role="status">
-          窗口宽度只够 {layout.charsPerLine} 字／行，已按上限显示
-          {layout.fontSizeClamped && `；字号已从 ${prefs?.fontSize} 降到 ${layout.fontSize} 显示`}
+          字号已从 {prefs?.fontSize} 降到 {layout.fontSize} 显示
         </p>
       )}
       {citationNote && (

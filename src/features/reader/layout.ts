@@ -21,12 +21,12 @@ export const SPREAD_WIDTH = 1900
 /** 窄窗口下的实际字号 */
 export const NARROW_FONT_SIZE = 17
 /** 版心宽的兜底下限，避免退化输入算出负数或 0 */
-const MIN_COLUMN_WIDTH = 120
+export const MIN_COLUMN_WIDTH = 120
 
 export type ReaderLayout = {
   /** 一屏几栏 */
   columns: 1 | 2
-  /** 单个版心宽（像素） */
+  /** 单个版心宽（像素）——吃满正文区可用宽 */
   columnWidth: number
   /** 正文区总宽 = 一屏内所有栏加间隙 */
   frameWidth: number
@@ -36,10 +36,6 @@ export type ReaderLayout = {
   step: number
   /** 实际使用的字号 */
   fontSize: number
-  /** 实际能放下的每行字数 */
-  charsPerLine: number
-  /** 用户设定的每行字数被窗口宽度压过了 —— 界面必须明说，不许静默降级 */
-  clamped: boolean
   /** 字号被降级了 */
   fontSizeClamped: boolean
 }
@@ -47,15 +43,11 @@ export type ReaderLayout = {
 /**
  * 按窗口宽度与正文区尺寸算出版式。
  *
- * 纯函数、不碰 DOM：所有「窗口不够宽怎么办」的判断都在这里，界面只负责把
- * clamped / fontSizeClamped 显示出来。
+ * 纯函数、不碰 DOM：版心吃满纸面可用宽；字号只影响 font-size，不参与算版心。
  *
  * 两个宽度分工不同，不能混用：
  * - windowWidth 决定 .uicraft.md 的自适应断点（对开、字号降级）—— 那一列说的是**窗口**；
  * - containerWidth 是正文区（纸面）的真实宽度，决定版心宽能分到多少。
- *
- * 为什么必须分开：壳层侧栏占掉一块宽度，窗口 1900 时正文区更窄。
- * 若拿正文区去比 SPREAD_WIDTH，窗口再宽也上不了对开。
  */
 export function computeLayout(input: {
   windowWidth: number
@@ -65,7 +57,6 @@ export function computeLayout(input: {
 }): ReaderLayout {
   const { windowWidth, containerWidth, containerHeight, prefs } = input
 
-  // 让位顺序（.uicraft.md）：对开 → 单栏 → 降字号
   const fontSizeClamped = windowWidth < NARROW_WIDTH && prefs.fontSize > NARROW_FONT_SIZE
   const fontSize = fontSizeClamped ? NARROW_FONT_SIZE : prefs.fontSize
 
@@ -73,11 +64,10 @@ export function computeLayout(input: {
   const pageHeight = Math.max(MIN_COLUMN_WIDTH, Math.round(containerHeight - PAGE_PAD_Y * 2))
   const textWidth = Math.max(MIN_COLUMN_WIDTH, Math.round(containerWidth - PAGE_PAD_X * 2))
 
-  // 版心宽 = 每行字数 × 字号（中文一字宽约等于字号）
-  const wanted = Math.round(prefs.charsPerLine * fontSize)
-  const available = Math.floor((textWidth - COLUMN_GAP * (columns - 1)) / columns)
-  const columnWidth = Math.max(MIN_COLUMN_WIDTH, Math.min(wanted, available))
-  const charsPerLine = Math.floor(columnWidth / fontSize)
+  const columnWidth = Math.max(
+    MIN_COLUMN_WIDTH,
+    Math.floor((textWidth - COLUMN_GAP * (columns - 1)) / columns)
+  )
 
   return {
     columns,
@@ -87,37 +77,28 @@ export function computeLayout(input: {
     pageHeight,
     step: (columnWidth + COLUMN_GAP) * columns,
     fontSize,
-    charsPerLine,
-    clamped: charsPerLine < prefs.charsPerLine,
     fontSizeClamped
   }
 }
 
 /**
- * 正文区至少要有多宽，设定的每行字数才不会被压窄（也就是 `computeLayout` 的 clamped 为假）。
- *
- * 与 `computeLayout` 反着算：它拿正文区宽度决定版心宽，这里拿想要的版心宽反推正文区。
- * 断点口径必须一致（都看窗口宽度），否则会和它算出来的结果对不上。
+ * 正文区至少要留多宽，AI 面板才不至于把阅读列挤没。
+ * 与版心「吃满剩余」配套：面板先退到这个地板之上，正文拿剩下的全部宽度。
  */
-export function readingAreaWidth(prefs: ReadingPrefs, windowWidth: number): number {
-  const fontSize =
-    windowWidth < NARROW_WIDTH ? Math.min(prefs.fontSize, NARROW_FONT_SIZE) : prefs.fontSize
+export function minReadingAreaWidth(windowWidth: number): number {
   const columns = windowWidth >= SPREAD_WIDTH ? 2 : 1
-  return PAGE_PAD_X * 2 + columns * prefs.charsPerLine * fontSize + COLUMN_GAP * (columns - 1)
+  return PAGE_PAD_X * 2 + columns * MIN_COLUMN_WIDTH + COLUMN_GAP * (columns - 1)
 }
 
 /**
  * AI 面板当下能占的宽度区间。
  *
- * 上限不是写死的 720，而是「窗口扣掉壳层侧栏、再扣掉正文所需宽度」之后剩下的那一块：
- * 窗口够宽时上限就是 720（面板吃满自己的最大宽度），窗口不够宽时上限跟着变小，
- * 正文列始终不被压窄 —— 面板先退让，正文优先（.uicraft.md 的自适应策略第一条）。
- * 窄到连下限都放不下时上限就是下限，那种情况下正文只能被压窄，界面按硬规则 2 明说。
+ * 上限不是写死的 720，而是「窗口扣掉壳层侧栏、再扣掉正文最小宽度」之后剩下的那一块：
+ * 窗口够宽时上限就是 720，窗口不够宽时上限跟着变小。
+ * 窄到连下限都放不下时上限就是下限，那种情况下正文只能被压到最小宽以下。
  */
 export function aiPanelRange(input: {
   windowWidth: number
-  prefs: ReadingPrefs
-  /** 壳层侧栏当前占用宽度（阅读收起 56，展开/非阅读 248） */
   shellSidebarWidth: number
 }): { min: number; max: number } {
   const [min, cap] = PREFS_LIMITS.aiPanelWidth
@@ -125,7 +106,7 @@ export function aiPanelRange(input: {
     input.windowWidth -
     input.shellSidebarWidth -
     SIDEBAR_BORDER -
-    readingAreaWidth(input.prefs, input.windowWidth)
+    minReadingAreaWidth(input.windowWidth)
   return { min, max: Math.max(min, Math.min(cap, room)) }
 }
 
@@ -133,11 +114,10 @@ export function aiPanelRange(input: {
  * AI 面板的实际宽度。
  *
  * 偏好里存的是「用户拖出来的宽度」，也就是他想要多宽；这个函数把它夹进窗口当下给得起的
- * 区间里：在正文列不被压窄的前提下让面板尽量宽，最多到 720。
+ * 区间里：在正文列保住最小宽度的前提下让面板尽量宽，最多到 720。
  */
 export function computeAiPanelWidth(input: {
   windowWidth: number
-  prefs: ReadingPrefs
   preferred: number
   shellSidebarWidth: number
 }): number {

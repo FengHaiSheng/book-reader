@@ -1,5 +1,5 @@
 import type Database from 'better-sqlite3'
-import { DEFAULT_PREFS, clampPrefs, type ReadingPrefs } from '@shared/types'
+import { DEFAULT_PREFS, applyPrefsPatch, clampPrefs, type ReadingPrefs } from '@shared/types'
 
 export function getAll(db: Database.Database): Record<string, string> {
   const rows = db.prepare('SELECT key, value FROM settings').all() as {
@@ -30,9 +30,9 @@ export function readPrefs(db: Database.Database): ReadingPrefs {
   return clampPrefs(parsed)
 }
 
-/** 写偏好统一过一遍 clampPrefs：界面传来的值不可信，越界值不该落库。 */
+/** 增量补丁先与现有偏好合并再夹取：界面传来的值不可信，越界值不该落库。 */
 export function writePrefs(db: Database.Database, input: Partial<ReadingPrefs>): ReadingPrefs {
-  const prefs = clampPrefs(input)
+  const prefs = applyPrefsPatch(readPrefs(db), input)
   set(db, 'prefs', JSON.stringify(prefs))
   return prefs
 }

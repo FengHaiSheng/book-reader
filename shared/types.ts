@@ -60,16 +60,15 @@ export function isBookFile(filePath: string): boolean {
   return bookFormatOf(filePath) !== null
 }
 
-/** 阅读偏好。每行字数是独立控件，不是字号的副产物。 */
+/** 阅读偏好。版心吃满纸面可用宽，字号只改字体大小。 */
 export type ReadingPrefs = {
   font: 'serif' | 'sans'
   fontSize: number
-  charsPerLine: number
   lineHeight: number
   theme: 'light' | 'dark'
   /**
    * AI 面板宽度（px），即用户拖左边缘拖出来的宽度。默认给到上限：窗口够宽时面板就吃满
-   * 这个宽度，窗口不够宽时由 `computeAiPanelWidth` 收窄，先保证正文列不被压窄。
+   * 这个宽度，窗口不够宽时由 `computeAiPanelWidth` 收窄，先保证正文列有最小宽度。
    */
   aiPanelWidth: number
 }
@@ -77,7 +76,6 @@ export type ReadingPrefs = {
 export const DEFAULT_PREFS: ReadingPrefs = {
   font: 'serif',
   fontSize: 19,
-  charsPerLine: 34,
   lineHeight: 1.85,
   theme: 'light',
   aiPanelWidth: 720
@@ -168,11 +166,10 @@ export type IpcResult<T> = { ok: true; value: T } | { ok: false; error: AppError
 
 /**
  * 用户可调项的边界。UI 的滑块范围与主进程的落库校验共用这一份，
- * 避免出现「界面能拖到 60 字、存进去被截成 48」这种两边不一致。
+ * 避免出现「界面能拖到 60、存进去被截成上限」这种两边不一致。
  */
 export const PREFS_LIMITS = {
-  fontSize: [15, 24],
-  charsPerLine: [24, 48],
+  fontSize: [15, 32],
   lineHeight: [1.5, 2.2],
   aiPanelWidth: [320, 720]
 } as const
@@ -182,11 +179,6 @@ export function clampPrefs(input: Partial<ReadingPrefs>): ReadingPrefs {
   return {
     font: input.font === 'sans' ? 'sans' : DEFAULT_PREFS.font,
     fontSize: clampNumber(input.fontSize, PREFS_LIMITS.fontSize, DEFAULT_PREFS.fontSize),
-    charsPerLine: clampNumber(
-      input.charsPerLine,
-      PREFS_LIMITS.charsPerLine,
-      DEFAULT_PREFS.charsPerLine
-    ),
     lineHeight: clampNumber(input.lineHeight, PREFS_LIMITS.lineHeight, DEFAULT_PREFS.lineHeight),
     theme: input.theme === 'dark' ? 'dark' : DEFAULT_PREFS.theme,
     aiPanelWidth: clampNumber(
@@ -195,6 +187,17 @@ export function clampPrefs(input: Partial<ReadingPrefs>): ReadingPrefs {
       DEFAULT_PREFS.aiPanelWidth
     )
   }
+}
+
+/**
+ * 把增量补丁叠到现有偏好上再夹取。
+ * Aa 面板每次只传改动的字段；若直接 clampPrefs(patch)，缺字段会回落默认，其它滑块被拽回去。
+ */
+export function applyPrefsPatch(
+  current: ReadingPrefs,
+  patch: Partial<ReadingPrefs>
+): ReadingPrefs {
+  return clampPrefs({ ...current, ...patch })
 }
 
 function clampNumber(value: unknown, [min, max]: readonly [number, number], fallback: number): number {

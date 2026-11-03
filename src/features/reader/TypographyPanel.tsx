@@ -7,14 +7,8 @@ import type { ReaderLayout } from './layout'
  * 与设置页的「阅读偏好」共用同一份 `ReadingPrefs`（spec §4.6），所以这里只负责发出增量改动，
  * 落库、夹取、失败回滚都归调用方。
  *
- * 三件事值得说明：
- * 1. 滑块的 min/max/step 全部来自 `PREFS_LIMITS`，与主进程落库时的校验是同一份常量。
- *    两边各写一份，迟早会出现「界面能拖到 60 字、存进去被截成 48」。
- * 2. 「每行字数」是独立控件，不是字号的副产物（spec §4.4）：字号大了想放大、一行太长了想收窄，
- *    是两个不同的诉求。
- * 3. slider 的 value 用 `prefs.*`（用户设定值）而不是 `layout.*`（实际生效值）。
- *    版心宽被窗口压窄时，滑块不该自己滑回去 —— 否则用户会以为是自己拖错了，
- *    实际生效值显示在标签里（`layout.charsPerLine`），降级提示在阅读器条上。
+ * 滑块的 min/max/step 全部来自 `PREFS_LIMITS`，与主进程落库时的校验是同一份常量。
+ * 版心吃满纸面可用宽：改字号只改字体大小，不牵动行宽。
  */
 export function TypographyPanel({
   prefs,
@@ -28,7 +22,6 @@ export function TypographyPanel({
   onClose: () => void
 }) {
   const [minFontSize, maxFontSize] = PREFS_LIMITS.fontSize
-  const [minChars, maxChars] = PREFS_LIMITS.charsPerLine
   const [minLineHeight, maxLineHeight] = PREFS_LIMITS.lineHeight
 
   return (
@@ -75,22 +68,6 @@ export function TypographyPanel({
           step={1}
           value={prefs.fontSize}
           onChange={(event) => onChange({ fontSize: Number(event.target.value) })}
-        />
-      </div>
-
-      <div className="typo__field">
-        <label className="typo__label" htmlFor="prefs-charsPerLine">
-          每行字数 · 实际 {layout.charsPerLine}
-          {layout.clamped ? `（设定 ${prefs.charsPerLine}）` : ''}
-        </label>
-        <input
-          id="prefs-charsPerLine"
-          type="range"
-          min={minChars}
-          max={maxChars}
-          step={1}
-          value={prefs.charsPerLine}
-          onChange={(event) => onChange({ charsPerLine: Number(event.target.value) })}
         />
       </div>
 

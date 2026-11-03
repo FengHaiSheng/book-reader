@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReaderBook } from '@shared/types'
+import { readerBarPadLeft } from './chrome'
 
 /** 翻页后延迟落库：连着翻十页不该发十次 IPC */
 const SAVE_DEBOUNCE_MS = 500
@@ -13,12 +14,15 @@ const SAVE_DEBOUNCE_MS = 500
 export function ComicReader({
   book,
   startChapterId,
+  shellSidebarWidth,
   exitConfirmOpen = false,
   onRequestExit
 }: {
   book: ReaderBook
   /** 上次读到的那一页（chapter id）；找不到就从头开始 */
   startChapterId: number | null
+  /** 壳层侧栏当前宽，用来算顶栏左侧让位 */
+  shellSidebarWidth: number
   /** 离开确认已打开时 Esc 只关确认 */
   exitConfirmOpen?: boolean
   /** 请求离开阅读（由壳层弹出确认） */
@@ -131,8 +135,7 @@ export function ComicReader({
 
   return (
     <div className="reader reader--comic">
-      <div className="reader__bar">
-        <span className="reader__title">{book.title}</span>
+      <div className="reader__bar" style={{ paddingLeft: readerBarPadLeft(shellSidebarWidth) }}>
         <span className="reader__spacer" />
         <button
           type="button"
