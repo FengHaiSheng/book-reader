@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>设置 · 图文教程示意</title>
+<style>
+  :root {
+    --desk: #E8E2D8;
+    --paper: #FCFAF6;
+    --paper-raised: #FFFFFF;
+    --ink: #2B2723;
+    --ink-muted: #6B645C;
+    --rule: rgba(43,39,35,.12);
+    --accent: #B4462F;
+    --ink-link: #2F4A6E;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font: 14px/1.5 "PingFang SC", "Noto Sans SC", sans-serif;
+    color: var(--ink);
+    background: var(--desk);
+  }
+  .app { display: flex; height: 100vh; }
+  .sidebar {
+    width: 208px; padding: 56px 16px 16px;
+    background: #DDD6CB; border-right: 1px solid var(--rule);
+  }
+  .nav { display: flex; flex-direction: column; gap: 4px; margin-bottom: 24px; }
+  .nav a {
+    display: block; padding: 8px 12px; border-radius: 6px;
+    color: var(--ink-muted); text-decoration: none;
+  }
+  .nav a.is-on { background: var(--paper-raised); color: var(--ink); box-shadow: 0 1px 2px rgba(43,39,35,.1); }
+  .main { flex: 1; display: flex; flex-direction: column; background: var(--paper); }
+  .titlebar {
+    height: 44px; display: flex; align-items: center; padding: 0 24px;
+    border-bottom: 1px solid var(--rule); font-weight: 500;
+  }
+  .content { padding: 28px 40px; max-width: 720px; overflow: auto; }
+  h2 { font-size: 15px; font-weight: 600; margin: 0 0 14px; }
+  .group {
+    background: var(--paper-raised); border: 1px solid var(--rule);
+    border-radius: 10px; padding: 18px 20px; margin-bottom: 18px;
+    box-shadow: 0 1px 2px rgba(43,39,35,.06);
+  }
+  .row {
+    display: flex; align-items: center; gap: 16px;
+    padding: 10px 0; border-top: 1px solid var(--rule);
+  }
+  .row:first-of-type { border-top: 0; padding-top: 0; }
+  .label { width: 96px; color: var(--ink-muted); flex-shrink: 0; }
+  .seg { display: inline-flex; background: var(--desk); border-radius: 8px; padding: 3px; gap: 2px; }
+  .seg b {
+    padding: 5px 12px; border-radius: 6px; font-weight: 500; font-size: 13px;
+  }
+  .seg b.is-on { background: var(--paper-raised); box-shadow: 0 1px 2px rgba(43,39,35,.12); }
+  input[type="text"], select {
+    flex: 1; max-width: 280px; height: 32px; padding: 0 10px;
+    border: 1px solid var(--rule); border-radius: 6px; background: var(--paper);
+    color: var(--ink); font: inherit;
+  }
+  .btn {
+    height: 32px; padding: 0 14px; border-radius: 6px; border: 1px solid var(--rule);
+    background: var(--paper); cursor: default; font: inherit;
+  }
+  .btn--primary { background: var(--accent); color: #fff; border-color: transparent; }
+  .hint { color: var(--ink-muted); font-size: 12px; margin: 8px 0 0; }
+  .caps { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 8px; }
+  .caps th, .caps td { text-align: left; padding: 6px 8px; border-top: 1px solid var(--rule); }
+  .ok { color: #2F6B4F; }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .stat {
+    background: var(--desk); border-radius: 8px; padding: 12px 14px;
+  }
+  .stat span { display: block; color: var(--ink-muted); font-size: 12px; }
+  .stat strong { font-size: 20px; font-weight: 600; }
+  .heat {
+    display: grid; grid-template-columns: repeat(14, 1fr); gap: 3px; margin-top: 12px;
+  }
+  .heat i {
+    display: block; aspect-ratio: 1; border-radius: 2px; background: color-mix(in srgb, var(--accent) 18%, var(--desk));
+  }
+  .heat i.l2 { background: color-mix(in srgb, var(--accent) 40%, var(--desk)); }
+  .heat i.l3 { background: color-mix(in srgb, var(--accent) 65%, var(--desk)); }
+  .heat i.l4 { background: var(--accent); }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="sidebar">
+    <div class="nav">
+      <a href="#">书架</a>
+      <a href="#">笔记</a>
+      <a class="is-on" href="#">设置</a>
+    </div>
+  </nav>
+  <main class="main">
+    <div class="titlebar">设置</div>
+    <div class="content">
+      <section class="group">
+        <h2>模型</h2>
+        <div class="row">
+          <span class="label">服务商</span>
+          <div class="seg">
+            <b class="is-on">DeepSeek</b><b>通义千问</b><b>智谱 GLM</b><b>Kimi</b>
+          </div>
+        </div>
+        <div class="row">
+          <span class="label">API Key</span>
+          <input type="text" value="sk-••••••••3f7a" readonly />
+          <button class="btn">清除</button>
+        </div>
+        <div class="row">
+          <span class="label">模型</span>
+          <select><option>deepseek-chat</option></select>
+          <button class="btn btn--primary">测试连接</button>
+        </div>
+        <p class="hint">密钥用系统钥匙串加密，只存本机。导出书库不会带走 API Key。</p>
+        <table class="caps">
+          <tr><th>能力</th><th>状态</th></tr>
+          <tr><td>对话 / 流式</td><td class="ok">支持</td></tr>
+          <tr><td>向量检索</td><td>不支持 → 降级为关键词检索</td></tr>
+          <tr><td>结构化输出</td><td class="ok">支持</td></tr>
+        </table>
+      </section>
+
+      <section class="group">
+        <h2>阅读偏好</h2>
+        <div class="row">
+          <span class="label">字体</span>
+          <div class="seg"><b class="is-on">宋体</b><b>黑体</b></div>
+        </div>
+        <div class="row"><span class="label">字号</span><span>19</span></div>
+        <div class="row"><span class="label">每行字数</span><span>34（独立控件）</span></div>
+        <div class="row"><span class="label">行距</span><span>1.85</span></div>
+        <div class="row">
+          <span class="label">主题</span>
+          <div class="seg"><b class="is-on">亮</b><b>暗</b></div>
+        </div>
+      </section>
+
+      <section class="group">
+        <h2>阅读统计</h2>
+        <div class="stats">
+          <div class="stat"><span>今日</span><strong>42 分</strong></div>
+          <div class="stat"><span>近 7 天</span><strong>5.2 时</strong></div>
+          <div class="stat"><span>累计</span><strong>38 时</strong></div>
+        </div>
+        <div class="heat">
+          <i></i><i class="l2"></i><i></i><i class="l3"></i><i class="l2"></i><i class="l4"></i><i></i>
+          <i class="l2"></i><i class="l3"></i><i></i><i class="l2"></i><i class="l4"></i><i class="l3"></i><i></i>
+        </div>
+      </section>
+
+      <section class="group">
+        <h2>数据</h2>
+        <p class="hint" style="margin-top:0">本地书库 24 本 · 218 MB。备份不含密钥。</p>
+        <div class="actions">
+          <button class="btn">打开书库目录</button>
+          <button class="btn">导出全部数据</button>
+          <button class="btn">从备份恢复</button>
+          <button class="btn">清理日志</button>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+</body>
+</html>
