@@ -23,10 +23,9 @@ async function flashNames(win: import('playwright').Page): Promise<string[]> {
 }
 
 /**
- * 全库跨书搜索的一个关键性质：书名筛选（逐字、零 IPC）与正文搜索（显式触发、一条 FTS）
- * 是两件事，输入框里打字只过滤书名，绝不能顺手发检索。
+ * 全库跨书搜索：书名筛选与正文搜索分离；点命中进阅读后浮层仍在，可再点下一条。
  */
-test('全库搜正文：命中分组、点开落到位、纯标点给提示、Esc 清空', async () => {
+test('全库搜正文：浮层分页、进阅读仍可点、关闭保留输入、Esc 清空', async () => {
   const userDataDir = mkdtempSync(join(tmpdir(), 'book-read-allsearch-'))
   const epubPath = join(userDataDir, 'long.epub')
   await writeEpub(epubPath, longBookFiles())
@@ -36,34 +35,55 @@ test('全库搜正文：命中分组、点开落到位、纯标点给提示、Es
   await win.evaluate((file) => (window as any).api.library.importPath(file), epubPath)
   await win.reload()
 
-  // 「蝉声」只在第二章出现，正好用来验「点一条进书并落到那一章」
+  // 「蝉声」只在第二章出现
   await win.locator('.search__input').fill('蝉声')
-  await win.locator('.search__input').press('Enter')
+  await win.locator('.search-group__go').click()
   await expect(win.locator('.libsearch')).toBeVisible()
   await expect(win.locator('.libsearch__ghead')).toContainText('《河边的月亮》')
-  // 命中词要在摘要里标出来，否则一堆相似句子分不出差别
   await expect(win.locator('.libsearch__mark').first()).toHaveText('蝉声')
 
-  // 只有标点的关键词切不出 token：查不了和查不到是两回事，必须分开说
+  // 纯标点
   await win.locator('.search__input').fill('……')
   await win.locator('.search__input').press('Enter')
   await expect(win.locator('.libsearch__empty')).toContainText('没有可检索的字符')
   await expect(win.locator('.libsearch__list')).toHaveCount(0)
 
-  // Esc 把书名筛选与正文结果一起清掉
+  // Esc：输入与结果一起清
   await win.locator('.search__input').press('Escape')
   await expect(win.locator('.libsearch')).toBeHidden()
   await expect(win.locator('.search__input')).toHaveValue('')
 
-  await win.locator('.search__input').fill('蝉声')
+  // 多命中词：进阅读后浮层细条还在，展开可再点
+  await win.locator('.search__input').fill('薄薄的雾')
   await win.locator('.search__input').press('Enter')
   await expect(win.locator('.libsearch__item').first()).toBeVisible()
+  const hitCount = await win.locator('.libsearch__item').count()
+  expect(hitCount).toBeGreaterThan(1)
 
   await win.locator('.libsearch__item').first().click()
-  await expect(win.locator('.reader__chapter')).toHaveText('第二章 夏夜')
-  // 跨章 / 摘录定位要等新文档就位后由定位链完成，闪烁只亮 2 秒 —— 轮询等它出现
+  await expect(win.locator('.reader__chapter')).toHaveText('第一章 河边')
   await waitForChapterLoaded(win)
   await expect.poll(async () => (await flashNames(win)).includes('cite-flash')).toBe(true)
+
+  // 点开后浮层应收成细条，但仍挂在壳层上
+  await expect(win.locator('.libsearch')).toBeVisible()
+  await expect(win.locator('.libsearch')).toHaveClass(/libsearch--collapsed/)
+  await expect(win.locator('.libsearch__list')).toHaveCount(0)
+
+  await win.locator('.libsearch__acts button', { hasText: '展开' }).click()
+  await expect(win.locator('.libsearch__item').nth(1)).toBeVisible()
+  await win.locator('.libsearch__item').nth(1).click()
+  await waitForChapterLoaded(win)
+  await expect.poll(async () => (await flashNames(win)).includes('cite-flash')).toBe(true)
+  await expect(win.locator('.libsearch')).toHaveClass(/libsearch--collapsed/)
+
+  // 关闭：丢掉结果，回到书架后输入仍在
+  await win.locator('.libsearch__acts button', { hasText: '关闭' }).click()
+  await expect(win.locator('.libsearch')).toBeHidden()
+
+  // 侧栏回书架（阅读中点书架会直接离开，见壳层行为）
+  await win.getByRole('navigation', { name: '主导航' }).getByRole('button', { name: '书架' }).click()
+  await expect(win.locator('.search__input')).toHaveValue('薄薄的雾')
 
   await app.close()
 })

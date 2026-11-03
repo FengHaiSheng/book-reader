@@ -139,10 +139,9 @@ export async function aiPrompts(app: ElectronApplication): Promise<string[]> {
   )
 }
 
-/** 阅读中经侧栏离开：点「书架」→ 确认「离开」 */
+/** 阅读中经侧栏离开：点「书架」直接退出（不再弹确认） */
 export async function exitReading(win: Page): Promise<void> {
   await win.getByRole('navigation', { name: '主导航' }).getByRole('button', { name: '书架' }).click()
-  await win.getByRole('button', { name: '离开' }).click()
 }
 
 /** 阅读侧栏默认收起；操作目录/书签前先展开 */

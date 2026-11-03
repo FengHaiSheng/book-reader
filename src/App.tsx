@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { BookStatus, LibraryStats, ReadingPrefs, ReadingTarget, Tag } from '@shared/types'
+import type {
+  BookStatus,
+  LibraryStats,
+  ReadingPrefs,
+  ReadingTarget,
+  SearchHitWithBook,
+  Tag
+} from '@shared/types'
 import { TitleBar } from './shell/TitleBar'
 import { Sidebar, type PageId } from './shell/Sidebar'
 import {
@@ -7,18 +14,19 @@ import {
   type ReadingChromeValue
 } from './shell/ReadingChromeContext'
 import { ExitReadingModal } from './shell/ExitReadingModal'
-import { SIDEBAR_COLLAPSED_WIDTH, SIDEBAR_WIDTH } from './shell/sidebarWidth'
+import {
+  SIDEBAR_COLLAPSED_WIDTH,
+  SIDEBAR_EXPANDED_MIN_WIDTH,
+  SIDEBAR_WIDTH,
+  clampExpandedSidebarWidth
+} from './shell/sidebarWidth'
 import { LibraryPage } from './pages/LibraryPage'
 import { NotesPage } from './pages/NotesPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { ReaderPage } from './features/reader/ReaderPage'
+import { LibraryBodySearchOverlay } from './features/library/LibraryBodySearchOverlay'
+import { useBodySearch } from './features/library/useBodySearch'
 import './styles/base.css'
-
-const TITLES: Record<PageId, string> = {
-  library: '书架',
-  notes: '笔记',
-  settings: '设置'
-}
 
 export default function App() {
   const [page, setPage] = useState<PageId>('library')
@@ -27,7 +35,27 @@ export default function App() {
   const [tagFilter, setTagFilter] = useState<number | null>(null)
   const [statusFilter, setStatusFilter] = useState<BookStatus | null>(null)
   const [stats, setStats] = useState<LibraryStats | null>(null)
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  /** 书架搜索框：与正文浮层同挂 App，进阅读回来不丢字 */
+  const [libraryQuery, setLibraryQuery] = useState('')
+  const {
+    bodyQuery,
+    hits: bodyHits,
+    busy: bodyBusy,
+    error: bodyError,
+    open: bodyOpen,
+    page: bodyPage,
+    active: bodyActive,
+    run: runBodySearch,
+    collapse: collapseBodySearch,
+    toggle: toggleBodySearch,
+    setPage: setBodyPage,
+    close: closeBodySearch,
+    clearAll: clearBodySearch
+  } = useBodySearch()
+  /** 阅读侧栏宽度；进入阅读收成图标轨，可拖宽；退出恢复默认展开宽 */
+  const [readingSidebarWidth, setReadingSidebarWidth] = useState(SIDEBAR_COLLAPSED_WIDTH)
+  /** 上次展开宽，点「展开」时回到这里（不低于展开最小宽） */
+  const lastExpandedWidth = useRef(Math.max(SIDEBAR_WIDTH, SIDEBAR_EXPANDED_MIN_WIDTH))
   const [exitDialog, setExitDialog] = useState<{ to: PageId | null } | null>(null)
   const [readingChrome, setReadingChrome] = useState<ReadingChromeValue | null>(null)
   const flushExitRef = useRef<(() => void) | null>(null)
@@ -39,6 +67,23 @@ export default function App() {
   // 每次渲染给一个新对象会让开书 effect 反复重跑，读一次书要重开好几次
   const openBook = useCallback((bookId: string) => {
     setReading({ bookId, chapterId: null, cfi: null })
+  }, [])
+
+  const openHit = useCallback(
+    (hit: SearchHitWithBook) => {
+      collapseBodySearch()
+      setReading({
+        bookId: hit.bookId,
+        chapterId: hit.chapterId,
+        cfi: null,
+        excerpt: hit.text
+      })
+    },
+    [collapseBodySearch]
+  )
+
+  const openAt = useCallback((target: ReadingTarget) => {
+    setReading(target)
   }, [])
 
   const refreshTags = useCallback(async () => {
@@ -86,41 +131,75 @@ export default function App() {
     })
   }, [])
 
-  // 进入阅读自动收起；退出时由确认回调强制展开
+  // 进入阅读自动收成图标轨
   useEffect(() => {
-    if (reading) setSidebarCollapsed(true)
+    if (reading) setReadingSidebarWidth(SIDEBAR_COLLAPSED_WIDTH)
   }, [reading])
 
-  const requestExit = useCallback((to: PageId | null) => {
-    setExitDialog((current) => (current !== null ? current : { to }))
+  const setSidebarWidth = useCallback((width: number) => {
+    setReadingSidebarWidth(width)
+    if (width > SIDEBAR_COLLAPSED_WIDTH) {
+      lastExpandedWidth.current = clampExpandedSidebarWidth(width)
+    }
   }, [])
 
-  const confirmExit = useCallback(() => {
-    if (exitDialog === null) return
+  const toggleCollapsed = useCallback(() => {
+    setReadingSidebarWidth((current) => {
+      if (current <= SIDEBAR_COLLAPSED_WIDTH) {
+        return clampExpandedSidebarWidth(lastExpandedWidth.current)
+      }
+      lastExpandedWidth.current = clampExpandedSidebarWidth(current)
+      return SIDEBAR_COLLAPSED_WIDTH
+    })
+  }, [])
+
+  /** 立刻离开阅读并可选切到壳层页（侧栏三项走这条，不弹确认） */
+  const leaveReading = useCallback((to: PageId | null) => {
     flushExitRef.current?.()
-    const to = exitDialog.to
     setReading(null)
     setReadingChrome(null)
     flushExitRef.current = null
     if (to !== null) setPage(to)
-    setSidebarCollapsed(false)
+    setReadingSidebarWidth(SIDEBAR_WIDTH)
     setExitDialog(null)
-  }, [exitDialog])
+  }, [])
 
-  const shellSidebarWidth =
-    reading !== null && sidebarCollapsed ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_WIDTH
+  /** Esc 等路径仍先确认 */
+  const requestExit = useCallback((to: PageId | null) => {
+    setExitDialog((current) => (current !== null ? current : { to }))
+  }, [])
+
+  /**
+   * 阅读中 Esc：查找由 ReaderPage 先关；这里再挡一层 ——
+   * 正文浮层展开时先收起，已收起才走离开确认。
+   */
+  const requestExitFromReader = useCallback(() => {
+    if (bodyActive && bodyOpen) {
+      collapseBodySearch()
+      return
+    }
+    requestExit(null)
+  }, [bodyActive, bodyOpen, collapseBodySearch, requestExit])
+
+  const confirmExit = useCallback(() => {
+    if (exitDialog === null) return
+    leaveReading(exitDialog.to)
+  }, [exitDialog, leaveReading])
+
+  const shellSidebarWidth = reading !== null ? readingSidebarWidth : SIDEBAR_WIDTH
 
   return (
     <ReadingChromeProvider value={readingChrome}>
       <div className="app">
-        {reading === null && <TitleBar title={TITLES[page]} />}
+        {reading === null && <TitleBar />}
         <div className="body">
           <Sidebar
             current={page}
             reading={reading !== null}
-            collapsed={reading !== null && sidebarCollapsed}
-            onToggleCollapsed={() => setSidebarCollapsed((value) => !value)}
-            onSelect={(id) => (reading !== null ? requestExit(id) : setPage(id))}
+            width={shellSidebarWidth}
+            onWidthChange={reading !== null ? setSidebarWidth : undefined}
+            onToggleCollapsed={reading !== null ? toggleCollapsed : undefined}
+            onSelect={(id) => (reading !== null ? leaveReading(id) : setPage(id))}
             tags={reading === null && page === 'library' ? tags : null}
             tagFilter={tagFilter}
             onPickTag={setTagFilter}
@@ -129,13 +208,28 @@ export default function App() {
             stats={stats}
           />
           <main className={`content${reading !== null ? ' content--reading' : ''}`}>
+            {bodyActive && (
+              <LibraryBodySearchOverlay
+                query={bodyQuery}
+                hits={bodyHits}
+                busy={bodyBusy}
+                error={bodyError}
+                open={bodyOpen}
+                page={bodyPage}
+                reading={reading !== null}
+                onToggle={toggleBodySearch}
+                onClose={closeBodySearch}
+                onPage={setBodyPage}
+                onOpen={openHit}
+              />
+            )}
             {reading !== null ? (
               <ReaderPage
                 bookId={reading.bookId}
                 target={reading}
                 shellSidebarWidth={shellSidebarWidth}
                 exitConfirmOpen={exitDialog !== null}
-                onRequestExit={() => requestExit(null)}
+                onRequestExit={requestExitFromReader}
                 registerFlushExit={registerFlushExit}
                 onChromeChange={setReadingChrome}
               />
@@ -144,14 +238,20 @@ export default function App() {
                 {page === 'library' && (
                   <LibraryPage
                     onOpen={openBook}
-                    onOpenAt={setReading}
                     tags={tags}
                     tagFilter={tagFilter}
                     statusFilter={statusFilter}
                     onLibraryChanged={onLibraryChanged}
+                    query={libraryQuery}
+                    onQuery={setLibraryQuery}
+                    onSearchBody={() => void runBodySearch(libraryQuery)}
+                    onEscapeSearch={() => {
+                      setLibraryQuery('')
+                      clearBodySearch()
+                    }}
                   />
                 )}
-                {page === 'notes' && <NotesPage onOpenAt={setReading} />}
+                {page === 'notes' && <NotesPage onOpenAt={openAt} />}
                 {page === 'settings' && <SettingsPage />}
               </>
             )}

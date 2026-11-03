@@ -56,33 +56,35 @@ export function LibraryTitlebarTools({
 
   return createPortal(
     <div className="lib-tools">
-      <label className="search">
-        <span className="search__icon" aria-hidden="true">
-          ⌕
-        </span>
-        <input
-          ref={inputRef}
-          type="text"
-          className="search__input"
-          placeholder="搜索书名、作者或标签"
-          value={query}
-          onChange={(event) => onQuery(event.target.value)}
-          onKeyDown={(event) => {
-            // 输入只过滤书名；正文搜索必须显式触发，所以 onChange 里绝不清正文结果，
-            // 否则用户边打字边看着结果消失，还看不出结果其实是旧的
-            if (event.key === 'Enter') {
-              event.preventDefault()
-              onSearchBody()
-            } else if (event.key === 'Escape') {
-              onEscape()
-            }
-          }}
-        />
-        <kbd>{isMac ? '⌘K' : 'Ctrl K'}</kbd>
-      </label>
-      <button type="button" className="tb-btn" onClick={onSearchBody}>
-        搜正文
-      </button>
+      <div className="search-group">
+        <label className="search">
+          <span className="search__icon" aria-hidden="true">
+            ⌕
+          </span>
+          <input
+            ref={inputRef}
+            type="text"
+            className="search__input"
+            placeholder="搜索书名、作者或标签"
+            value={query}
+            onChange={(event) => onQuery(event.target.value)}
+            onKeyDown={(event) => {
+              // 输入只过滤书名；正文搜索必须显式触发，所以 onChange 里绝不清正文结果，
+              // 否则用户边打字边看着结果消失，还看不出结果其实是旧的
+              if (event.key === 'Enter') {
+                event.preventDefault()
+                onSearchBody()
+              } else if (event.key === 'Escape') {
+                onEscape()
+              }
+            }}
+          />
+          <kbd>{isMac ? '⌘K' : 'Ctrl K'}</kbd>
+        </label>
+        <button type="button" className="search-group__go" onClick={onSearchBody}>
+          搜正文
+        </button>
+      </div>
       <span className="tb-sep" aria-hidden="true" />
       <ImportButton busy={busy} onPick={onPick} />
       <button type="button" className="tb-btn" aria-expanded={managing} onClick={onToggleTags}>

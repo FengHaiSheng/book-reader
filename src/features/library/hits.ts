@@ -1,10 +1,29 @@
 import type { SearchHitWithBook } from '@shared/types'
 
+/** 浮层整次结果统一分页；与「每书截 5 条」无关 */
+export const PAGE_SIZE = 10
+
 export type BookHits = {
   bookId: string
   bookTitle: string
   count: number
   hits: SearchHitWithBook[]
+}
+
+/** 0-based 页；越界给空数组 */
+export function sliceHitsPage(
+  hits: readonly SearchHitWithBook[],
+  page: number
+): SearchHitWithBook[] {
+  if (page < 0) return []
+  const start = page * PAGE_SIZE
+  return hits.slice(start, start + PAGE_SIZE)
+}
+
+/** 至少 1 页（空结果也显示「第 1 / 1 页」由 UI 决定；这里空为 0） */
+export function hitPageCount(total: number): number {
+  if (total <= 0) return 0
+  return Math.ceil(total / PAGE_SIZE)
 }
 
 /**
