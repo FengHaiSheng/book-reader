@@ -2,24 +2,27 @@
 
 # 阅微
 
-**一个纯本地的桌面端读书软件 —— 把本地书当作要沉淀的知识，而不是消遣**
+**本地读书 × AI 理解 —— 把书读进脑子里，把疑问留给模型**
+
+纯本地桌面阅读器，内建划词解释 / 翻译 / 问答、章节与全书分析、AI 笔记钉住；书库与密钥都留在本机，AI 走 BYOK（自带密钥）。
 
 [![Electron](https://img.shields.io/badge/Electron-44-47848F?logo=electron&logoColor=white)](https://www.electronjs.org/)
 [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white)](https://react.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![SQLite](https://img.shields.io/badge/SQLite-better--sqlite3-003B57?logo=sqlite&logoColor=white)](https://github.com/WiseLibs/better-sqlite3)
+[![AI](https://img.shields.io/badge/AI-BYOK%20%7C%20DeepSeek%20%2F%20Qwen%20%2F%20GLM%20%2F%20Kimi-B4462F)](#ai-配置byok)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-2B2723)](#下载与安装)
 [![License](https://img.shields.io/badge/license-ISC-2B2723)](#许可)
 
-[界面预览](#界面预览) · [功能](#功能) · [图文教程](#图文教程) · [下载与安装](#下载与安装) · [从源码运行](#从源码运行) · [AI 配置](#ai-配置byok) · [技术栈](#技术栈与架构) · [设计文档](#设计文档)
+[界面预览](#界面预览) · [功能](#功能) · [图文教程](#图文教程) · [下载与安装](#下载与安装) · [从源码运行](#从源码运行) · [AI 配置](#ai-配置byok) · [技术栈](#技术栈与架构) · [设计文档](#设计文档) · [赞赏](#赞赏)
 
 </div>
 
 ---
 
-**无账号、无云同步、无遥测。** 书库、笔记与阅读进度全部只存在这台电脑上，首次启动不联网、不需要登录。AI 能力走 BYOK（自带密钥），不配置也能完整读书。
+**读是主线，AI 是读中的第二双手。** 无账号、无云同步、无遥测——书库、笔记与阅读进度全部只存在这台电脑上，首次启动不联网、不需要登录。配上 DeepSeek / 通义千问 / 智谱 GLM / Kimi 任一密钥，即可在划词处解释、翻译、追问，并生成章节要点与全书提纲；不配置也能完整读书。
 
-> **功能现状**（2026-11-08）：书架、多格式导入、文字/漫画阅读、划词标注、笔记导出、BYOK AI、**学习脉络（单目标能力树与问缺）**、阅读统计与整库备份均已落地。完整条目见 [功能清单](docs/superpowers/specs/2026-11-03-feature-inventory.md)。安装包发布在 [Releases](https://github.com/FengHaiSheng/book-reader/releases)。下方界面图来自设计样板，与产品视觉一致。
+> **功能现状**（2026-11-08）：书架、多格式导入、文字/漫画阅读、划词标注、**BYOK AI（问答 / 解释 / 翻译 / 分析）**、**学习脉络（单目标能力树与问缺）**、笔记导出、阅读统计与整库备份均已落地。完整条目见 [功能清单](docs/superpowers/specs/2026-11-03-feature-inventory.md)。安装包发布在 [Releases](https://github.com/FengHaiSheng/book-reader/releases)。下方界面图来自设计样板，与产品视觉一致。
 
 ---
 
@@ -30,12 +33,12 @@
 | 书架 | 阅读器 |
 |---|---|
 | ![书架](docs/images/bookshelf.png) | ![阅读器](docs/images/reader.png) |
-| 网格 / 列表双视图，封面按真实装帧渲染（投影 + 书脊），末尾即拖放终点，支持一次拖入多本。 | 单章 iframe + CSS 多栏横向翻页，划词浮条就地高亮、写批注、问 AI。窗口够宽时自动切对开双页；右侧可开 AI 面板。 |
+| 网格 / 列表双视图，封面按真实装帧渲染（投影 + 书脊），末尾即拖放终点，支持一次拖入多本。 | 单章 iframe + CSS 多栏横向翻页；划词即可高亮、写批注，并一键 **解释 / 翻译 / 问 AI**。窗口够宽时自动对开双页；右侧 **AI 面板** 可继续对话与跑章节/全书分析。 |
 
 | 笔记 |
 |---|
 | ![笔记](docs/images/notes.png) |
-| 跨书汇总，按书分组、分组头吸顶；左侧色条对应书内高亮颜色；右栏给出所选笔记的原文上下文，不跳回书里也能判断这条笔记是否要留；可导出 Markdown / Anki / HTML。 |
+| 跨书汇总，按书分组、分组头吸顶；左侧色条对应书内高亮颜色；右栏给出所选笔记的原文上下文，并可筛出 **有 AI 笔记** 的条目；可导出 Markdown / Anki / HTML（可选含 AI 回答）。 |
 
 ---
 
@@ -74,10 +77,13 @@
 - **导出**：Markdown / Anki / HTML；可选含批注、位置、上下文、AI 笔记；支持全部或当前筛选结果
 - 全部落在本机 SQLite，杀进程重开零丢失
 
-### AI 能力（BYOK）
+### AI 能力（与阅读器深度结合 · BYOK）
 
-- **划词问答 / 解释 / 翻译**：流式回答，附带可回跳的引用；发送前 token 预估，回答下显示本次用量
-- **本章小结、全书要点、关键词与概念、思维导图**：固定提示词与结构，结果落库复用；思维导图**不调模型**（重组关键词结果）
+阅微不是「旁边挂个聊天框」——AI 嵌在划词、笔记与阅读流程里：选中即问、回答可钉回原文、分析任务结果落库复用。
+
+- **划词即 AI**：解释 / 翻译 / 问答，流式回答，附带可回跳的正文引用；发送前 token 预估，回答下显示本次用量
+- **读中分析**：本章小结、全书要点、关键词与概念、思维导图；固定提示词与结构，结果落库复用；思维导图**不调模型**（重组关键词结果）
+- **AI 笔记钉住**：回答可钉到划线，笔记页可按「有 AI 笔记」筛选并随 Markdown / Anki / HTML 导出
 - **中文检索默认可用**：FTS5 bigram，不依赖 embedding；也可显式为某本书建立向量索引
 - 支持 **DeepSeek / 通义千问 / 智谱 GLM / Kimi** 四家 OpenAI 兼容接口
 - **单通道串行**：同一时刻只有一个 AI 请求；切章、关面板、取消即中断
@@ -209,7 +215,7 @@
 
 ### 首次启动
 
-不联网、不需要注册登录。导入一本书就能开始读；AI 功能是可选增强，随时在「设置 → 模型」里配置。建议按 [图文教程](#图文教程) 走一遍。
+不联网、不需要注册登录。导入一本书就能开始读；要启用划词解释、翻译、问答与章节分析，在「设置 → 模型」填入任一支持厂商的 API Key 即可（BYOK）。建议按 [图文教程](#图文教程) 走一遍。
 
 ---
 
@@ -278,6 +284,8 @@ electron-builder 会由这张 PNG 自动生成 macOS 的 `icns` 与 Windows 的 
 ---
 
 ## AI 配置（BYOK）
+
+阅微把 AI 嵌进阅读流程（划词问答、解释/翻译、章节与全书分析），密钥自备、按次计费；不配也能当普通阅读器。
 
 打开 **设置 → 模型**：
 
@@ -382,6 +390,18 @@ logs/              # 按天切分，保留 7 天
 | [实现计划](docs/superpowers/plans/) | 应用骨架 → 导入 → 阅读器 → 标注笔记 → AI → 书架与打包等 |
 
 视觉样板（可直接在浏览器打开）：[书架](design/mockups/bookshelf.html) · [阅读器](design/mockups/reader.html) · [笔记](design/mockups/notes.html) · [设置示意](design/mockups/settings-guide.html)
+
+---
+
+## 赞赏
+
+如果「阅微」帮到了你，觉得好用，欢迎扫码请我喝杯咖啡——完全自愿，谢谢支持。
+
+<div align="center">
+
+<img src="docs/images/wechat-appreciate.jpg" alt="风海生的微信赞赏码" width="280" />
+
+</div>
 
 ---
 
