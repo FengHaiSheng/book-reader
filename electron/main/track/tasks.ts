@@ -5,6 +5,7 @@ import { appError, toAppError } from '@shared/errors'
 import {
   TRACK_PROMPT_VERSION,
   normalizeTrackTree,
+  trackGapScopeKey,
   type TrackGapPayload,
   type TrackNodeInput
 } from '@shared/track'
@@ -152,27 +153,13 @@ export function remapTrackNodeIds(
   }))
 }
 
+export { trackGapScopeKey }
+
 /** 规范化目标 + 全书库 id 的 sha256。id 排序后哈希，与展示顺序无关。 */
 export function trackBuildScopeKey(goalText: string, bookIds: readonly string[]): string {
   const goal = goalText.trim().replace(/\s+/g, ' ')
   const hash = createHash('sha256').update([...bookIds].sort().join('\n'), 'utf8').digest('hex')
   return `${goal}\n${hash}`
-}
-
-/**
- * 无追问时键就是信号指纹。有追问则另起一行。
- * forceRefresh 再加时间戳，写入新行，不覆盖旧报告。
- */
-export function trackGapScopeKey(
-  fingerprint: string,
-  question: string | undefined,
-  forceRefresh: boolean,
-  now: number
-): string {
-  const normalized = (question ?? '').trim().replace(/\s+/g, ' ')
-  let key = normalized === '' ? fingerprint : `${fingerprint}\n${normalized}`
-  if (forceRefresh) key = `${key}\n${now}`
-  return key
 }
 
 export async function runTrackBuild(

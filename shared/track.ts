@@ -1,4 +1,21 @@
 export const TRACK_PROMPT_VERSION = 'v1'
+
+/**
+ * 无追问时键就是信号指纹。有追问则另起一行。
+ * forceRefresh 再加时间戳，写入新行，不覆盖旧报告。
+ */
+export function trackGapScopeKey(
+  fingerprint: string,
+  question: string | undefined,
+  forceRefresh: boolean,
+  now: number
+): string {
+  const normalized = (question ?? '').trim().replace(/\s+/g, ' ')
+  let key = normalized === '' ? fingerprint : `${fingerprint}\n${normalized}`
+  if (forceRefresh) key = `${key}\n${now}`
+  return key
+}
+
 export const SEDIMENT_WEIGHTS = { highlight: 1, note: 2, aiNote: 3 } as const
 export const TRACK_MAX_DEPTH = 3
 export const TRACK_LIBRARY_TOP_N = 80

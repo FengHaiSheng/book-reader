@@ -1,13 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import {
   errorNeedsSettings,
+  gapPanelFromResult,
   gapReportIsStale,
   gapScopeFingerprint,
   isQuietStop,
   trackPhaseLabel,
   trackProgressTask,
   treeRoots,
-  unlinkedBookIds
+  unlinkedBookIds,
+  type GapAskResult
 } from '../src/features/track/state'
 
 describe('track ui state', () => {
@@ -53,6 +55,49 @@ describe('track ui state', () => {
       { id: 'b', parentId: 'a', title: '乙', sortOrder: 0 }
     ])
     expect(roots.map((node) => node.id).sort()).toEqual(['a', 'b'])
+  })
+
+  it('已经走过的节点不再往下展开', () => {
+    const roots = treeRoots([
+      { id: 'root', parentId: null, title: '根', sortOrder: 0 },
+      { id: 'a', parentId: 'root', title: '甲', sortOrder: 0 },
+      { id: 'b', parentId: 'a', title: '乙', sortOrder: 0 },
+      { id: 'a', parentId: 'b', title: '甲环', sortOrder: 1 }
+    ])
+    expect(roots.map((node) => node.id)).toEqual(['root'])
+    expect(roots[0]?.children.map((node) => node.id)).toEqual(['a'])
+    expect(roots[0]?.children[0]?.children.map((node) => node.id)).toEqual(['b'])
+    expect(roots[0]?.children[0]?.children[0]?.children).toEqual([])
+  })
+
+  it('问缺结果以本次 payload 为准，不用另一条最新报告', () => {
+    const latest = {
+      payload: { overall: '库里更新的一份', gaps: [], nextSteps: [], note: '另一条说明' },
+      scopeKey: 'newer-fp\n别的追问',
+      createdAt: 1
+    }
+    const result: GapAskResult = {
+      payload: { overall: '这次返回', gaps: [], nextSteps: ['先读这一块'], note: '这次的说明' },
+      cached: true,
+      fingerprint: 'fp1',
+      usage: { inputTokens: 3, outputTokens: 4 }
+    }
+    const shown = gapPanelFromResult(result, latest, {
+      question: '先补哪一块',
+      forceRefresh: false,
+      now: 99
+    })
+    expect(shown.gap.payload).toBe(result.payload)
+    expect(shown.gap.payload).not.toBe(latest.payload)
+    expect(shown.gap.payload.note).toBe('这次的说明')
+    expect(shown.usage).toEqual(result.usage)
+    expect(shown.cached).toBe(true)
+    expect(shown.gap.scopeKey).toBe('fp1\n先补哪一块')
+    expect(shown.gap.createdAt).toBe(99)
+
+    const fresh = gapPanelFromResult({ ...result, cached: false }, latest, { now: 100 })
+    expect(fresh.gap.payload).toBe(result.payload)
+    expect(fresh.cached).toBe(false)
   })
 
   it('进度只认脉络通道上的 build / gap', () => {

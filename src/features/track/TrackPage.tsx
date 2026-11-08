@@ -5,6 +5,7 @@ import { Modal } from '../../shell/Modal'
 import { GapPanel } from './GapPanel'
 import {
   errorNeedsSettings,
+  gapPanelFromResult,
   isQuietStop,
   trackPhaseLabel,
   trackProgressTask,
@@ -17,6 +18,8 @@ import './track.css'
 
 const NO_KEY = '还没有模型密钥。请先到设置里填写，再生成脉络或问缺。'
 const SPEND_COPY = '将调用模型，分两阶段生成骨架并建议挂书。'
+const REBUILD_COPY =
+  '仍然存在的节点会留下原来的挂载，不只是手改的；对不上的节点会丢掉。'
 
 type SpendConfirm = { rebuild: boolean; goalText: string }
 type BusyTask = 'build' | 'gap'
@@ -168,20 +171,18 @@ export function TrackPage({
     try {
       const result = await window.api.track.gap({ question: asked, forceRefresh })
       if (!alive.current) return
-      const [latest, signals] = await Promise.all([
-        window.api.track.getLatestGap(),
-        window.api.track.computeSignals()
-      ])
+      const shown = gapPanelFromResult(result, null, {
+        question: asked,
+        forceRefresh,
+        now: Date.now()
+      })
+      setGap(shown.gap)
+      setGapCached(shown.cached)
+      const signals = await window.api.track.computeSignals()
       if (!alive.current) return
       const read = readSignals(signals)
       setFingerprint(read.fingerprint)
       setStrengthById(read.strength)
-      setGapCached(result.cached)
-      setGap(
-        latest
-          ? toGap(latest)
-          : { payload: result.payload, scopeKey: result.fingerprint, createdAt: Date.now() }
-      )
     } catch (e) {
       fail(e, '问缺没有完成')
     } finally {
@@ -492,7 +493,7 @@ function SpendDialog({
     <Modal title={confirm.rebuild ? '重生骨架？' : '生成脉络？'} onClose={onCancel}>
       <p className="exit-reading__text">
         {SPEND_COPY}
-        {confirm.rebuild ? '已手改的挂载会尽量留在仍然存在的节点上。' : ''}
+        {confirm.rebuild ? REBUILD_COPY : ''}
       </p>
       <div className="exit-reading__acts">
         <button type="button" className="btn" autoFocus onClick={onCancel}>

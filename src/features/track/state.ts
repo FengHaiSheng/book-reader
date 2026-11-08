@@ -1,9 +1,44 @@
-import type { TrackGapType } from '@shared/track'
+import { trackGapScopeKey, type TrackGapPayload, type TrackGapType } from '@shared/track'
+import type { GapView } from './types'
 
 /** 问缺 scopeKey 的第一行是信号指纹。追问和强制刷新只在后面另起一行。 */
 export function gapScopeFingerprint(scopeKey: string): string {
   const breakAt = scopeKey.indexOf('\n')
   return breakAt === -1 ? scopeKey : scopeKey.slice(0, breakAt)
+}
+
+export type GapAskResult = {
+  payload: TrackGapPayload
+  cached: boolean
+  fingerprint: string
+  usage: { inputTokens: number; outputTokens: number }
+}
+
+/**
+ * 这次问缺要画出来的状态。
+ * 只用本次返回的 payload、cached、usage 和说明；`latestGap` 可能是另一次追问或强制刷新，不能拿来替换。
+ * 「沿用上次结果，未重新计费」只看本次 `cached`。
+ */
+export function gapPanelFromResult(
+  result: GapAskResult,
+  latestGap: { payload: TrackGapPayload } | null,
+  asked: { question?: string; forceRefresh?: boolean; now: number }
+): { gap: GapView; cached: boolean; usage: GapAskResult['usage'] } {
+  void latestGap
+  return {
+    gap: {
+      payload: result.payload,
+      scopeKey: trackGapScopeKey(
+        result.fingerprint,
+        asked.question,
+        asked.forceRefresh === true,
+        asked.now
+      ),
+      createdAt: asked.now
+    },
+    cached: result.cached === true,
+    usage: result.usage
+  }
 }
 
 /** 有最近一次问缺、且它记下的指纹已经不是现在的信号时，提示可重问。不自动重跑。 */
@@ -71,11 +106,15 @@ export function treeRoots<T extends TreeSource>(nodes: readonly T[]): TreeItem<T
   }
 
   const seen = new Set<string>()
-  const walk = (parent: string | null): TreeItem<T>[] =>
-    ordered(parent).map((node) => {
+  const walk = (parent: string | null): TreeItem<T>[] => {
+    const items: TreeItem<T>[] = []
+    for (const node of ordered(parent)) {
+      if (seen.has(node.id)) continue
       seen.add(node.id)
-      return { ...node, children: walk(node.id) }
-    })
+      items.push({ ...node, children: walk(node.id) })
+    }
+    return items
+  }
 
   const roots = walk(null)
   const orphans = nodes.filter((node) => !seen.has(node.id))
