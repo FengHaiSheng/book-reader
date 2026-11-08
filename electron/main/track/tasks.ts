@@ -223,11 +223,11 @@ export async function runTrackBuild(
   const title = trackTitle(goal)
   const links = applied.links
   if (active) {
-    rebuildActiveTree(db, active.id, nodes, links, true, now)
-    db.prepare(
-      `UPDATE tracks SET goal_text = ?, title = ?, prompt_version = ?, updated_at = ?
-       WHERE id = ? AND status = 'active'`
-    ).run(goal, title, TRACK_PROMPT_VERSION, now, active.id)
+    rebuildActiveTree(db, active.id, nodes, links, true, now, {
+      goalText: goal,
+      title,
+      promptVersion: TRACK_PROMPT_VERSION
+    })
   } else {
     replaceActiveTrack(
       db,
@@ -236,12 +236,15 @@ export async function runTrackBuild(
     )
   }
 
+  const mountedBookIds = persistedMountedBookIds(listNodesWithBooks(db, trackId))
+  const uncategorized = uncategorizedBookIds(library.rankedIds, new Set(mountedBookIds))
+  const note = composeNote(applied.note, mountFailureNote(applied.mountsParsed, mountedBookIds.length))
   const payload: TrackBuildPayload = {
     goalText: goal,
     nodes,
-    mountedBookIds: applied.mountedBookIds,
-    uncategorizedBookIds: applied.uncategorizedBookIds,
-    note: applied.note
+    mountedBookIds,
+    uncategorizedBookIds: uncategorized,
+    note
   }
   saveTrackAiResult(
     db,
@@ -260,9 +263,9 @@ export async function runTrackBuild(
 
   return {
     trackId,
-    uncategorizedBookIds: applied.uncategorizedBookIds,
+    uncategorizedBookIds: uncategorized,
     usage: applied.usage,
-    note: applied.note
+    note
   }
 }
 
@@ -341,8 +344,7 @@ function settleMounts(
   library: LibrarySummary
 ): {
   links: ReturnType<typeof applyMountSuggestions>['links']
-  mountedBookIds: string[]
-  uncategorizedBookIds: string[]
+  mountsParsed: boolean
   note: string | null
   usage: AiUsage
 } {
@@ -352,16 +354,30 @@ function settleMounts(
   const applied = applyMountSuggestions(parsed ?? [], nodeIds, libraryIds)
   return {
     links: applied.links,
-    mountedBookIds: applied.mountedBookIds,
-    uncategorizedBookIds: uncategorizedBookIds(library.rankedIds, new Set(applied.mountedBookIds)),
-    note: composeNote(
-      library.note,
-      skeleton.note,
-      mounted.note,
-      parsed === null ? '挂载建议没能解析，书都留在未归类' : null
-    ),
+    mountsParsed: parsed !== null,
+    note: composeNote(library.note, skeleton.note, mounted.note),
     usage: addUsage(skeleton.usage, mounted.usage)
   }
+}
+
+/** 解析失败时，只有落库后确实一本都没挂上，才说书都留在未归类。 */
+function mountFailureNote(mountsParsed: boolean, mountedCount: number): string | null {
+  if (mountsParsed) return null
+  return mountedCount === 0 ? '挂载建议没能解析，书都留在未归类' : '挂载建议没能解析'
+}
+
+/** 落库后真正挂上的书。同一本挂在多个节点上只计一次。 */
+function persistedMountedBookIds(nodes: readonly TrackNodeView[]): string[] {
+  const seen = new Set<string>()
+  const ids: string[] = []
+  for (const node of nodes) {
+    for (const book of node.books) {
+      if (book.bookId === '' || seen.has(book.bookId)) continue
+      seen.add(book.bookId)
+      ids.push(book.bookId)
+    }
+  }
+  return ids
 }
 
 function gapNodes(tree: readonly TrackNodeView[], signals: TrackSignalsResult): GapPromptNode[] {

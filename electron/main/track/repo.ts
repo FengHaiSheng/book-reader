@@ -132,6 +132,13 @@ export function replaceActiveTrack(
   })
 }
 
+/** 与换树同一笔写入的目标字段。缺省时只刷新 updated_at。 */
+export type TrackRebuildGoal = {
+  goalText: string
+  title: string
+  promptVersion: string
+}
+
 /**
  * 换成新骨架。
  *
@@ -139,6 +146,7 @@ export function replaceActiveTrack(
  *（含用户手改）；对不上的挂载丢掉。传入的 links 只补充还没有的书，
  * 不会把已有的 user 挂载改回 ai。
  * 为假时丢掉该脉络的全部旧挂载，只写入 links。
+ * 传入 goal 时，目标、标题、提示词版本和树在同一事务里更新。
  */
 export function rebuildActiveTree(
   db: Database.Database,
@@ -146,7 +154,8 @@ export function rebuildActiveTree(
   nodes: TrackNodeInput[],
   links: TrackLinkInput[],
   keepUserLinksByNodeId: boolean,
-  now: number
+  now: number,
+  goal?: TrackRebuildGoal
 ): void {
   assertNodes(nodes)
   const nodeIds = nodeIdSet(nodes)
@@ -169,8 +178,17 @@ export function rebuildActiveTree(
     db.prepare('DELETE FROM track_node_books WHERE track_id = ?').run(trackId)
     db.prepare('DELETE FROM track_nodes WHERE track_id = ?').run(trackId)
     insertNodes(db, trackId, nodes, now, createdAtById)
+    if (goal) {
+      const goalText = requireText(goal.goalText, '目标不能为空')
+      const title = requireText(goal.title, '脉络标题不能为空')
+      const promptVersion = requireText(goal.promptVersion, '提示词版本不能为空')
+      db.prepare(
+        `UPDATE tracks SET goal_text = ?, title = ?, prompt_version = ?, updated_at = ?
+         WHERE id = ? AND status = 'active'`
+      ).run(goalText, title, promptVersion, now, trackId)
+    }
     insertLinks(db, trackId, merged)
-    db.prepare('UPDATE tracks SET updated_at = ? WHERE id = ?').run(now, trackId)
+    if (!goal) db.prepare('UPDATE tracks SET updated_at = ? WHERE id = ?').run(now, trackId)
   })
 }
 

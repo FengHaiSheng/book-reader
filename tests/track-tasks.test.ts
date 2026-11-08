@@ -109,6 +109,32 @@ function dbWithUpdates(): { db: Database.Database; runs: { sql: string; params: 
   return { db, runs }
 }
 
+/** 新建路径的 listNodesWithBooks 按刚写入的链接回答，模拟落库后的挂载。 */
+function viewsFromLastReplace(): TrackNodeView[] {
+  const input = vi.mocked(replaceActiveTrack).mock.calls.at(-1)?.[1]
+  if (!input) return []
+  return input.nodes.map((node) => ({
+    id: node.id,
+    trackId: input.id,
+    parentId: node.parentId,
+    title: node.title,
+    summary: node.summary,
+    sortOrder: node.sortOrder,
+    depth: node.depth,
+    createdAt: 1,
+    updatedAt: 1,
+    books: input.links
+      .filter((link) => link.nodeId === node.id)
+      .map((link) => ({
+        bookId: link.bookId,
+        title: link.bookId,
+        author: null,
+        source: link.source,
+        createdAt: 1
+      }))
+  }))
+}
+
 function textOf(chat: ReturnType<typeof vi.fn>, index: number): string {
   const call = chat.mock.calls[index]?.[0] as { input: { messages: { content: string }[] } } | undefined
   return call?.input.messages.map((message) => message.content).join('\n') ?? ''
@@ -164,7 +190,7 @@ describe('runTrackBuild', () => {
     vi.mocked(saveTrackAiResult).mockReset()
     vi.mocked(loadLibrarySummary).mockReturnValue(library)
     vi.mocked(getActiveTrack).mockReturnValue(null)
-    vi.mocked(listNodesWithBooks).mockReturnValue([])
+    vi.mocked(listNodesWithBooks).mockImplementation(() => viewsFromLastReplace())
   })
 
   it('两阶段成树后把短 id 换成 uuid，并丢掉不存在的书', async () => {
@@ -368,6 +394,10 @@ describe('runTrackBuild', () => {
 
   it('重生沿用模型带回的旧 id，并保留同 id 挂载', async () => {
     const { db, runs } = dbWithUpdates()
+    vi.mocked(loadLibrarySummary).mockReturnValue({
+      ...library,
+      rankedIds: ['b1', 'b2', 'b3', 'old-book']
+    })
     vi.mocked(getActiveTrack).mockReturnValue({
       id: 'track-1',
       goalText: '旧目标',
@@ -377,22 +407,33 @@ describe('runTrackBuild', () => {
       createdAt: 1,
       updatedAt: 1
     })
-    vi.mocked(listNodesWithBooks).mockReturnValue([
-      {
-        id: 'keep',
-        trackId: 'track-1',
-        parentId: null,
-        title: '旧节点',
-        summary: '原来的',
-        sortOrder: 0,
-        depth: 1,
-        createdAt: 1,
-        updatedAt: 1,
-        books: [
-          { bookId: 'old-book', title: '旧书', author: null, source: 'user', createdAt: 1 }
-        ]
-      }
-    ] as TrackNodeView[])
+    const kept = {
+      id: 'keep',
+      trackId: 'track-1',
+      parentId: null,
+      title: '旧节点',
+      summary: '原来的',
+      sortOrder: 0,
+      depth: 1,
+      createdAt: 1,
+      updatedAt: 1
+    }
+    vi.mocked(listNodesWithBooks)
+      .mockReturnValueOnce([
+        {
+          ...kept,
+          books: [{ bookId: 'old-book', title: '旧书', author: null, source: 'user', createdAt: 1 }]
+        }
+      ] as TrackNodeView[])
+      .mockReturnValue([
+        {
+          ...kept,
+          books: [
+            { bookId: 'old-book', title: '旧书', author: null, source: 'user', createdAt: 1 },
+            { bookId: 'b1', title: '深入理解计算机系统', author: null, source: 'ai', createdAt: 2 }
+          ]
+        }
+      ] as TrackNodeView[])
 
     const chat = vi.fn<TrackChat>(async (options) => {
       const text = options.input.messages.map((message) => message.content).join('\n')
@@ -434,19 +475,85 @@ describe('runTrackBuild', () => {
     expect(nodes.find((node) => node.id !== 'keep')).toMatchObject({ parentId: 'keep', title: '新枝' })
     expect(nodes.find((node) => node.id !== 'keep')?.id).toMatch(UUID)
     expect(links).toEqual([{ nodeId: 'keep', bookId: 'b1', source: 'ai' }])
-    expect(runs[0]?.sql).toMatch(/UPDATE tracks SET goal_text/)
-    expect(runs[0]?.params[0]).toBe('新目标')
-    expect(runs[0]?.params[1]).toBe('新目标')
-    expect(runs[0]?.params[2]).toBe('v1')
-    expect(runs[0]?.params[4]).toBe('track-1')
+    expect(vi.mocked(rebuildActiveTree).mock.calls[0]?.[6]).toEqual({
+      goalText: '新目标',
+      title: '新目标',
+      promptVersion: 'v1'
+    })
+    expect(runs).toEqual([])
     expect(result.trackId).toBe('track-1')
+    expect(result.uncategorizedBookIds).not.toContain('old-book')
+    expect(result.uncategorizedBookIds).toEqual(['b2', 'b3'])
     expect(saveTrackAiResult).toHaveBeenCalledWith(
       db,
       expect.objectContaining({ trackId: 'track-1', task: 'build' }),
-      expect.anything(),
+      expect.objectContaining({
+        mountedBookIds: ['old-book', 'b1'],
+        uncategorizedBookIds: ['b2', 'b3']
+      }),
       expect.anything(),
       expect.any(Number)
     )
+  })
+
+  it('重生时挂载建议解析失败，已保留的书不再说成全部未归类', async () => {
+    const { db } = dbWithUpdates()
+    vi.mocked(loadLibrarySummary).mockReturnValue({
+      ...library,
+      rankedIds: ['b1', 'b2', 'b3', 'old-book']
+    })
+    vi.mocked(getActiveTrack).mockReturnValue({
+      id: 'track-1',
+      goalText: '旧目标',
+      title: '旧目标',
+      status: 'active',
+      promptVersion: 'v1',
+      createdAt: 1,
+      updatedAt: 1
+    })
+    const kept = {
+      id: 'keep',
+      trackId: 'track-1',
+      parentId: null,
+      title: '旧节点',
+      summary: '',
+      sortOrder: 0,
+      depth: 1,
+      createdAt: 1,
+      updatedAt: 1,
+      books: [{ bookId: 'old-book', title: '旧书', author: null, source: 'user' as const, createdAt: 1 }]
+    }
+    vi.mocked(listNodesWithBooks)
+      .mockReturnValueOnce([kept] as TrackNodeView[])
+      .mockReturnValue([kept] as TrackNodeView[])
+
+    const chat = vi.fn<TrackChat>(async (options) => {
+      const text = options.input.messages.map((message) => message.content).join('\n')
+      if (text.includes(TRACK_SKELETON_SCHEMA)) {
+        return {
+          content: JSON.stringify({
+            nodes: [{ id: 'keep', parentId: null, title: '旧节点', summary: '', depth: 1, sortOrder: 0 }]
+          }),
+          usage: { inputTokens: 1, outputTokens: 1 }
+        }
+      }
+      return { content: '没挂上', usage: { inputTokens: 1, outputTokens: 1 } }
+    })
+
+    const result = await runTrackBuild(db, {
+      goalText: '新目标',
+      rebuild: true,
+      providerId: 'deepseek',
+      model: 'deepseek-chat',
+      signal: new AbortController().signal,
+      onProgress: () => undefined,
+      chat
+    })
+
+    expect(result.uncategorizedBookIds).not.toContain('old-book')
+    expect(result.uncategorizedBookIds).toEqual(['b1', 'b2', 'b3'])
+    expect(result.note).toContain('挂载建议没能解析')
+    expect(result.note).not.toContain('书都留在未归类')
   })
 })
 

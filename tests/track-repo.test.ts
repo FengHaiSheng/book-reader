@@ -251,6 +251,17 @@ function openDb(): Database.Database {
       return { changes: track ? 1 : 0 }
     }
 
+    if (text.startsWith('UPDATE tracks SET goal_text = ?')) {
+      const [goalText, title, promptVersion, now, trackId] = params
+      const track = state.tracks.find((item) => item.id === trackId && item.status === 'active')
+      if (!track) return { changes: 0 }
+      track.goal_text = String(goalText)
+      track.title = String(title)
+      track.prompt_version = String(promptVersion)
+      track.updated_at = num(now)
+      return { changes: 1 }
+    }
+
     if (text.startsWith('UPDATE tracks SET updated_at = ? WHERE id = ?')) {
       const [now, trackId] = params
       const track = state.tracks.find((item) => item.id === trackId)
@@ -615,6 +626,58 @@ describe('track repo', () => {
     ])
     expect(nodes[1]?.books).toEqual([])
     expect(getActiveTrack(db)?.updatedAt).toBe(1500)
+  })
+
+  it('重生时目标和树同一笔写入，失败则目标和旧挂载都留下', () => {
+    const db = openDb()
+    seedBook(db, 'b1', '书一')
+    replaceActiveTrack(
+      db,
+      activeInput('t1', [root], [{ nodeId: 'n1', bookId: 'b1', source: 'user' }]),
+      1000
+    )
+
+    rebuildActiveTree(
+      db,
+      't1',
+      [root],
+      [{ nodeId: 'n1', bookId: 'b1', source: 'ai' }],
+      true,
+      1700,
+      { goalText: '新目标', title: '新标题', promptVersion: 'v2' }
+    )
+    expect(getActiveTrack(db)).toMatchObject({
+      goalText: '新目标',
+      title: '新标题',
+      promptVersion: 'v2',
+      updatedAt: 1700
+    })
+    expect(listNodesWithBooks(db, 't1')[0]?.books).toEqual([
+      { bookId: 'b1', title: '书一', author: null, source: 'user', createdAt: 1000 }
+    ])
+
+    expect(
+      thrownMessage(() =>
+        rebuildActiveTree(
+          db,
+          't1',
+          [root],
+          [{ nodeId: 'n1', bookId: 'missing-book', source: 'ai' }],
+          true,
+          1800,
+          { goalText: '不该写上', title: '不该写上', promptVersion: 'v9' }
+        )
+      )
+    ).toMatch(/不在书库/)
+    expect(getActiveTrack(db)).toMatchObject({
+      goalText: '新目标',
+      title: '新标题',
+      promptVersion: 'v2',
+      updatedAt: 1700
+    })
+    expect(listNodesWithBooks(db, 't1')[0]?.books).toEqual([
+      { bookId: 'b1', title: '书一', author: null, source: 'user', createdAt: 1000 }
+    ])
   })
 
   it('keepUserLinksByNodeId 为假时只留下新挂载', () => {
