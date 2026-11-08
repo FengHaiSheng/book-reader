@@ -11,10 +11,13 @@ import {
 } from './sidebarWidth'
 import { useReadingChrome } from './ReadingChromeContext'
 
-export type PageId = 'library' | 'notes' | 'settings'
+export type PageId = 'library' | 'track' | 'notes' | 'settings'
 
-const NAV: { id: PageId; label: string; icon: 'library' | 'notes' | 'settings' }[] = [
+type NavIconName = 'library' | 'track' | 'notes' | 'settings' | 'expand' | 'collapse'
+
+const NAV: { id: PageId; label: string; icon: NavIconName }[] = [
   { id: 'library', label: '书架', icon: 'library' },
+  { id: 'track', label: '脉络', icon: 'track' },
   { id: 'notes', label: '笔记', icon: 'notes' },
   { id: 'settings', label: '设置', icon: 'settings' }
 ]
@@ -28,7 +31,7 @@ const STATUSES: { id: BookStatus | null; label: string }[] = [
 ]
 
 /** 线框小图标：阅读收起态用；笔画克制，不抢正文 */
-function NavIcon({ name }: { name: 'library' | 'notes' | 'settings' | 'expand' | 'collapse' }) {
+function NavIcon({ name }: { name: NavIconName }) {
   const common = {
     width: 16,
     height: 16,
@@ -45,6 +48,17 @@ function NavIcon({ name }: { name: 'library' | 'notes' | 'settings' | 'expand' |
       <svg {...common}>
         <path d="M3 2.5h7.5A1.5 1.5 0 0 1 12 4v9.5H4.5A1.5 1.5 0 0 1 3 12V2.5Z" />
         <path d="M3 12a1.5 1.5 0 0 1 1.5-1.5H12" />
+      </svg>
+    )
+  }
+  if (name === 'track') {
+    return (
+      <svg {...common}>
+        <path d="M4 2.5v11" />
+        <path d="M4 5.5h4.25" />
+        <path d="M8.25 5.5v3" />
+        <path d="M4 9.25h7" />
+        <path d="M11 9.25v2.75" />
       </svg>
     )
   }

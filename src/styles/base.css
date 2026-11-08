@@ -148,7 +148,7 @@ body.is-resizing-sidebar {
   line-height: 1.2;
 }
 
-/* 阅读展开：顶上一排三个导航，目录占中，收起钮永远在最底 */
+/* 阅读展开：顶上一排四个导航，目录占中，收起钮永远在最底 */
 .sidebar--reading:not(.sidebar--collapsed) .sidebar__nav {
   flex-direction: row;
   flex-wrap: nowrap;

@@ -8,10 +8,11 @@ export const SIDEBAR_WIDTH = 248
  */
 export const SIDEBAR_COLLAPSED_WIDTH = Math.max(72, IS_MAC ? BAR_PAD_LEFT : 72)
 /**
- * 阅读展开态最小宽：一排放下「书架 / 笔记 / 设置」三个带图标+文案的按钮
- *（约 66×3 + 间距 + 侧栏左右内边距）。
+ * 阅读展开态最小宽：一排放下「书架 / 脉络 / 笔记 / 设置」四个带图标+文案的按钮。
+ * 每项约 66（图标 16 + 间距 5 + 两字约 25 + 按钮左右内边距 12，再留一点不省略）。
+ * 66×4 + 按钮间距 2×3 + 侧栏左右内边距 8×2 = 286。
  */
-export const SIDEBAR_EXPANDED_MIN_WIDTH = 220
+export const SIDEBAR_EXPANDED_MIN_WIDTH = 286
 /** 阅读侧栏拖宽上限 */
 export const SIDEBAR_MAX_WIDTH = 360
 /** 与侧栏右边框一致，算 AI 面板可用宽度时要扣 */

@@ -3,6 +3,7 @@ import type { PageId } from './Sidebar'
 
 const PAGE_LABEL: Record<PageId, string> = {
   library: '书架',
+  track: '脉络',
   notes: '笔记',
   settings: '设置'
 }

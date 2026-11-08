@@ -23,6 +23,7 @@ import {
 import { LibraryPage } from './pages/LibraryPage'
 import { NotesPage } from './pages/NotesPage'
 import { SettingsPage } from './pages/SettingsPage'
+import { TrackPage } from './features/track/TrackPage'
 import { ReaderPage } from './features/reader/ReaderPage'
 import { LibraryBodySearchOverlay } from './features/library/LibraryBodySearchOverlay'
 import { useBodySearch } from './features/library/useBodySearch'
@@ -153,7 +154,7 @@ export default function App() {
     })
   }, [])
 
-  /** 立刻离开阅读并可选切到壳层页（侧栏三项走这条，不弹确认） */
+  /** 立刻离开阅读并可选切到壳层页（侧栏导航走这条，不弹确认） */
   const leaveReading = useCallback((to: PageId | null) => {
     flushExitRef.current?.()
     setReading(null)
@@ -250,6 +251,9 @@ export default function App() {
                       clearBodySearch()
                     }}
                   />
+                )}
+                {page === 'track' && (
+                  <TrackPage onOpenBook={openBook} onOpenSettings={() => setPage('settings')} />
                 )}
                 {page === 'notes' && <NotesPage onOpenAt={openAt} />}
                 {page === 'settings' && <SettingsPage />}
