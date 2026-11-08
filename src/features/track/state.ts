@@ -34,7 +34,8 @@ export function gapPanelFromResult(
         asked.forceRefresh === true,
         asked.now
       ),
-      createdAt: asked.now
+      createdAt: asked.now,
+      usage: result.usage
     },
     cached: result.cached === true,
     usage: result.usage
@@ -143,6 +144,20 @@ export const GAP_TYPE_LABEL: Record<TrackGapType, string> = {
   coverage: '覆盖',
   progress: '进度',
   sediment: '沉淀'
+}
+
+/**
+ * 脉络 BYOK 用量。
+ * 刚问到的结果写「输入 N · 输出 M」；这次命中缓存时标明没有花钱，并带上上次用量。
+ * 没有用量对象时不编数字。
+ */
+export function formatTrackUsage(
+  usage: { inputTokens: number; outputTokens: number } | null | undefined,
+  cached = false
+): string | null {
+  if (!usage) return null
+  const spent = `输入 ${usage.inputTokens} · 输出 ${usage.outputTokens}`
+  return cached ? `来自缓存，没有花钱（${spent}）` : spent
 }
 
 export function gapTypeLabel(type: string): string {

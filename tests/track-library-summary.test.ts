@@ -336,6 +336,9 @@ describe('脉络提示词', () => {
       books: [libraryBook]
     })
     expect(messages[1]?.content).toContain(TRACK_MOUNT_SCHEMA)
+    expect(TRACK_MOUNT_SCHEMA).not.toContain('n1')
+    expect(messages[0]?.content).toContain('骨架里列出的 id')
+    expect(messages[1]?.content).toContain('骨架里列出的 id')
     expect(messages[1]?.content).toContain('不要编造')
     expect(messages[1]?.content).toContain('node n1')
     expect(messages[1]?.content).toContain('book b1')

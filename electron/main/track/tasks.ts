@@ -225,7 +225,15 @@ export async function runTrackBuild(
 
   const mountedBookIds = persistedMountedBookIds(listNodesWithBooks(db, trackId))
   const uncategorized = uncategorizedBookIds(library.rankedIds, new Set(mountedBookIds))
-  const note = composeNote(applied.note, mountFailureNote(applied.mountsParsed, mountedBookIds.length))
+  const note = composeNote(
+    applied.note,
+    mountFailureNote({
+      mountsParsed: applied.mountsParsed,
+      mountedCount: mountedBookIds.length,
+      suggestedCount: applied.suggestedCount,
+      linkCount: applied.links.length
+    })
+  )
   const payload: TrackBuildPayload = {
     goalText: goal,
     nodes,
@@ -332,25 +340,44 @@ function settleMounts(
 ): {
   links: ReturnType<typeof applyMountSuggestions>['links']
   mountsParsed: boolean
+  suggestedCount: number
   note: string | null
   usage: AiUsage
 } {
   const nodeIds = new Set(nodes.map((node) => node.id))
   const libraryIds = new Set(library.rankedIds)
   const parsed = mounted.payload
-  const applied = applyMountSuggestions(parsed ?? [], nodeIds, libraryIds)
+  const suggestions = parsed ?? []
+  const applied = applyMountSuggestions(suggestions, nodeIds, libraryIds)
   return {
     links: applied.links,
     mountsParsed: parsed !== null,
+    suggestedCount: suggestions.length,
     note: composeNote(library.note, skeleton.note, mounted.note),
     usage: addUsage(skeleton.usage, mounted.usage)
   }
 }
 
-/** 解析失败时，只有落库后确实一本都没挂上，才说书都留在未归类。 */
-function mountFailureNote(mountsParsed: boolean, mountedCount: number): string | null {
-  if (mountsParsed) return null
-  return mountedCount === 0 ? '挂载建议没能解析，书都留在未归类' : '挂载建议没能解析'
+/**
+ * 解析失败时，只有落库后确实一本都没挂上，才说书都留在未归类。
+ * 解析成功但建议里的节点全被滤掉、一本都没挂上时，单独说明对不上。
+ * 模型故意返回空的 mounts 不算失败。
+ */
+function mountFailureNote(input: {
+  mountsParsed: boolean
+  mountedCount: number
+  suggestedCount: number
+  linkCount: number
+}): string | null {
+  if (!input.mountsParsed) {
+    return input.mountedCount === 0 ? '挂载建议没能解析，书都留在未归类' : '挂载建议没能解析'
+  }
+  if (input.suggestedCount > 0 && input.linkCount === 0) {
+    return input.mountedCount === 0
+      ? '挂载建议里的节点对不上，书留在未归类'
+      : '挂载建议里的节点对不上'
+  }
+  return null
 }
 
 /** 落库后真正挂上的书。同一本挂在多个节点上只计一次。 */

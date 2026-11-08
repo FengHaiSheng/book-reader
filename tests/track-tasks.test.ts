@@ -342,6 +342,60 @@ describe('runTrackBuild', () => {
     expect(result.usage).toEqual({ inputTokens: 3, outputTokens: 3 })
   })
 
+  it('挂载建议里的节点全对不上时说明书留在未归类', async () => {
+    const { db } = dbWithUpdates()
+    const chat = vi.fn<TrackChat>(async (options) => {
+      const text = options.input.messages.map((message) => message.content).join('\n')
+      if (text.includes(TRACK_SKELETON_SCHEMA)) {
+        return { content: JSON.stringify(skeleton), usage: { inputTokens: 2, outputTokens: 2 } }
+      }
+      return {
+        content: JSON.stringify({ mounts: [{ nodeId: 'n1', bookIds: ['b1'] }] }),
+        usage: { inputTokens: 1, outputTokens: 1 }
+      }
+    })
+
+    const result = await runTrackBuild(db, {
+      goalText: '学操作系统',
+      rebuild: false,
+      providerId: 'deepseek',
+      model: 'deepseek-chat',
+      signal: new AbortController().signal,
+      onProgress: () => undefined,
+      chat
+    })
+
+    expect(vi.mocked(replaceActiveTrack).mock.calls[0]?.[1].links).toEqual([])
+    expect(result.uncategorizedBookIds).toEqual(['b1', 'b2', 'b3'])
+    expect(result.note).toContain('对不上')
+    expect(result.note).toContain('未归类')
+  })
+
+  it('故意返回空挂载时不说节点对不上', async () => {
+    const { db } = dbWithUpdates()
+    const chat = vi.fn<TrackChat>(async (options) => {
+      const text = options.input.messages.map((message) => message.content).join('\n')
+      if (text.includes(TRACK_SKELETON_SCHEMA)) {
+        return { content: JSON.stringify(skeleton), usage: { inputTokens: 1, outputTokens: 1 } }
+      }
+      return { content: JSON.stringify({ mounts: [] }), usage: { inputTokens: 1, outputTokens: 1 } }
+    })
+
+    const result = await runTrackBuild(db, {
+      goalText: '学操作系统',
+      rebuild: false,
+      providerId: 'deepseek',
+      model: 'deepseek-chat',
+      signal: new AbortController().signal,
+      onProgress: () => undefined,
+      chat
+    })
+
+    expect(vi.mocked(replaceActiveTrack).mock.calls[0]?.[1].links).toEqual([])
+    expect(result.note ?? '').not.toContain('对不上')
+    expect(result.note ?? '').not.toContain('未归类')
+  })
+
   it('服务商拒绝 jsonMode 后去掉参数重试，同一次成树的挂载不再带该参数', async () => {
     const { db } = dbWithUpdates()
     const chat = vi.fn<TrackChat>(async (options) => {

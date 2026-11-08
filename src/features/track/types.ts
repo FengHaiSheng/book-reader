@@ -23,9 +23,10 @@ export type TrackRecord = {
   goalText: string
 }
 
-/** 界面只留问缺对照指纹要用的字段。 */
+/** 界面只留问缺对照指纹要用的字段，并带上当时的 token，方便 BYOK 展示。 */
 export type GapView = {
   payload: TrackGapPayload
   scopeKey: string
   createdAt: number
+  usage?: { inputTokens: number; outputTokens: number } | null
 }

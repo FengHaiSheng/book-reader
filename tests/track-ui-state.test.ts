@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   errorNeedsSettings,
+  formatTrackUsage,
   gapPanelFromResult,
   gapReportIsStale,
   gapScopeFingerprint,
@@ -91,6 +92,7 @@ describe('track ui state', () => {
     expect(shown.gap.payload).not.toBe(latest.payload)
     expect(shown.gap.payload.note).toBe('这次的说明')
     expect(shown.usage).toEqual(result.usage)
+    expect(shown.gap.usage).toEqual(result.usage)
     expect(shown.cached).toBe(true)
     expect(shown.gap.scopeKey).toBe('fp1\n先补哪一块')
     expect(shown.gap.createdAt).toBe(99)
@@ -98,6 +100,15 @@ describe('track ui state', () => {
     const fresh = gapPanelFromResult({ ...result, cached: false }, latest, { now: 100 })
     expect(fresh.gap.payload).toBe(result.payload)
     expect(fresh.cached).toBe(false)
+  })
+
+  it('用量行写出输入和输出；缓存命中标明没有花钱', () => {
+    expect(formatTrackUsage({ inputTokens: 12, outputTokens: 3 })).toBe('输入 12 · 输出 3')
+    expect(formatTrackUsage({ inputTokens: 12, outputTokens: 3 }, true)).toBe(
+      '来自缓存，没有花钱（输入 12 · 输出 3）'
+    )
+    expect(formatTrackUsage(null, true)).toBeNull()
+    expect(formatTrackUsage(undefined)).toBeNull()
   })
 
   it('进度只认脉络通道上的 build / gap', () => {

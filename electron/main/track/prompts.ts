@@ -5,7 +5,8 @@ import type { TrackLibraryBook } from './library-summary'
 export const TRACK_SKELETON_SCHEMA =
   '{"nodes":[{"id":"n1","parentId":null,"title":"能力","summary":"一句话","depth":1,"sortOrder":0}]}'
 
-export const TRACK_MOUNT_SCHEMA = '{"mounts":[{"nodeId":"n1","bookIds":["book-id"]}]}'
+export const TRACK_MOUNT_SCHEMA =
+  '{"mounts":[{"nodeId":"<骨架里列出的节点 id>","bookIds":["book-id"]}]}'
 
 export const TRACK_GAP_SCHEMA =
   '{"overall":"一两句","gaps":[{"nodeId":"n1","type":"coverage","summary":"缺什么","suggestBookKinds":["哪一类书"]}],"nextSteps":["下一步"]}'
@@ -71,7 +72,7 @@ export function mountMessages(input: {
   const lines = [
     `目标：\n${input.goalText}`,
     '',
-    '节点（nodeId 必须用下面的 id，不要新造）：'
+    '节点（nodeId 必须是下面骨架里列出的 id 之一，不要新造，也不要照抄占位符）：'
   ]
   if (input.nodes.length === 0) lines.push('（没有节点）')
   else lines.push(...input.nodes.map(nodeLine))
@@ -84,6 +85,7 @@ export function mountMessages(input: {
       role: 'system',
       content: [
         '你负责把书挂到已经确定的能力节点上。',
+        'nodeId 必须是骨架里列出的 id 之一，不要新造。',
         'bookId 只能来自书库列表。拿不准、关系弱的书不要挂，留给未归类。',
         '一本书可以挂到多个真正相关的节点上，不要为了凑数重复。',
         '可以返回空的 mounts。不要修改节点。',

@@ -1,5 +1,5 @@
 import type { TrackGapPayload } from '@shared/track'
-import { gapReportIsStale, gapTypeLabel } from './state'
+import { formatTrackUsage, gapReportIsStale, gapTypeLabel } from './state'
 import type { GapView } from './types'
 
 export function GapPanel({
@@ -31,6 +31,7 @@ export function GapPanel({
   const stale = gapReportIsStale(fingerprint, gap?.scopeKey)
   const running = mode === 'gap'
   const blocked = mode !== 'idle'
+  const usageText = gap ? formatTrackUsage(gap.usage, cached) : null
 
   return (
     <section className="track-gap" aria-label="我缺什么">
@@ -76,6 +77,7 @@ export function GapPanel({
           </button>
         </form>
         {cached && !stale && <p className="track-hint">沿用上次结果，未重新计费。</p>}
+        {usageText && <p className="track-hint">{usageText}</p>}
         {gap ? <Report gap={gap} nodeTitle={nodeTitle} /> : <p className="track-hint">还没有问过。点「我缺什么」看当前还缺哪一块。</p>}
       </div>
     </section>

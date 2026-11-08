@@ -5,6 +5,7 @@ import { Modal } from '../../shell/Modal'
 import { GapPanel } from './GapPanel'
 import {
   errorNeedsSettings,
+  formatTrackUsage,
   gapPanelFromResult,
   isQuietStop,
   trackPhaseLabel,
@@ -55,7 +56,9 @@ export function TrackPage({
   const [progress, setProgress] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const [buildUsage, setBuildUsage] = useState<{ inputTokens: number; outputTokens: number } | null>(null)
   const [confirm, setConfirm] = useState<SpendConfirm | null>(null)
+  const buildUsageLine = formatTrackUsage(buildUsage, false)
 
   const reload = useCallback(async () => {
     try {
@@ -115,6 +118,7 @@ export function TrackPage({
     if (busyRef.current) return
     setError(null)
     setNotice(null)
+    setBuildUsage(null)
     setProgress(null)
     busyRef.current = 'build'
     setBusy('build')
@@ -143,6 +147,7 @@ export function TrackPage({
       // 生成结果里的未归类用接口原样带回，不在这里按书架重算。
       setUncategorizedIds(result.uncategorizedBookIds)
       setNotice(result.note)
+      setBuildUsage(result.usage)
       setEditingGoal(false)
       setGoalDraft(active?.goalText ?? goalText)
       setSelectedId((current) =>
@@ -339,6 +344,7 @@ export function TrackPage({
                 </button>
               )}
             </div>
+            {buildUsageLine && <p className="track-empty__note">{buildUsageLine}</p>}
             <p className="track-empty__note">只根据这台电脑上的书架来挂书，不推荐外链。</p>
           </div>
         </div>
@@ -421,6 +427,7 @@ export function TrackPage({
         </p>
       )}
       {notice && <p className="track-note">{notice}</p>}
+      {buildUsageLine && <p className="track-note">{buildUsageLine}</p>}
       {alertMessage && <Alert message={alertMessage} onOpenSettings={onOpenSettings} />}
       <div className="track-body">
         <TrackTree
@@ -558,7 +565,15 @@ function toNodes(nodes: Awaited<ReturnType<typeof window.api.track.listNodes>>):
 }
 
 function toGap(gap: NonNullable<Awaited<ReturnType<typeof window.api.track.getLatestGap>>>): GapView {
-  return { payload: gap.payload, scopeKey: gap.scopeKey, createdAt: gap.createdAt }
+  return {
+    payload: gap.payload,
+    scopeKey: gap.scopeKey,
+    createdAt: gap.createdAt,
+    usage:
+      Number.isFinite(gap.inputTokens) && Number.isFinite(gap.outputTokens)
+        ? { inputTokens: gap.inputTokens, outputTokens: gap.outputTokens }
+        : null
+  }
 }
 
 function readSignals(signals: Awaited<ReturnType<typeof window.api.track.computeSignals>>): {
