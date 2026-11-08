@@ -77,7 +77,20 @@ export const CH = {
   aiMindmap: 'ai:mindmap',
   aiCancelDigest: 'ai:cancelDigest',
   /** 打开面板时回填已有结果。只读 ai_results，不发起任何模型调用 */
-  aiCachedResults: 'ai:cachedResults'
+  aiCachedResults: 'ai:cachedResults',
+  /**
+   * 学习脉络。阶段进度复用 aiProgress：kind 为 track，label 前缀 track:build / track:gap。
+   * 不另开 track:onProgress，避免和索引、全书要点各听一条通道。
+   */
+  trackGetActive: 'track:getActive',
+  trackListNodes: 'track:listNodes',
+  trackSetBookLinks: 'track:setBookLinks',
+  trackRenameNode: 'track:renameNode',
+  trackComputeSignals: 'track:computeSignals',
+  trackGetLatestGap: 'track:getLatestGap',
+  trackBuild: 'track:build',
+  trackGap: 'track:gap',
+  trackCancel: 'track:cancel'
 } as const
 
 export type Channel = (typeof CH)[keyof typeof CH]
@@ -146,5 +159,19 @@ export const API_SHAPE = {
     'mindmap',
     'cancelDigest',
     'cachedResults'
+  ],
+  /**
+   * 没有 onProgress：界面订 ai.onProgress，用 kind === 'track' 或 label 前缀区分。
+   */
+  track: [
+    'getActive',
+    'listNodes',
+    'setBookLinks',
+    'renameNode',
+    'computeSignals',
+    'getLatestGap',
+    'build',
+    'gap',
+    'cancel'
   ]
 } as const

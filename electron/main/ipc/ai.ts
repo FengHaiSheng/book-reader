@@ -9,7 +9,7 @@ import type {
   AiProgressEvent,
   ProviderId
 } from '@shared/types'
-import { AiQueue } from '../ai/queue'
+import { aiSpendQueue as queue } from '../ai/queue'
 import { buildIndex, cancelIndex, indexState } from '../ai/index-builder'
 import { appendMessage, clearScope, listMessages } from '../ai/repo'
 import { estimateTokens } from '../ai/retrieve'
@@ -34,8 +34,10 @@ import {
 } from '../ai/tasks'
 import { getDatabase } from '../store/db'
 
-/** 单通道串行：手快连点也不会并发烧钱（spec §5.6） */
-const queue = new AiQueue()
+/**
+ * `queue` 就是 `aiSpendQueue`。学习脉络的 build / gap 用的是同一份，
+ * 手快连点也不会和对话、索引、小结并发烧钱（spec §5.6）。
+ */
 
 /** requestId → 中止信号。切章、关面板、关窗口都要能停流。 */
 const inflight = new Map<string, AbortController>()

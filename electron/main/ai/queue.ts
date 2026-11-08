@@ -65,3 +65,11 @@ export class AiQueue {
     }
   }
 }
+
+/**
+ * 进程里唯一的一条花钱队列。
+ *
+ * 阅读器里的对话、索引、小结，和学习脉络的生成、问缺，必须排在同一条队里。
+ * 各 new 一份就会并发打到用户的密钥上。
+ */
+export const aiSpendQueue = new AiQueue()

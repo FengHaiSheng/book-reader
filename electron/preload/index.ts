@@ -51,6 +51,9 @@ import type {
   Tag,
   TermsPayload
 } from '@shared/types'
+import type { StoredGap, TrackNodeView, TrackRow } from '../main/track/repo'
+import type { TrackSignalsResult } from '../main/track/signals'
+import type { TrackBuildResult, TrackGapResult } from '../main/track/tasks'
 
 /** 把导入类调用回传的结果信封还原成「返回值或干净的中文 Error」。 */
 function unwrap<T>(result: IpcResult<T>): T {
@@ -226,6 +229,27 @@ const api = {
     /** 打开面板时回填已有结果。只读缓存，不调模型、不花钱 */
     cachedResults: (bookId: string, chapterId: number | null): Promise<CachedTaskResults> =>
       ipcRenderer.invoke(CH.aiCachedResults, bookId, chapterId)
+  },
+  /**
+   * 生成和问缺与阅读器 AI 共用一条花钱队列。
+   * 阶段进度不在这里订阅，走 ai.onProgress：kind 为 track，label 以 track:build / track:gap 开头。
+   * build 的 uncategorizedBookIds、gap 的 cached 由主进程原样带回，界面不要自己重算未归类。
+   */
+  track: {
+    getActive: (): Promise<TrackRow | null> => ipcRenderer.invoke(CH.trackGetActive),
+    listNodes: (): Promise<TrackNodeView[]> => ipcRenderer.invoke(CH.trackListNodes),
+    setBookLinks: (nodeId: string, bookIds: string[]): Promise<void> =>
+      ipcRenderer.invoke(CH.trackSetBookLinks, nodeId, bookIds),
+    renameNode: (nodeId: string, title: string, summary: string): Promise<void> =>
+      ipcRenderer.invoke(CH.trackRenameNode, nodeId, title, summary),
+    computeSignals: (): Promise<TrackSignalsResult | null> =>
+      ipcRenderer.invoke(CH.trackComputeSignals),
+    getLatestGap: (): Promise<StoredGap | null> => ipcRenderer.invoke(CH.trackGetLatestGap),
+    build: (input: { goalText: string; rebuild?: boolean }): Promise<TrackBuildResult> =>
+      ipcRenderer.invoke(CH.trackBuild, input),
+    gap: (input?: { question?: string; forceRefresh?: boolean }): Promise<TrackGapResult> =>
+      ipcRenderer.invoke(CH.trackGap, input ?? {}),
+    cancel: (task: 'build' | 'gap'): Promise<void> => ipcRenderer.invoke(CH.trackCancel, task)
   },
   shell: {
     openExternal: (url: string): Promise<void> =>

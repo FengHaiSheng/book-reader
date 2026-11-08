@@ -513,13 +513,18 @@ export type AiStatus = {
 export type AiDegradeEvent = { requestId: string; delta: string }
 
 export type AiProgressEvent = {
-  /** 'index' 是建索引，'digest' 是全书要点逐章 map */
-  kind: 'index' | 'digest'
+  /**
+   * 'index' 是建索引，'digest' 是全书要点逐章 map，'track' 是学习脉络。
+   * 脉络事件不另开通道：bookId 为空，label 以 `track:build` 或 `track:gap` 开头。
+   */
+  kind: 'index' | 'digest' | 'track'
   bookId: string
   done: number
   total: number
   label: string
   running: boolean
+  /** 仅 kind 为 track 时有值，与花钱队列的 key 相同 */
+  task?: 'track:build' | 'track:gap'
 }
 
 export type ChapterSummaryPayload = {

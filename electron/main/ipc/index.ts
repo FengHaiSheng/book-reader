@@ -8,6 +8,7 @@ import { registerReadingIpc } from './reading'
 import { registerSecretsIpc } from './secrets'
 import { registerSettingsIpc } from './settings'
 import { registerShellIpc } from './shell'
+import { registerTrackIpc } from './track'
 
 /** 所有 IPC handler 的唯一注册点。新增域时在这里加一行。 */
 export function registerIpc(): void {
@@ -21,4 +22,5 @@ export function registerIpc(): void {
   registerShellIpc()
   registerDataIpc()
   registerAiIpc()
+  registerTrackIpc()
 }
