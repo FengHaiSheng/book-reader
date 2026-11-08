@@ -221,5 +221,61 @@ export const migrations: Migration[] = [
           ON highlight_ai_notes(highlight_id, created_at);
       `)
     }
+  },
+  {
+    version: 8,
+    up: (db) => {
+      /**
+       * 学习脉络单独成表，不复用 ai_results（那张表强制 book_id）。
+       * 同一时刻只留一条 status=active，由 replaceActiveTrack 归档旧行保证；
+       * 不加部分唯一索引，避免和 spec 的 DDL 分叉。
+       */
+      db.exec(`
+        CREATE TABLE tracks (
+          id TEXT PRIMARY KEY,
+          goal_text TEXT NOT NULL,
+          title TEXT NOT NULL,
+          status TEXT NOT NULL,
+          prompt_version TEXT NOT NULL,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        );
+        CREATE TABLE track_nodes (
+          id TEXT PRIMARY KEY,
+          track_id TEXT NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
+          parent_id TEXT,
+          title TEXT NOT NULL,
+          summary TEXT NOT NULL DEFAULT '',
+          sort_order INTEGER NOT NULL DEFAULT 0,
+          depth INTEGER NOT NULL,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        );
+        CREATE INDEX idx_track_nodes_track ON track_nodes(track_id, sort_order);
+        CREATE TABLE track_node_books (
+          track_id TEXT NOT NULL,
+          node_id TEXT NOT NULL,
+          book_id TEXT NOT NULL REFERENCES books(id) ON DELETE CASCADE,
+          source TEXT NOT NULL,
+          created_at INTEGER NOT NULL,
+          PRIMARY KEY (node_id, book_id)
+        );
+        CREATE INDEX idx_track_node_books_book ON track_node_books(book_id);
+        CREATE TABLE track_ai_results (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          track_id TEXT NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
+          task TEXT NOT NULL,
+          scope_key TEXT NOT NULL,
+          prompt_version TEXT NOT NULL,
+          provider TEXT NOT NULL,
+          model TEXT NOT NULL,
+          payload TEXT NOT NULL,
+          input_tokens INTEGER NOT NULL DEFAULT 0,
+          output_tokens INTEGER NOT NULL DEFAULT 0,
+          created_at INTEGER NOT NULL,
+          UNIQUE (track_id, task, scope_key, prompt_version, model)
+        );
+      `)
+    }
   }
 ]
