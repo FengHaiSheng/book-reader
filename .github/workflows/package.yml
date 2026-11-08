@@ -50,6 +50,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # --publish never：有 git tag 时 electron-builder 会默认想发 GitHub Release，
+      # 缺 GH_TOKEN 会把已打好的安装包判失败；Release 交给下面的 release job。
       - name: Build Windows installer
         run: npm run dist:win
 
@@ -59,6 +61,7 @@ jobs:
           name: 阅微-windows
           path: |
             dist/*.exe
+            dist/*.blockmap
             dist/*.yml
           if-no-files-found: error
           retention-days: 14
