@@ -618,3 +618,11 @@ export type CleanupResult = {
   freedBytes: number
   removedLogs: number
 }
+
+export type {
+  NodeSignals,
+  TrackGapPayload,
+  TrackGapType,
+  TrackNodeInput,
+  TrackSignalsSnapshot
+} from './track'
