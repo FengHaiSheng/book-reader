@@ -96,12 +96,21 @@ describe('scoreBookAgainstNode', () => {
     })
   })
 
-  it('标点空白大小写去掉后，书名与节点名互相包含且达到四成 → 0.92', () => {
+  it('标点空白大小写去掉后，书名与节点名互相包含且达到四成 → 至少 0.92', () => {
+    // 标点把 helloworld 拆成 he / lloworld，Jaccard 为 0，下限仍是 0.92
     const noisy = 'He \u3000\t\n.,，。:：;；!！?？、·-_/\\()（）[]【】「」『』"\'lloWorld'
     expect(scoreBookAgainstNode(book('b', noisy), node('n', 'helloworld'))).toBe(0.92)
     expect(scoreBookAgainstNode(book('b', '战略管理学'), node('n', '战略'))).toBe(0.92)
     expect(scoreBookAgainstNode(book('b', '战略'), node('n', '竞争战略'))).toBe(0.92)
-    expect(scoreBookAgainstNode(book('b', 'hello world'), node('n', 'hello world'))).toBe(0.92)
+  })
+
+  it('完全同名时 Jaccard 为 1，高于包含下限', () => {
+    expect(scoreBookAgainstNode(book('b', 'hello world'), node('n', 'hello world'))).toBe(1)
+  })
+
+  it('子串命中只是下限，Jaccard 更高时取更高分', () => {
+    const title = 'alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu'
+    expect(scoreBookAgainstNode(book('b', title), node('n', title, { summary: 'extra' }))).toBe(12 / 13)
   })
 
   it('短于四成、空标题、目录作者摘要都不走包含分', () => {
@@ -226,6 +235,18 @@ describe('decideBookMatch 三档', () => {
         { nodeId: 'c', score: 0.55 }
       ]
     })
+
+    // 完全同名得 1，次高 0.8；若封顶在 0.92 则分差不够，现在可以单挂
+    const exactLead = decideBookMatch(
+      book('b', 'aa bb cc dd'),
+      [node('best', 'aa bb cc dd'), node('second', 'aa', { summary: 'bb cc dd ee' })],
+      new Set()
+    )
+    expect(scoreBookAgainstNode(book('b', 'aa bb cc dd'), node('best', 'aa bb cc dd'))).toBe(1)
+    expect(
+      scoreBookAgainstNode(book('b', 'aa bb cc dd'), node('second', 'aa', { summary: 'bb cc dd ee' }))
+    ).toBe(0.8)
+    expect(exactLead).toEqual({ bookId: 'b', kind: 'mount', nodeIds: ['best'] })
   })
 
   it('pending 最多 pendingMax 条', () => {

@@ -83,13 +83,12 @@ function isAncestor(
 export function scoreBookAgainstNode(book: MatchBookInput, node: MatchNodeInput): number {
   const nodeTitle = normalize(node.title)
   const bookTitle = normalize(book.title)
-  // 书名包含命中记 0.92，不再与 Jaccard 取最大；否则用 token Jaccard。作者命中再与 0.55 取最大。
-  let score = titlesContain(bookTitle, nodeTitle)
-    ? CONTAINMENT_SCORE
-    : jaccard(
-        tokenSet([book.title, book.author, ...book.tocTitles]),
-        tokenSet([node.title, node.summary])
-      )
+  const j = jaccard(
+    tokenSet([book.title, book.author, ...book.tocTitles]),
+    tokenSet([node.title, node.summary])
+  )
+  // 子串命中是下限 0.92，与 Jaccard 取较大值。作者命中再与 0.55 取最大。
+  let score = titlesContain(bookTitle, nodeTitle) ? Math.max(CONTAINMENT_SCORE, j) : j
 
   const author = book.author ? normalize(book.author) : ''
   if (author && normalize(`${node.title}${node.summary}`).includes(author)) {
