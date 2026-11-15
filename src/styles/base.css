@@ -2536,72 +2536,202 @@ html[data-theme='dark'] .seg__b.is-on {
   flex-direction: column;
   align-items: stretch;
   gap: var(--s3);
+  height: 100%;
 }
 
+/* 拖放终点只跟封面同高（2:3），别用整卡高度把这一行撑高 */
 .book-grid__drop {
-  min-height: 220px;
-  border: 1px dashed var(--line);
-  border-radius: var(--r-md);
-  align-items: center;
-  justify-content: center;
+  min-height: 0;
+  border: 0;
   color: var(--ink-muted);
   font-size: 12px;
+  justify-content: flex-start;
+}
+
+.book-grid__drop::before {
+  content: '拖电子书到这里';
+  aspect-ratio: 2 / 3;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--s3);
+  border: 1px dashed var(--line);
+  border-radius: var(--r-md);
+  text-align: center;
+  line-height: 1.5;
+  box-sizing: border-box;
 }
 
 .book-card {
   display: flex;
+  flex: 1;
   flex-direction: column;
   align-items: stretch;
   gap: var(--s2);
+  max-width: 100%;
+  min-height: 100%;
+}
+
+.book-card__open,
+.book-card__info {
+  display: block;
+  width: 100%;
   padding: 0;
   background: none;
   border: 0;
   color: inherit;
   cursor: pointer;
-  max-width: 100%;
   text-align: left;
 }
 
-/* 封面 + 悬停 CTA 共用一个定位框 */
+.book-card__info {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--s2);
+}
+
+/* 封面 + 悬停 CTA / 动作 共用定位框；封面与角标一起上浮 */
 .book-card__frame {
   position: relative;
   display: block;
 }
 
-.book-card .book-cover {
-  transition: transform var(--ease), box-shadow var(--ease);
+.book-card__cover-wrap {
+  position: relative;
+  display: block;
+  transition: transform var(--ease);
 }
 
-.book-card:hover .book-cover {
+.book-card .book-cover {
+  transition: box-shadow var(--ease);
+}
+
+.book-grid__cell:hover .book-card__cover-wrap,
+.book-grid__cell:focus-within .book-card__cover-wrap {
   transform: translateY(-4px);
+}
+
+.book-grid__cell:hover .book-cover,
+.book-grid__cell:focus-within .book-cover {
   box-shadow: 0 2px 4px rgba(43, 39, 35, 0.18), 0 16px 30px rgba(43, 39, 35, 0.2);
 }
 
-.book-card__cta {
+/* 封面正中一层：CTA + 动作纵向收拢，避免挤出封面或压住进度环 */
+.book-card__hover {
   position: absolute;
   left: 50%;
   top: 50%;
-  transform: translate(-50%, -50%) scale(0.94);
-  height: 30px;
-  padding: 0 14px;
-  border-radius: var(--r-md);
-  display: inline-flex;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  background: rgba(20, 18, 16, 0.72);
-  color: #f3eee4;
-  font-size: 12.5px;
-  white-space: nowrap;
+  gap: 6px;
+  max-width: calc(100% - 16px);
+  transform: translate(-50%, -50%) scale(0.96);
   opacity: 0;
   pointer-events: none;
   transition: opacity var(--ease), transform var(--ease);
 }
 
-.book-card:hover .book-card__cta {
+.book-grid__cell:hover .book-card__hover,
+.book-grid__cell:focus-within .book-card__hover {
   opacity: 1;
   transform: translate(-50%, -50%) scale(1);
 }
 
+/* 悬停层本身不接事件，只让 CTA / 动作按钮可点，避免挡住封面打开 */
+.book-grid__cell:hover .book-card__cta,
+.book-grid__cell:hover .book-card__acts button,
+.book-grid__cell:focus-within .book-card__cta,
+.book-grid__cell:focus-within .book-card__acts button {
+  pointer-events: auto;
+}
+
+.book-card__cta {
+  flex: 0 0 auto;
+  height: 28px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--r-md);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(20, 18, 16, 0.72);
+  color: #f3eee4;
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+  pointer-events: none;
+  transition: background var(--ease), color var(--ease);
+}
+
+.book-card__cta:hover {
+  background: rgba(20, 18, 16, 0.88);
+  color: #fff;
+}
+
+.book-grid__cell:hover .book-card__ring,
+.book-grid__cell:focus-within .book-card__ring {
+  opacity: 0;
+}
+
+/* 封面右下角圆形进度：未开始不挂节点；中心是整数百分比 */
+.book-card__ring {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: rgba(20, 18, 16, 0.72);
+  pointer-events: none;
+  z-index: 1;
+  transition: opacity var(--ease);
+}
+
+.book-card__ring svg {
+  display: block;
+  transform: rotate(-90deg);
+}
+
+.book-card__ring-track,
+.book-card__ring-value {
+  fill: none;
+  stroke-width: 2.5;
+}
+
+.book-card__ring-track {
+  stroke: rgba(243, 238, 228, 0.28);
+}
+
+.book-card__ring-value {
+  stroke: #f3eee4;
+  stroke-linecap: round;
+}
+
+.book-card__ring.is-done .book-card__ring-value {
+  stroke: color-mix(in srgb, var(--accent-link) 85%, #f3eee4);
+}
+
+.book-card__ring-num {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #f3eee4;
+  font-size: 9px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
 .book-card__title {
+  /* 固定两行高，书名长短不再把卡片撑得参差不齐 */
+  min-height: calc(1.4em * 2);
   font-size: 13.5px;
   font-weight: 500;
   line-height: 1.4;
@@ -2611,7 +2741,8 @@ html[data-theme='dark'] .seg__b.is-on {
   -webkit-box-orient: vertical;
 }
 
-.book-card:hover .book-card__title {
+.book-grid__cell:hover .book-card__title,
+.book-grid__cell:focus-within .book-card__title {
   color: var(--accent-link);
 }
 
@@ -2621,20 +2752,6 @@ html[data-theme='dark'] .seg__b.is-on {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.book-card__prog {
-  margin-top: 6px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 11px;
-  color: var(--ink-muted);
-  font-variant-numeric: tabular-nums;
-}
-
-.book-card__prog-text {
-  flex: 0 0 auto;
 }
 
 /* 进度条：网格与列表共用 */
@@ -2673,35 +2790,42 @@ html[data-theme='dark'] .seg__b.is-on {
 
 .book-card__tags {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  align-items: center;
   gap: var(--s1);
+  min-height: 22px;
+  overflow: hidden;
 }
 
-/* 卡片的两个动作：和列表行一样悬停才显出来，免得网格里排满按钮 */
 .book-card__acts {
   display: flex;
+  flex-wrap: nowrap;
   align-items: center;
-  gap: var(--s3);
-  opacity: 0;
-  transition: opacity var(--ease);
-}
-
-.book-grid__cell:hover .book-card__acts {
-  opacity: 1;
+  justify-content: center;
+  gap: 6px;
 }
 
 .book-card__acts button {
+  flex: 0 0 auto;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: var(--r-md);
+  background: rgba(20, 18, 16, 0.72);
+  color: #f3eee4;
   font-size: 12px;
-  color: var(--ink-muted);
-  transition: color var(--ease);
+  white-space: nowrap;
+  pointer-events: none;
+  transition: background var(--ease), color var(--ease);
 }
 
 .book-card__tag-add:hover {
-  color: var(--accent-link);
+  background: rgba(20, 18, 16, 0.88);
+  color: #fff;
 }
 
 .book-card__remove:hover {
-  color: var(--accent-mark);
+  background: color-mix(in srgb, var(--accent-mark) 72%, rgba(20, 18, 16, 0.88));
+  color: #fff;
 }
 
 .book-list__item .book-cover {

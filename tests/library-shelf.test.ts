@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import type { BookSummary, BookTag, BookStatus } from '../shared/types'
 import {
+  BOOK_CARD_RING_C,
+  bookCardProgress,
+  bookCardRingOffset,
   ctaLabel,
   filterBooks,
   formatBytes,
@@ -138,6 +141,16 @@ describe('sortBooks', () => {
     expect(sortBooks(books, 'title').map((b) => b.id)).toEqual(['b', 'a', 'c'])
   })
 
+  it('progress 按阅读进度降序，已读完视为 100%', () => {
+    const mixed = [
+      book({ id: 'a', title: '半途', status: 'reading', percent: 0.4 }),
+      book({ id: 'b', title: '未开', status: 'unread', percent: 0 }),
+      book({ id: 'c', title: '读完', status: 'finished', percent: 0.2 }),
+      book({ id: 'd', title: '将完', status: 'reading', percent: 0.9 })
+    ]
+    expect(sortBooks(mixed, 'progress').map((b) => b.id)).toEqual(['c', 'd', 'a', 'b'])
+  })
+
   it('返回新数组，不改原数组', () => {
     const result = sortBooks(books, 'added')
     expect(result).not.toBe(books)
@@ -158,6 +171,35 @@ describe('progressLabel', () => {
     expect(progressLabel(book({ id: 'a', title: 'x', status: 'finished' }))).toBe('已读完')
     expect(progressLabel(book({ id: 'a', title: 'x', status: 'reading', percent: 0.38 }))).toBe('38%')
     expect(progressLabel(book({ id: 'a', title: 'x', status: 'unread', percent: 0 }))).toBe('')
+  })
+})
+
+describe('bookCardProgress', () => {
+  it('未开始不显示角标', () => {
+    expect(bookCardProgress(book({ id: 'a', title: 'x', status: 'unread', percent: 0 }))).toEqual({
+      visible: false,
+      pct: 0,
+      done: false
+    })
+  })
+
+  it('在读与已完成给出圆心百分比', () => {
+    expect(
+      bookCardProgress(book({ id: 'a', title: 'x', status: 'reading', percent: 0.38 }))
+    ).toEqual({ visible: true, pct: 38, done: false })
+    expect(bookCardProgress(book({ id: 'a', title: 'x', status: 'finished' }))).toEqual({
+      visible: true,
+      pct: 100,
+      done: true
+    })
+  })
+})
+
+describe('bookCardRingOffset', () => {
+  it('满环 offset 为 0，空环为整周长', () => {
+    expect(bookCardRingOffset(100)).toBe(0)
+    expect(bookCardRingOffset(0)).toBe(BOOK_CARD_RING_C)
+    expect(bookCardRingOffset(50)).toBeCloseTo(BOOK_CARD_RING_C / 2, 5)
   })
 })
 

@@ -47,6 +47,8 @@ test('书库状态筛选、搜索与排序', async () => {
   await expect(win.locator('.book-grid__cell')).toHaveCount(3)
   await win.locator('.sort__select').selectOption('added')
   await expect(win.locator('.book-grid__cell')).toHaveCount(3)
+  await win.locator('.sort__select').selectOption('progress')
+  await expect(win.locator('.book-grid__cell')).toHaveCount(3)
   await win.locator('.sort__select').selectOption('recent')
   await expect(win.locator('.book-grid__cell')).toHaveCount(3)
 
@@ -60,6 +62,90 @@ test('空书库显示引导与两个导入入口', async () => {
   await expect(win.locator('.empty__t')).toHaveText('书架还是空的')
   await expect(win.getByRole('button', { name: '选择文件…' })).toBeVisible()
   await expect(win.getByRole('button', { name: '从文件夹导入' })).toBeVisible()
+
+  await app.close()
+})
+
+test('网格悬停 CTA 可点：继续阅读打开书', async () => {
+  const userDataDir = mkdtempSync(join(tmpdir(), 'book-read-shelf-cta-'))
+  const novel = join(userDataDir, 'novel.epub')
+  await writeEpub(novel, novelFiles())
+
+  const app = await launchAppWithUserData(userDataDir)
+  const win = await app.firstWindow()
+
+  const imported = await win.evaluate(
+    (file: string) => (window as any).api.library.importPath(file),
+    novel
+  )
+  await win.evaluate(
+    (id: string) =>
+      (window as any).api.reader.saveProgress({
+        bookId: id,
+        cfi: 'epubcfi(/6/2!/4/2/1:0)',
+        chapterId: 1,
+        percent: 0.4
+      }),
+    imported.bookId as string
+  )
+  await win.reload()
+
+  const card = win.locator('.book-grid__cell').first()
+  await card.hover()
+  const cta = card.getByRole('button', { name: '继续阅读' })
+  await expect(cta).toBeVisible()
+  await cta.click()
+  await expect(win.locator('.reader')).toBeVisible()
+
+  await app.close()
+})
+
+test('网格卡片高度一致：有无标签与进度不改变卡片高度', async () => {
+  const userDataDir = mkdtempSync(join(tmpdir(), 'book-read-shelf-card-height-'))
+  const novel = join(userDataDir, 'novel.epub')
+  const manual = join(userDataDir, 'manual.epub')
+  await writeEpub(novel, novelFiles())
+  await writeEpub(manual, nestedTocFiles())
+
+  const app = await launchAppWithUserData(userDataDir)
+  const win = await app.firstWindow()
+
+  const imported = await win.evaluate(
+    (paths: string[]) => (window as any).api.library.importPaths(paths),
+    [novel, manual]
+  )
+  const bookIds = (imported as { bookId: string }[])
+    .filter((item) => item.bookId)
+    .map((item) => item.bookId)
+  await win.evaluate(
+    (id: string) =>
+      (window as any).api.reader.saveProgress({
+        bookId: id,
+        cfi: 'epubcfi(/6/2!/4/2/1:0)',
+        chapterId: 1,
+        percent: 0.4
+      }),
+    bookIds[0]
+  )
+  const tag = await win.evaluate(() => (window as any).api.library.tagCreate('待读'))
+  await win.evaluate(
+    ({ bookId, tagId }: { bookId: string; tagId: number }) =>
+      (window as any).api.library.tagAssign(bookId, tagId, true),
+    { bookId: bookIds[0], tagId: tag.id as number }
+  )
+  await win.reload()
+
+  await expect(win.locator('.book-card')).toHaveCount(2)
+  await expect(win.locator('.book-card .tag-chip')).toHaveCount(1)
+  await expect(win.locator('.book-card__ring')).toHaveCount(1)
+  await expect(win.locator('.book-card__ring-num')).toHaveText('40')
+  await expect(win.locator('.book-card__prog')).toHaveCount(0)
+
+  const heights = await win.locator('.book-card').evaluateAll((cards) =>
+    cards.map((card) => Math.round(card.getBoundingClientRect().height))
+  )
+  expect(heights).toHaveLength(2)
+  expect(heights[0]).toBe(heights[1])
 
   await app.close()
 })

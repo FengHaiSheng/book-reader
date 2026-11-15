@@ -1,11 +1,21 @@
 import type { BookSummary } from '@shared/types'
 import { BookCover } from './BookCover'
-import { confirmRemove, ctaLabel, progressLabel } from './shelf'
+import {
+  BOOK_CARD_RING_C,
+  BOOK_CARD_RING_R,
+  bookCardProgress,
+  bookCardRingOffset,
+  confirmRemove,
+  ctaLabel
+} from './shelf'
 
 /**
  * 网格用 auto-fill 自适应列数（spec §4.5），列宽由 CSS 定，这里只负责结构。
  * 末尾永远留一个拖放终点：它让「拖到书架上」这件事有个明确的目标，
  * 空白区域的虚线框比整页任意位置都能放更好理解。
+ *
+ * 进度在封面右下角；「继续阅读 / ＋标签 / 删除」收在封面正中一层，悬停才显。
+ * 封面打开与动作按钮拆开，避免 button 套 button。
  */
 export function BookGrid({
   books,
@@ -21,55 +31,81 @@ export function BookGrid({
 }) {
   return (
     <ul className="book-grid">
-      {books.map((book) => (
-        <li key={book.id} className="book-grid__cell">
-          <button type="button" className="book-card" onClick={() => onOpen(book.id)}>
-            <span className="book-card__frame">
-              <BookCover book={book} width={132} fill />
-              <span className="book-card__cta" aria-hidden="true">
-                {ctaLabel(book)}
-              </span>
-            </span>
-            <span className="book-card__title">{book.title}</span>
-            <span className="book-card__meta">{book.author ?? '未知作者'}</span>
-            {book.tags.length > 0 && (
-              <span className="book-card__tags">
-                {book.tags.map((tag) => (
-                  <span key={tag.id} className={`tag-chip tag-chip--${tag.color}`}>
-                    {tag.name}
+      {books.map((book) => {
+        const progress = bookCardProgress(book)
+        return (
+          <li key={book.id} className="book-grid__cell">
+            <div className="book-card">
+              <div className="book-card__frame">
+                <button
+                  type="button"
+                  className="book-card__open"
+                  onClick={() => onOpen(book.id)}
+                  aria-label={`打开《${book.title}》`}
+                >
+                  <span className="book-card__cover-wrap">
+                    <BookCover book={book} width={132} fill />
+                    {progress.visible && (
+                      <span
+                        className={`book-card__ring${progress.done ? ' is-done' : ''}`}
+                        aria-label={`已读 ${progress.pct}%`}
+                      >
+                        <svg viewBox="0 0 30 30" width="30" height="30" aria-hidden="true">
+                          <circle className="book-card__ring-track" cx="15" cy="15" r={BOOK_CARD_RING_R} />
+                          <circle
+                            className="book-card__ring-value"
+                            cx="15"
+                            cy="15"
+                            r={BOOK_CARD_RING_R}
+                            strokeDasharray={BOOK_CARD_RING_C}
+                            strokeDashoffset={bookCardRingOffset(progress.pct)}
+                          />
+                        </svg>
+                        <span className="book-card__ring-num">{progress.pct}</span>
+                      </span>
+                    )}
                   </span>
-                ))}
-              </span>
-            )}
-            {(book.percent > 0 || book.status === 'finished') && (
-              <span className="book-card__prog">
-                <span className="track">
-                  <i
-                    className={book.status === 'finished' ? 'is-done' : undefined}
-                    style={{ width: `${book.status === 'finished' ? 100 : Math.round(book.percent * 100)}%` }}
-                  />
+                </button>
+                <div className="book-card__hover">
+                  <button
+                    type="button"
+                    className="book-card__cta"
+                    onClick={() => onOpen(book.id)}
+                  >
+                    {ctaLabel(book)}
+                  </button>
+                  <span className="book-card__acts">
+                    <button type="button" className="book-card__tag-add" onClick={() => onTag(book)}>
+                      ＋标签
+                    </button>
+                    <button
+                      type="button"
+                      className="book-card__remove"
+                      onClick={() => {
+                        if (confirmRemove(book)) onRemove(book.id)
+                      }}
+                    >
+                      删除
+                    </button>
+                  </span>
+                </div>
+              </div>
+              <button type="button" className="book-card__info" onClick={() => onOpen(book.id)}>
+                <span className="book-card__title">{book.title}</span>
+                <span className="book-card__meta">{book.author ?? '未知作者'}</span>
+                <span className="book-card__tags">
+                  {book.tags.map((tag) => (
+                    <span key={tag.id} className={`tag-chip tag-chip--${tag.color}`}>
+                      {tag.name}
+                    </span>
+                  ))}
                 </span>
-                <span className="book-card__prog-text">{progressLabel(book)}</span>
-              </span>
-            )}
-          </button>
-          <span className="book-card__acts">
-            <button type="button" className="book-card__tag-add" onClick={() => onTag(book)}>
-              ＋标签
-            </button>
-            <button
-              type="button"
-              className="book-card__remove"
-              onClick={() => {
-                if (confirmRemove(book)) onRemove(book.id)
-              }}
-            >
-              删除
-            </button>
-          </span>
-        </li>
-      ))}
-      <li className="book-grid__cell book-grid__drop">拖电子书到这里</li>
+              </button>
+            </div>
+          </li>
+        )
+      })}
+      <li className="book-grid__cell book-grid__drop" aria-label="拖电子书到这里" />
     </ul>
   )
 }

@@ -65,6 +65,11 @@ export function filterBooks(books: readonly BookSummary[], filters: ShelfFilters
   })
 }
 
+/** 排序用的进度值：已读完按 100% 计，其余用 percent。 */
+function progressRank(book: BookSummary): number {
+  return book.status === 'finished' ? 1 : book.percent
+}
+
 /** 排序口径见 shared/types 的 LibrarySort。返回新数组，不改原数组。 */
 export function sortBooks(books: readonly BookSummary[], sort: LibrarySort): BookSummary[] {
   const copy = [...books]
@@ -72,6 +77,12 @@ export function sortBooks(books: readonly BookSummary[], sort: LibrarySort): Boo
     copy.sort((a, b) => a.title.localeCompare(b.title, 'zh-Hans-CN'))
   } else if (sort === 'added') {
     copy.sort((a, b) => b.addedAt - a.addedAt)
+  } else if (sort === 'progress') {
+    copy.sort((a, b) => {
+      const delta = progressRank(b) - progressRank(a)
+      if (delta !== 0) return delta
+      return a.title.localeCompare(b.title, 'zh-Hans-CN')
+    })
   } else {
     copy.sort((a, b) => (b.lastOpenedAt ?? b.addedAt) - (a.lastOpenedAt ?? a.addedAt))
   }
@@ -87,12 +98,38 @@ export function ctaLabel(book: BookSummary): string {
 
 /**
  * 进度行文案。名字与导入用的 `progressText(progress)` 区分开，避免同名两义。
- * finished→「已读完」；有进度→百分比；未开始→空串（调用方据此不渲染）。
+ * finished→「已读完」；有进度→百分比；未开始→空串。
+ * 列表视图用；网格封面角标用 `bookCardProgress`。
  */
 export function progressLabel(book: BookSummary): string {
   if (book.status === 'finished') return '已读完'
   if (book.percent > 0) return `${Math.round(book.percent * 100)}%`
   return ''
+}
+
+/**
+ * 网格封面右下角圆形进度：未开始不显示；圆心数字为整数百分比。
+ */
+export function bookCardProgress(book: BookSummary): {
+  visible: boolean
+  pct: number
+  done: boolean
+} {
+  if (book.status === 'finished') return { visible: true, pct: 100, done: true }
+  if (book.percent > 0) {
+    return { visible: true, pct: Math.round(book.percent * 100), done: false }
+  }
+  return { visible: false, pct: 0, done: false }
+}
+
+/** SVG 圆环周长，与 BookGrid 角标半径一致（r=11） */
+export const BOOK_CARD_RING_R = 11
+export const BOOK_CARD_RING_C = 2 * Math.PI * BOOK_CARD_RING_R
+
+/** 进度弧的 stroke-dashoffset：pct=100 → 0，pct=0 → 整周 */
+export function bookCardRingOffset(pct: number): number {
+  const clamped = Math.min(100, Math.max(0, pct))
+  return BOOK_CARD_RING_C * (1 - clamped / 100)
 }
 
 export function statusLabel(status: BookStatus): string {

@@ -4,7 +4,8 @@ import type { LibraryView } from './shelf'
 const SORTS: { id: LibrarySort; label: string }[] = [
   { id: 'recent', label: '最近阅读' },
   { id: 'title', label: '书名' },
-  { id: 'added', label: '加入时间' }
+  { id: 'added', label: '加入时间' },
+  { id: 'progress', label: '阅读进度' }
 ]
 
 /** 书架舞台栏：左侧当前上下文与计数，右侧排序与视图切换 */

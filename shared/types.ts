@@ -108,7 +108,7 @@ export type BookSummary = {
 }
 
 /** 书架的排序口径。recent 用「上次阅读，没有就加入时间」 */
-export type LibrarySort = 'recent' | 'title' | 'added'
+export type LibrarySort = 'recent' | 'title' | 'added' | 'progress'
 
 /** 侧栏「本地书库」的汇总。bytes 是全部原文件大小之和 */
 export type LibraryStats = {

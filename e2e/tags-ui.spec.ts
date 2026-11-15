@@ -53,8 +53,9 @@ test('标签：网格卡片与列表的指派、侧栏筛选、管理模态框�
   await closeModal.click()
   await expect(win.locator('.modal')).toHaveCount(0)
 
-  // 网格卡片上就能指派：chip 当场出现在卡面上
+  // 网格卡片上就能指派：chip 当场出现在卡面上（动作在封面悬停层）
   const firstCard = win.locator('.book-grid__cell').first()
+  await firstCard.hover()
   await firstCard.getByRole('button', { name: '＋标签' }).click()
   await expect(win.locator('.modal__title')).toContainText('的标签')
   await win.locator('.tag-picker__row input[type=checkbox]').first().check()
