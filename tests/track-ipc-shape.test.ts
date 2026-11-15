@@ -15,7 +15,9 @@ const TRACK_METHODS = [
   'getLatestGap',
   'build',
   'gap',
-  'cancel'
+  'cancel',
+  'matchBooks',
+  'confirmMatch'
 ] as const
 
 describe('学习脉络 IPC 白名单', () => {
@@ -29,6 +31,8 @@ describe('学习脉络 IPC 白名单', () => {
     expect(CH.trackBuild).toBe('track:build')
     expect(CH.trackGap).toBe('track:gap')
     expect(CH.trackCancel).toBe('track:cancel')
+    expect(CH.trackMatchBooks).toBe('track:matchBooks')
+    expect(CH.trackConfirmMatch).toBe('track:confirmMatch')
     expect(CH).not.toHaveProperty('trackOnProgress')
     expect(Object.values(CH)).not.toContain('track:onProgress')
     expect(CH.aiProgress).toBe('ai:progress')

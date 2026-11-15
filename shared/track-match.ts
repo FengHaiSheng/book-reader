@@ -26,6 +26,16 @@ export type MatchDecision =
   | { bookId: string; kind: 'pending'; candidates: Array<{ nodeId: string; score: number }> }
   | { bookId: string; kind: 'skip'; reason: 'low' | 'already-linked' }
 
+/** 主进程归位结果：mount 已落库为 local，pending 等用户确认，skipped 不动。 */
+export type TrackMatchResult = {
+  mounted: Array<{ bookId: string; nodeIds: string[] }>
+  pending: Array<{
+    bookId: string
+    candidates: Array<{ nodeId: string; score: number; title: string }>
+  }>
+  skipped: Array<{ bookId: string; reason: 'low' | 'already-linked' }>
+}
+
 const CONTAINMENT_SCORE = 0.92
 const AUTHOR_FLOOR = 0.55
 

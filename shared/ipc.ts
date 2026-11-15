@@ -90,7 +90,9 @@ export const CH = {
   trackGetLatestGap: 'track:getLatestGap',
   trackBuild: 'track:build',
   trackGap: 'track:gap',
-  trackCancel: 'track:cancel'
+  trackCancel: 'track:cancel',
+  trackMatchBooks: 'track:matchBooks',
+  trackConfirmMatch: 'track:confirmMatch'
 } as const
 
 export type Channel = (typeof CH)[keyof typeof CH]
@@ -172,6 +174,8 @@ export const API_SHAPE = {
     'getLatestGap',
     'build',
     'gap',
-    'cancel'
+    'cancel',
+    'matchBooks',
+    'confirmMatch'
   ]
 } as const

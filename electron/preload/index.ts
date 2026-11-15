@@ -51,6 +51,7 @@ import type {
   Tag,
   TermsPayload
 } from '@shared/types'
+import type { TrackMatchResult } from '@shared/track-match'
 import type { StoredGap, TrackNodeView, TrackRow } from '../main/track/repo'
 import type { TrackSignalsResult } from '../main/track/signals'
 import type { TrackBuildResult, TrackGapResult } from '../main/track/tasks'
@@ -249,7 +250,11 @@ const api = {
       ipcRenderer.invoke(CH.trackBuild, input),
     gap: (input?: { question?: string; forceRefresh?: boolean }): Promise<TrackGapResult> =>
       ipcRenderer.invoke(CH.trackGap, input ?? {}),
-    cancel: (task: 'build' | 'gap'): Promise<void> => ipcRenderer.invoke(CH.trackCancel, task)
+    cancel: (task: 'build' | 'gap'): Promise<void> => ipcRenderer.invoke(CH.trackCancel, task),
+    matchBooks: (opts?: { bookIds?: string[] }): Promise<TrackMatchResult> =>
+      ipcRenderer.invoke(CH.trackMatchBooks, opts ?? {}),
+    confirmMatch: (bookId: string, nodeIds: string[]): Promise<void> =>
+      ipcRenderer.invoke(CH.trackConfirmMatch, bookId, nodeIds)
   },
   shell: {
     openExternal: (url: string): Promise<void> =>

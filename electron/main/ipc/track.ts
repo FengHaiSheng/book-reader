@@ -13,6 +13,7 @@ import {
   renameNode,
   setNodeBooks
 } from '../track/repo'
+import { runConfirmMatch, runMatchBooks } from '../track/match-books'
 import { computeTrackSignals } from '../track/signals'
 import { runTrackBuild, runTrackGap } from '../track/tasks'
 
@@ -118,6 +119,30 @@ export function registerTrackIpc(): void {
         })
       })
   )
+
+  // 本地归位不花钱、不走队列，同步跑完即返回
+  ipcMain.handle(CH.trackMatchBooks, (_event, opts: { bookIds?: string[] } | null) => {
+    try {
+      const bookIds = opts?.bookIds
+      if (
+        bookIds !== undefined &&
+        (!Array.isArray(bookIds) || bookIds.some((id) => typeof id !== 'string'))
+      ) {
+        throw appError('DB_ERROR', '书籍列表不正确')
+      }
+      return runMatchBooks(getDatabase(), bookIds === undefined ? {} : { bookIds })
+    } catch (error) {
+      throw asIpcError(error, '归位没有完成')
+    }
+  })
+
+  ipcMain.handle(CH.trackConfirmMatch, (_event, bookId: string, nodeIds: string[]) => {
+    try {
+      runConfirmMatch(getDatabase(), bookId, nodeIds)
+    } catch (error) {
+      throw asIpcError(error, '归位没有确认成')
+    }
+  })
 
   ipcMain.handle(CH.trackCancel, (_event, task: TrackTask) => {
     if (task !== 'build' && task !== 'gap') throw new Error('未知的脉络任务')
