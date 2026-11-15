@@ -27,6 +27,9 @@ export type NodeSignals = {
   sediment: number
 }
 
+/** 脉络上的书从哪来：模型建议、用户手改、本地匹配。 */
+export type TrackBookSource = 'ai' | 'user' | 'local'
+
 export type TrackNodeInput = {
   id: string
   parentId: string | null

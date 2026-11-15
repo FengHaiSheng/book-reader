@@ -1,10 +1,10 @@
 import type Database from 'better-sqlite3'
 import { APP_ERROR_CODES, appError } from '@shared/errors'
-import type { TrackGapPayload, TrackNodeInput } from '@shared/track'
+import type { TrackBookSource, TrackGapPayload, TrackNodeInput } from '@shared/track'
 import type { AiUsage, ProviderId } from '@shared/types'
 
+export type { TrackBookSource }
 export type TrackStatus = 'active' | 'archived'
-export type TrackBookSource = 'ai' | 'user'
 export type TrackAiTask = 'build' | 'gap'
 
 export type TrackRow = {
@@ -144,7 +144,7 @@ export type TrackRebuildGoal = {
  *
  * keepUserLinksByNodeId 为真时，新树里仍然存在的 node_id 留下原来的挂载
  *（含用户手改）；对不上的挂载丢掉。传入的 links 只补充还没有的书，
- * 不会把已有的 user 挂载改回 ai。
+ * 不会把已有的 user 挂载改成 ai 或 local。
  * 为假时丢掉该脉络的全部旧挂载，只写入 links。
  * 传入 goal 时，目标、标题、提示词版本和树在同一事务里更新。
  */
@@ -223,6 +223,44 @@ export function setNodeBooks(
     for (const bookId of unique) insert.run(trackId, nodeId, bookId, now)
     db.prepare('UPDATE track_nodes SET updated_at = ? WHERE id = ?').run(now, nodeId)
     db.prepare('UPDATE tracks SET updated_at = ? WHERE id = ?').run(now, trackId)
+  })
+}
+
+/**
+ * 给脉络补挂载。节点必须属于这条脉络。
+ * 主键已存在则跳过，不改原来的 source，因此 user 不会被 local 盖掉。
+ */
+export function addBookLinks(
+  db: Database.Database,
+  trackId: string,
+  links: TrackLinkInput[],
+  now: number
+): void {
+  const prepared: { nodeId: string; bookId: string; source: TrackBookSource }[] = []
+  for (const link of links) {
+    const source = asSource(link.source)
+    if (!source) throw appError('DB_ERROR', '挂载来源无效')
+    const bookId = link.bookId.trim()
+    if (bookId === '') throw appError('DB_ERROR', '挂载缺少书籍')
+    prepared.push({ nodeId: link.nodeId, bookId, source })
+  }
+  if (prepared.length === 0) return
+
+  runWrite(db, () => {
+    const nodeOnTrack = db.prepare('SELECT id FROM track_nodes WHERE id = ? AND track_id = ?')
+    const insert = db.prepare(
+      `INSERT INTO track_node_books (track_id, node_id, book_id, source, created_at)
+       VALUES (?, ?, ?, ?, ?)`
+    )
+    for (const link of prepared) {
+      if (!nodeOnTrack.get(link.nodeId, trackId)) throw appError('DB_ERROR', '找不到节点')
+      try {
+        insert.run(trackId, link.nodeId, link.bookId, link.source, now)
+      } catch (error) {
+        if (sqliteCode(error).includes('PRIMARYKEY')) continue
+        throw error
+      }
+    }
   })
 }
 
@@ -429,7 +467,7 @@ function readLinks(db: Database.Database, trackId: string): LinkRow[] {
 }
 
 /**
- * 旧挂载先占位。新挂载只补还没有的书；同一本书已经是 user 时，不接受 ai 把它改回去。
+ * 旧挂载先占位。新挂载只补还没有的书；同一本书已经是 user 时，不接受 ai 或 local 把它改回去。
  */
 function mergeLinks(
   nodeIds: Set<string>,
@@ -484,7 +522,7 @@ function linkKey(nodeId: string, bookId: string): string {
 }
 
 function asSource(value: string): TrackBookSource | null {
-  return value === 'ai' || value === 'user' ? value : null
+  return value === 'ai' || value === 'user' || value === 'local' ? value : null
 }
 
 function requireText(value: string, message: string): string {

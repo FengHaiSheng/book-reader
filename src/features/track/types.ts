@@ -1,10 +1,10 @@
-import type { TrackGapPayload } from '@shared/track'
+import type { TrackBookSource, TrackGapPayload } from '@shared/track'
 
 export type TrackBookLink = {
   bookId: string
   title: string
   author: string | null
-  source: 'ai' | 'user'
+  source: TrackBookSource
 }
 
 export type TrackNode = {
