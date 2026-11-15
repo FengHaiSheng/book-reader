@@ -5,6 +5,7 @@ import type {
   ImportProgressEvent,
   LibrarySort
 } from '@shared/types'
+import type { TrackMatchResult } from '@shared/track-match'
 
 export type LibraryView = 'grid' | 'list'
 
@@ -25,6 +26,40 @@ export function summarizeImport(outcomes: readonly ImportOutcome[]): string {
     parts.push(`${duplicates.length} 本已在书库里${titles}`)
   }
   return parts.join('，')
+}
+
+/** 导入后本地预归位的那一句话；有待确认的书时指路脉络页 */
+export function summarizeMatch(result: TrackMatchResult): string {
+  const n = result.mounted.length
+  const m = result.pending.length
+  const k = result.skipped.filter((item) => item.reason === 'low').length
+  const text = `脉络归位 ${n} 本，待确认 ${m} 本，仍未归类 ${k} 本`
+  return m > 0 ? `${text}，可到脉络页确认` : text
+}
+
+type MatchApi = {
+  getActive: () => Promise<unknown | null>
+  matchBooks: (opts: { bookIds: string[] }) => Promise<TrackMatchResult>
+}
+
+/**
+ * 导入结束后的完整提示：先说导入结果；若有新书且存在 active 脉络，再对新书做本地预归位。
+ * 归位失败不能把「导入成功」的提示吞掉。
+ */
+export async function noticeAfterImport(
+  outcomes: readonly ImportOutcome[],
+  api: MatchApi
+): Promise<string> {
+  const base = summarizeImport(outcomes)
+  const importedIds = outcomes.filter((o) => o.status === 'imported').map((o) => o.bookId)
+  if (importedIds.length === 0) return base
+  try {
+    if (!(await api.getActive())) return base
+    const match = await api.matchBooks({ bookIds: importedIds })
+    return `${base}。${summarizeMatch(match)}`
+  } catch {
+    return base
+  }
 }
 
 const PHASE_LABEL: Record<ImportProgressEvent['phase'], string> = {

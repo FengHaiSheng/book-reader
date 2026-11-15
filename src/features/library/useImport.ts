@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react'
 import type { ImportOutcome, ImportProgressEvent } from '@shared/types'
 import { readableError } from '@shared/errors'
-import { summarizeImport } from './shelf'
+import { noticeAfterImport } from './shelf'
 
 /**
  * 选择文件与拖放共用的一条导入路径。
@@ -22,7 +22,7 @@ export function useImport(onDone: () => Promise<void> | void) {
       try {
         const outcomes = await task()
         await onDone()
-        setNotice(summarizeImport(outcomes ?? []))
+        setNotice(await noticeAfterImport(outcomes ?? [], window.api.track))
       } catch (error) {
         setNotice(readableError(error, '导入没有成功'))
       } finally {

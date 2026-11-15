@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { BookSummary, BookTag, BookStatus } from '../shared/types'
 import {
   BOOK_CARD_RING_C,
@@ -12,7 +12,9 @@ import {
   progressText,
   sortBooks,
   statusLabel,
-  summarizeImport
+  summarizeImport,
+  summarizeMatch,
+  noticeAfterImport
 } from '../src/features/library/shelf'
 
 function book(
@@ -217,5 +219,72 @@ describe('formatBytes', () => {
     expect(formatBytes(Math.round(4.2 * 1024 * 1024))).toBe('4.2 MB')
     expect(formatBytes(218 * 1024 * 1024)).toBe('218 MB')
     expect(formatBytes(Math.round(1.5 * 1024 ** 3))).toBe('1.5 GB')
+  })
+})
+
+describe('summarizeMatch', () => {
+  it('只统计 low 的未归类，already-linked 不算', () => {
+    expect(
+      summarizeMatch({
+        mounted: [{ bookId: 'a', nodeIds: ['n1'] }],
+        pending: [],
+        skipped: [
+          { bookId: 'b', reason: 'low' },
+          { bookId: 'c', reason: 'already-linked' }
+        ]
+      })
+    ).toBe('脉络归位 1 本，待确认 0 本，仍未归类 1 本')
+  })
+
+  it('有待确认时提示去脉络页', () => {
+    expect(
+      summarizeMatch({
+        mounted: [],
+        pending: [{ bookId: 'a', candidates: [] }],
+        skipped: []
+      })
+    ).toBe('脉络归位 0 本，待确认 1 本，仍未归类 0 本，可到脉络页确认')
+  })
+})
+
+describe('noticeAfterImport', () => {
+  const imported = [{ status: 'imported' as const, bookId: 'a', title: '夏夜' }]
+  const result = { mounted: [{ bookId: 'a', nodeIds: ['n'] }], pending: [], skipped: [] }
+
+  it('没有 active 脉络时不调用 matchBooks', async () => {
+    const matchBooks = vi.fn()
+    const text = await noticeAfterImport(imported, { getActive: async () => null, matchBooks })
+    expect(matchBooks).not.toHaveBeenCalled()
+    expect(text).toBe('导入 1 本')
+  })
+
+  it('没有新导入的书时不查 active', async () => {
+    const getActive = vi.fn()
+    const text = await noticeAfterImport(
+      [{ status: 'duplicate', bookId: 'a', title: '夏夜' }],
+      { getActive, matchBooks: vi.fn() }
+    )
+    expect(getActive).not.toHaveBeenCalled()
+    expect(text).toBe('1 本已在书库里《夏夜》')
+  })
+
+  it('有 active 时只对新导入的书匹配并拼接文案', async () => {
+    const matchBooks = vi.fn(async () => result)
+    const text = await noticeAfterImport(
+      [...imported, { status: 'duplicate', bookId: 'b', title: '旧书' }],
+      { getActive: async () => ({}), matchBooks }
+    )
+    expect(matchBooks).toHaveBeenCalledWith({ bookIds: ['a'] })
+    expect(text).toBe('导入 1 本，1 本已在书库里《旧书》。脉络归位 1 本，待确认 0 本，仍未归类 0 本')
+  })
+
+  it('匹配失败不影响导入提示', async () => {
+    const text = await noticeAfterImport(imported, {
+      getActive: async () => ({}),
+      matchBooks: async () => {
+        throw new Error('boom')
+      }
+    })
+    expect(text).toBe('导入 1 本')
   })
 })
