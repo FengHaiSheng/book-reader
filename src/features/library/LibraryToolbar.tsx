@@ -1,5 +1,5 @@
 import type { LibrarySort } from '@shared/types'
-import type { LibraryView } from './shelf'
+import type { LibraryGroupBy, LibraryView } from './shelf'
 
 const SORTS: { id: LibrarySort; label: string }[] = [
   { id: 'recent', label: '最近阅读' },
@@ -8,14 +8,22 @@ const SORTS: { id: LibrarySort; label: string }[] = [
   { id: 'progress', label: '阅读进度' }
 ]
 
-/** 书架舞台栏：左侧当前上下文与计数，右侧排序与视图切换 */
+const GROUPS: { id: LibraryGroupBy; label: string }[] = [
+  { id: 'list', label: '按列表' },
+  { id: 'track', label: '按脉络' }
+]
+
+/** 书架舞台栏：左侧当前上下文与计数，右侧分组、排序与视图切换 */
 export function LibraryToolbar({
   title,
   count,
   sort,
   onSort,
   view,
-  onView
+  onView,
+  groupBy,
+  onGroupBy,
+  showTrackGroup
 }: {
   title: string
   count: number
@@ -23,12 +31,32 @@ export function LibraryToolbar({
   onSort: (sort: LibrarySort) => void
   view: LibraryView
   onView: (view: LibraryView) => void
+  groupBy: LibraryGroupBy
+  onGroupBy: (groupBy: LibraryGroupBy) => void
+  /** 没有 active 脉络时不显示「按脉络」，也不让它被选中 */
+  showTrackGroup: boolean
 }) {
   return (
     <div className="stage__bar">
       <span className="stage__title">{title}</span>
       <span className="stage__count">{count} 本</span>
       <span className="stage__spacer" />
+
+      {showTrackGroup && (
+        <div className="seg" role="group" aria-label="分组">
+          {GROUPS.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className={`seg__b${groupBy === item.id ? ' is-on' : ''}`}
+              aria-pressed={groupBy === item.id}
+              onClick={() => onGroupBy(item.id)}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       <label className="sort">
         <span className="sort__label">排序</span>

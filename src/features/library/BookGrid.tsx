@@ -21,13 +21,16 @@ export function BookGrid({
   books,
   onOpen,
   onRemove,
-  onTag
+  onTag,
+  showDrop = true
 }: {
   books: BookSummary[]
   onOpen: (id: string) => void
   onRemove: (id: string) => void
   /** 打标签的入口交给页面：指派是一个模态框，两套视图共用同它 */
   onTag: (book: BookSummary) => void
+  /** 按脉络分节时每节都渲染网格，只在平铺书架保留一个拖放终点 */
+  showDrop?: boolean
 }) {
   return (
     <ul className="book-grid">
@@ -105,7 +108,7 @@ export function BookGrid({
           </li>
         )
       })}
-      <li className="book-grid__cell book-grid__drop" aria-label="拖电子书到这里" />
+      {showDrop && <li className="book-grid__cell book-grid__drop" aria-label="拖电子书到这里" />}
     </ul>
   )
 }

@@ -2521,6 +2521,36 @@ html[data-theme='dark'] .seg__b.is-on {
   padding: var(--s5) var(--s5) var(--s7);
 }
 
+/* 按脉络分节：节标题跟着树的层级缩进，未归类用分隔线收尾 */
+.track-shelf {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s6);
+}
+
+.track-shelf__title {
+  margin: 0 0 var(--s3);
+  font-family: var(--serif);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.track-shelf__section.is-untracked {
+  padding-top: var(--s4);
+  border-top: 1px solid var(--line);
+}
+
+.track-shelf__section.is-untracked .track-shelf__title {
+  color: var(--ink-muted);
+}
+
+.track-shelf__empty {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 13px;
+}
+
 .book-grid {
   list-style: none;
   margin: 0;

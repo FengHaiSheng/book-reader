@@ -8,15 +8,19 @@ import { LibraryTitlebarTools } from '../features/library/LibraryTitlebarTools'
 import { LibraryToolbar } from '../features/library/LibraryToolbar'
 import { TagManager } from '../features/library/TagManager'
 import { TagPicker } from '../features/library/TagPicker'
+import { TrackShelf } from '../features/library/TrackShelf'
 import { Modal } from '../shell/Modal'
 import {
   filterBooks,
+  parseGroupBy,
   parseView,
   progressText,
   sortBooks,
   statusLabel,
+  type LibraryGroupBy,
   type LibraryView
 } from '../features/library/shelf'
+import { groupBooksByTrack, type TrackShelfNode } from '../features/library/track-groups'
 import { useImport } from '../features/library/useImport'
 
 export function LibraryPage({
@@ -43,6 +47,9 @@ export function LibraryPage({
 }) {
   const [books, setBooks] = useState<BookSummary[] | null>(null)
   const [view, setView] = useState<LibraryView>('grid')
+  const [groupBy, setGroupBy] = useState<LibraryGroupBy>('list')
+  /** null 表示没有 active 脉络；空数组是「有脉络但还没节点」 */
+  const [trackNodes, setTrackNodes] = useState<TrackShelfNode[] | null>(null)
   const [sort, setSort] = useState<LibrarySort>('recent')
   const [dropping, setDropping] = useState(false)
   const [managing, setManaging] = useState(false)
@@ -57,11 +64,31 @@ export function LibraryPage({
     setBooks(await window.api.library.list(tagFilter))
   }, [tagFilter])
 
-  /** 手段之后要刷新三处：列表（这里）、侧栏标签计数与书库汇总（在 App 里） */
+  /** 脉络挂载会随导入、打标签之外的改动变化，分节视图要靠它重取 */
+  const refreshTrack = useCallback(async () => {
+    const active = await window.api.track.getActive()
+    if (!active) {
+      setTrackNodes(null)
+      return
+    }
+    const list = await window.api.track.listNodes()
+    setTrackNodes(
+      list.map((node) => ({
+        id: node.id,
+        parentId: node.parentId,
+        title: node.title,
+        depth: node.depth,
+        sortOrder: node.sortOrder,
+        bookIds: node.books.map((book) => book.bookId)
+      }))
+    )
+  }, [])
+
+  /** 手段之后要刷新三处：列表（这里）、脉络分节、侧栏标签计数与书库汇总（在 App 里） */
   const refreshAll = useCallback(async () => {
-    await refresh()
+    await Promise.all([refresh(), refreshTrack()])
     await onLibraryChanged()
-  }, [refresh, onLibraryChanged])
+  }, [refresh, refreshTrack, onLibraryChanged])
 
   const { progress, busy, notice, setNotice, run } = useImport(refreshAll)
 
@@ -70,7 +97,14 @@ export function LibraryPage({
   }, [refresh])
 
   useEffect(() => {
-    void window.api.settings.getAll().then((all) => setView(parseView(all['library.view'])))
+    void refreshTrack()
+  }, [refreshTrack])
+
+  useEffect(() => {
+    void window.api.settings.getAll().then((all) => {
+      setView(parseView(all['library.view']))
+      setGroupBy(parseGroupBy(all['library.groupBy']))
+    })
   }, [])
 
   // 切换标签或状态筛选相当于换了个上下文，模态框跟着收起，避免停在旧上下文里
@@ -96,6 +130,11 @@ export function LibraryPage({
   function pickView(next: LibraryView): void {
     setView(next)
     void window.api.settings.set('library.view', next)
+  }
+
+  function pickGroupBy(next: LibraryGroupBy): void {
+    setGroupBy(next)
+    void window.api.settings.set('library.groupBy', next)
   }
 
   function onPick(): void {
@@ -136,6 +175,16 @@ export function LibraryPage({
         : '全部书籍'
   const pristine =
     books.length === 0 && statusFilter === null && tagFilter === null && trimmed === ''
+  // 没有 active 脉络时分组只能是平铺：控件不显示，也不让设置里的旧值把书架卡成空节
+  const hasTrack = trackNodes !== null
+  const activeGroupBy: LibraryGroupBy = hasTrack ? groupBy : 'list'
+  const sections =
+    trackNodes !== null && activeGroupBy === 'track'
+      ? groupBooksByTrack(
+          visible.map((book) => book.id),
+          trackNodes
+        )
+      : null
   // 每轮刷新都从列表里现取，指派完 chip 与复选框一起变
   const tagging = taggingId === null ? null : (books.find((book) => book.id === taggingId) ?? null)
 
@@ -173,6 +222,9 @@ export function LibraryPage({
         onSort={setSort}
         view={view}
         onView={pickView}
+        groupBy={activeGroupBy}
+        onGroupBy={pickGroupBy}
+        showTrackGroup={hasTrack}
       />
 
       <div className="library__status" role="status">
@@ -199,6 +251,15 @@ export function LibraryPage({
           <p className="library__empty">
             {trimmed !== '' ? `没有匹配「${trimmed}」的书。` : '这里还没有书。'}
           </p>
+        ) : sections ? (
+          <TrackShelf
+            sections={sections}
+            books={visible}
+            view={view}
+            onOpen={onOpen}
+            onRemove={(id) => void window.api.library.remove(id).then(refreshAll)}
+            onTag={(book) => setTaggingId(book.id)}
+          />
         ) : view === 'grid' ? (
           <BookGrid
             books={visible}
