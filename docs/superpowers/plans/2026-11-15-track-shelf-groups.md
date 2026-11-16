@@ -57,7 +57,7 @@
 **Interfaces:**
 - Produces: `TrackBookSource = 'ai' | 'user' | 'local'`；`asSource` 三者皆合法；`addBookLinks(db, trackId, links: {nodeId, bookId, source}[], now)` 仅 INSERT OR IGNORE / 跳过已存在键
 
-- [ ] **Step 1: 写失败单测（source=local 可读可写）**
+- [x] **Step 1: 写失败单测（source=local 可读可写）**
 
 ```ts
 import { describe, expect, it } from 'vitest'
@@ -67,12 +67,12 @@ import { describe, expect, it } from 'vitest'
 
 在 `tests/track-source-local.test.ts`：复用 `tests/track-repo.test.ts` 的 DB 搭建方式，插入一条 `local` 挂载并 `listNodesWithBooks` 断言 `books[0].source === 'local'`。
 
-- [ ] **Step 2: 跑测确认失败**
+- [x] **Step 2: 跑测确认失败**
 
 Run: `pnpm test -- tests/track-source-local.test.ts`  
 Expected: FAIL（`asSource` 尚不认 local 或类型不含 local）
 
-- [ ] **Step 3: 最小实现**
+- [x] **Step 3: 最小实现**
 
 1. `TrackBookSource` 加入 `'local'`
 2. `asSource`: `value === 'ai' || value === 'user' || value === 'local'`
@@ -91,11 +91,11 @@ export function addBookLinks(
 
 `mergeLinks` 里「user 不被非 user 覆盖」规则保持；`local` 与 `ai` 同等，不能覆盖 `user`。
 
-- [ ] **Step 4: 跑测通过**
+- [x] **Step 4: 跑测通过**
 
 Run: `pnpm test -- tests/track-source-local.test.ts tests/track-repo.test.ts`
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add electron/main/track/repo.ts src/features/track/types.ts shared/track.ts tests/track-source-local.test.ts
@@ -178,7 +178,7 @@ export function decideMatches(
 7. 否则若 `best >= highMin` 且 `best - second >= highGap` → mount 唯一个 best
 8. 否则 → `{ kind: 'pending', candidates: 按分降序最多 pendingMax 条 }`
 
-- [ ] **Step 1: 写 `tests/track-match.test.ts` 覆盖**
+- [x] **Step 1: 写 `tests/track-match.test.ts` 覆盖**
 
 ```ts
 import { describe, expect, it } from 'vitest'
@@ -235,7 +235,7 @@ describe('track-match', () => {
 })
 ```
 
-- [ ] **Step 2: 跑测失败 → Step 3 实现 `shared/track-match.ts` → Step 4 跑通 → Step 5 Commit**
+- [x] **Step 2: 跑测失败 → Step 3 实现 `shared/track-match.ts` → Step 4 跑通 → Step 5 Commit**
 
 ```bash
 git add shared/track-match.ts tests/track-match.test.ts
@@ -316,11 +316,11 @@ confirmMatch: (bookId: string, nodeIds: string[]) =>
   ipcRenderer.invoke(CH.trackConfirmMatch, bookId, nodeIds)
 ```
 
-- [ ] **Step 1: 扩展 `tests/track-ipc-shape.test.ts` 的 `TRACK_METHODS` 含新方法；跑测 FAIL**
-- [ ] **Step 2: 改 ipc / preload / CH / API_SHAPE；跑 shape 测 PASS**
-- [ ] **Step 3: 写 `tests/track-match-books.test.ts`（内存库：建 track+节点+书，match 后挂载为 local；confirm 为 user）**
-- [ ] **Step 4: 实现 `match-books.ts` + handlers；测 PASS**
-- [ ] **Step 5: Commit**
+- [x] **Step 1: 扩展 `tests/track-ipc-shape.test.ts` 的 `TRACK_METHODS` 含新方法；跑测 FAIL**
+- [x] **Step 2: 改 ipc / preload / CH / API_SHAPE；跑 shape 测 PASS**
+- [x] **Step 3: 写 `tests/track-match-books.test.ts`（内存库：建 track+节点+书，match 后挂载为 local；confirm 为 user）**
+- [x] **Step 4: 实现 `match-books.ts` + handlers；测 PASS**
+- [x] **Step 5: Commit**
 
 ```bash
 git commit -m "$(cat <<'EOF'
@@ -367,10 +367,10 @@ export function summarizeMatch(result: TrackMatchResult): string {
 
 pending>0 时 notice 可带「可到脉络页确认」（纯文案即可）。
 
-- [ ] **Step 1: 单测 `summarizeMatch`**
-- [ ] **Step 2: 接入 LibraryPage / useImport**
-- [ ] **Step 3: 手动或单测验证无 Track 时不调用 match（getActive null 则跳过）**
-- [ ] **Step 4: Commit**
+- [x] **Step 1: 单测 `summarizeMatch`**
+- [x] **Step 2: 接入 LibraryPage / useImport**
+- [x] **Step 3: 手动或单测验证无 Track 时不调用 match（getActive null 则跳过）**
+- [x] **Step 4: Commit**
 
 ```bash
 git commit -m "$(cat <<'EOF'
@@ -425,7 +425,7 @@ export function groupBooksByTrack(
 3. 末节：`nodeId: null`, `title: '未归类'`, `bookIds` = `visibleBookIds` 里未出现在任何节点直挂中的 id；若为空则**省略**未归类节  
 4. 一书多挂 → 多个节的 bookIds 可重复出现同一 id  
 
-- [ ] **Step 1–4: TDD 实现 + Commit**
+- [x] **Step 1–4: TDD 实现 + Commit**
 
 ```bash
 git commit -m "$(cat <<'EOF'
@@ -454,10 +454,10 @@ EOF
 5. 标签筛选仍走 `library.list(tagFilter)`；状态与 query 仍 `filterBooks`；再 `groupBooksByTrack`  
 6. 工具栏旁可显示 `track.title` 小字上下文（可选，有则写，无则跳过以免挤）
 
-- [ ] **Step 1: 改 Toolbar props：`groupBy` / `onGroupBy` / `showTrackGroup`**
-- [ ] **Step 2: 实现 TrackShelf + LibraryPage 接线**
-- [ ] **Step 3: 手动目视或 e2e（Task 8）**
-- [ ] **Step 4: Commit**
+- [x] **Step 1: 改 Toolbar props：`groupBy` / `onGroupBy` / `showTrackGroup`**
+- [x] **Step 2: 实现 TrackShelf + LibraryPage 接线**
+- [x] **Step 3: 手动目视或 e2e（Task 8）**
+- [x] **Step 4: Commit**
 
 ```bash
 git commit -m "$(cat <<'EOF'
@@ -482,9 +482,9 @@ EOF
 3. 「全部跳过」清空 pending state（不写库）  
 4. 导入带来的 pending：若用户先在书架看到文案，进脉络页可再点「归位未归类」重跑（pending 不持久化，符合 spec）
 
-- [ ] **Step 1: UI + 调用**
-- [ ] **Step 2: 确认后 source 为 user（可依赖 Task 3 单测）**
-- [ ] **Step 3: Commit**
+- [x] **Step 1: UI + 调用**
+- [x] **Step 2: 确认后 source 为 user（可依赖 Task 3 单测）**
+- [x] **Step 3: Commit**
 
 ```bash
 git commit -m "$(cat <<'EOF'
@@ -515,9 +515,9 @@ EOF
 - 书架有 Track 时可「按脉络」分节；标签不变  
 - 导入 / 归位未归类：本地三档挂载  
 
-- [ ] **Step 1: e2e 绿灯**
-- [ ] **Step 2: 更新清单**
-- [ ] **Step 3: Commit**
+- [x] **Step 1: e2e 绿灯**
+- [x] **Step 2: 更新清单**
+- [x] **Step 3: Commit**
 
 ```bash
 git commit -m "$(cat <<'EOF'
