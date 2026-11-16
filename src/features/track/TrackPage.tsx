@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { BookSummary } from '@shared/types'
+import type { TrackMatchResult } from '@shared/track-match'
 import { readableError } from '@shared/errors'
 import { Modal } from '../../shell/Modal'
 import { GapPanel } from './GapPanel'
@@ -24,6 +25,7 @@ const REBUILD_COPY =
 
 type SpendConfirm = { rebuild: boolean; goalText: string }
 type BusyTask = 'build' | 'gap'
+type PendingMatch = TrackMatchResult['pending'][number]
 
 export function TrackPage({
   onOpenBook,
@@ -35,6 +37,7 @@ export function TrackPage({
   const alive = useRef(true)
   const busyRef = useRef<BusyTask | null>(null)
   const linkBusyRef = useRef(false)
+  const matchBusyRef = useRef(false)
   const settingsHintRef = useRef<HTMLButtonElement>(null)
 
   const [ready, setReady] = useState(false)
@@ -53,6 +56,10 @@ export function TrackPage({
   const [keyReady, setKeyReady] = useState<boolean | null>(null)
   const [busy, setBusy] = useState<BusyTask | null>(null)
   const [linkBusy, setLinkBusy] = useState(false)
+  const [matchBusy, setMatchBusy] = useState(false)
+  const [pending, setPending] = useState<PendingMatch[]>([])
+  /** bookId → 已勾选的候选节点；默认全选，确认时写库为 user */
+  const [picked, setPicked] = useState<Record<string, string[]>>({})
   const [progress, setProgress] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -147,6 +154,9 @@ export function TrackPage({
       // 生成结果里的未归类用接口原样带回，不在这里按书架重算。
       setUncategorizedIds(result.uncategorizedBookIds)
       setNotice(result.note)
+      // 重生后节点 id 可能整批换掉，旧的待确认候选不再有意义
+      setPending([])
+      setPicked({})
       setBuildUsage(result.usage)
       setEditingGoal(false)
       setGoalDraft(active?.goalText ?? goalText)
@@ -211,8 +221,68 @@ export function TrackPage({
     setConfirm({ rebuild, goalText: goal })
   }
 
+  /** 本地归位：不花钱，高置信已由主进程落库，中置信留在这里等确认 */
+  const matchUncategorized = async (): Promise<void> => {
+    if (busyRef.current || matchBusyRef.current) return
+    matchBusyRef.current = true
+    setMatchBusy(true)
+    setError(null)
+    try {
+      const result = await window.api.track.matchBooks({})
+      if (!alive.current) return
+      setPending(result.pending)
+      setPicked(
+        Object.fromEntries(
+          result.pending.map((item) => [item.bookId, item.candidates.map((c) => c.nodeId)])
+        )
+      )
+      setNotice(`已归位 ${result.mounted.length} 本，待确认 ${result.pending.length} 本`)
+      await reload()
+    } catch (e) {
+      fail(e, '归位没有完成')
+    } finally {
+      matchBusyRef.current = false
+      if (alive.current) setMatchBusy(false)
+    }
+  }
+
+  const togglePendingNode = (bookId: string, nodeId: string): void => {
+    setPicked((current) => {
+      const chosen = current[bookId] ?? []
+      return {
+        ...current,
+        [bookId]: chosen.includes(nodeId)
+          ? chosen.filter((id) => id !== nodeId)
+          : [...chosen, nodeId]
+      }
+    })
+  }
+
+  const confirmPending = async (bookId: string): Promise<void> => {
+    if (busyRef.current || matchBusyRef.current) return
+    const nodeIds = picked[bookId] ?? []
+    if (nodeIds.length === 0) {
+      setError('至少选一个节点')
+      return
+    }
+    matchBusyRef.current = true
+    setMatchBusy(true)
+    setError(null)
+    try {
+      await window.api.track.confirmMatch(bookId, nodeIds)
+      if (!alive.current) return
+      setPending((list) => list.filter((item) => item.bookId !== bookId))
+      await reload()
+    } catch (e) {
+      fail(e, '归位没有确认成')
+    } finally {
+      matchBusyRef.current = false
+      if (alive.current) setMatchBusy(false)
+    }
+  }
+
   const changeLinks = async (nodeId: string, bookIds: string[]): Promise<void> => {
-    if (busyRef.current || linkBusyRef.current) return
+    if (busyRef.current || linkBusyRef.current || matchBusyRef.current) return
     linkBusyRef.current = true
     setLinkBusy(true)
     setError(null)
@@ -379,6 +449,14 @@ export function TrackPage({
           <button
             type="button"
             className="btn btn--quiet"
+            disabled={busy !== null || linkBusy || matchBusy}
+            onClick={() => void matchUncategorized()}
+          >
+            归位未归类
+          </button>
+          <button
+            type="button"
+            className="btn btn--quiet"
             disabled={busy !== null}
             onClick={() => {
               setEditingGoal((open) => {
@@ -397,7 +475,7 @@ export function TrackPage({
             <button
               type="button"
               className="btn btn--primary"
-              disabled={busy !== null || linkBusy}
+              disabled={busy !== null || linkBusy || matchBusy}
               onClick={() => requestBuild(true)}
             >
               重生骨架
@@ -429,6 +507,56 @@ export function TrackPage({
       {notice && <p className="track-note">{notice}</p>}
       {buildUsageLine && <p className="track-note">{buildUsageLine}</p>}
       {alertMessage && <Alert message={alertMessage} onOpenSettings={onOpenSettings} />}
+      {pending.length > 0 && (
+        <section className="track-pending" aria-label="待确认归位">
+          <div className="track-pending__head">
+            <span className="track-section">待确认归位</span>
+            <button
+              type="button"
+              className="btn btn--quiet"
+              disabled={matchBusy}
+              onClick={() => setPending([])}
+            >
+              全部跳过
+            </button>
+          </div>
+          <ul className="track-pending__list">
+            {pending.map((item) => {
+              const book = books.find((candidate) => candidate.id === item.bookId)
+              const chosen = picked[item.bookId] ?? []
+              return (
+                <li key={item.bookId} className="track-pending__item">
+                  <span className="track-pending__book">{book?.title ?? '已不在书架'}</span>
+                  <div className="track-pending__opts">
+                    {item.candidates.map((candidate) => (
+                      <label key={candidate.nodeId} className="track-pending__opt">
+                        <input
+                          type="checkbox"
+                          checked={chosen.includes(candidate.nodeId)}
+                          disabled={matchBusy}
+                          onChange={() => togglePendingNode(item.bookId, candidate.nodeId)}
+                        />
+                        <span>{candidate.title || candidate.nodeId}</span>
+                        <span className="track-pending__score">
+                          {Math.round(candidate.score * 100)}%
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    className="btn"
+                    disabled={matchBusy || chosen.length === 0}
+                    onClick={() => void confirmPending(item.bookId)}
+                  >
+                    确认
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        </section>
+      )}
       <div className="track-body">
         <TrackTree
           nodes={nodes}
@@ -436,7 +564,7 @@ export function TrackPage({
           selectedId={selectedId}
           books={books}
           uncategorizedIds={uncategorizedIds}
-          locked={busy !== null || linkBusy}
+          locked={busy !== null || linkBusy || matchBusy}
           onSelect={setSelectedId}
           onOpenBook={onOpenBook}
           onChangeLinks={(nodeId, bookIds) => void changeLinks(nodeId, bookIds)}
