@@ -28,6 +28,11 @@ export type AiStubOptions = {
   deltas?: string[]
   /** 非流式（结构化）回答的正文，会被塞进 choices[0].message.content */
   payload?: Record<string, unknown>
+  /**
+   * 按调用顺序依次返回的结构化回答。脉络生成会连发两次（骨架 + 挂书建议），
+   * 用同一份 payload 两阶段都能解析时没必要拆；需要各自不同时用这个。
+   */
+  payloads?: Record<string, unknown>[]
 }
 
 /**
@@ -42,7 +47,7 @@ export async function installAiStub(
   options: AiStubOptions = {}
 ): Promise<void> {
   await app.evaluate((_electron, opts: AiStubOptions) => {
-    const state = { chat: 0, embed: 0, prompts: [] as string[] }
+    const state = { chat: 0, embed: 0, structured: 0, prompts: [] as string[] }
     const scope = globalThis as unknown as {
       __aiStub: typeof state
       fetch: typeof fetch
@@ -103,8 +108,12 @@ export async function installAiStub(
             headers: { 'Content-Type': 'text/event-stream' }
           })
         }
+        const payload = opts.payloads
+          ? (opts.payloads[state.structured] ?? opts.payload ?? {})
+          : (opts.payload ?? {})
+        state.structured += 1
         return reply({
-          choices: [{ message: { content: JSON.stringify(opts.payload ?? {}) } }],
+          choices: [{ message: { content: JSON.stringify(payload) } }],
           usage: { prompt_tokens: 300, completion_tokens: 40 }
         })
       }
