@@ -21,8 +21,9 @@ export function useImport(onDone: () => Promise<void> | void) {
       const unsubscribe = window.api.library.onImportProgress(setProgress)
       try {
         const outcomes = await task()
-        await onDone()
+        // 先归位再刷新：本地预归位写库后，书架的脉络分节要立刻看到新挂载
         setNotice(await noticeAfterImport(outcomes ?? [], window.api.track))
+        await onDone()
       } catch (error) {
         setNotice(readableError(error, '导入没有成功'))
       } finally {
