@@ -14,6 +14,14 @@ export function parseView(raw: string | undefined | null): LibraryView {
   return raw === 'list' ? 'list' : 'grid'
 }
 
+/** 书架分组：平铺列表，或按学习脉络分节 */
+export type LibraryGroupBy = 'list' | 'track'
+
+/** 设置里的字符串同样只认 'track'，其余一律落回平铺 */
+export function parseGroupBy(raw: string | undefined | null): LibraryGroupBy {
+  return raw === 'track' ? 'track' : 'list'
+}
+
 /** 导入结束后的那一句话：导入了几本、哪几本是重复的 */
 export function summarizeImport(outcomes: readonly ImportOutcome[]): string {
   const imported = outcomes.filter((item) => item.status === 'imported')
