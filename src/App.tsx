@@ -34,6 +34,8 @@ export default function App() {
   const [reading, setReading] = useState<ReadingTarget | null>(null)
   const [tags, setTags] = useState<Tag[]>([])
   const [tagFilter, setTagFilter] = useState<number | null>(null)
+  /** 侧栏标签增删改后递增，用来通知 LibraryPage 重取书列（tag chip / 筛选结果） */
+  const [tagRevision, setTagRevision] = useState(0)
   const [statusFilter, setStatusFilter] = useState<BookStatus | null>(null)
   const [stats, setStats] = useState<LibraryStats | null>(null)
   /** 书架搜索框：与正文浮层同挂 App，进阅读回来不丢字 */
@@ -109,6 +111,12 @@ export default function App() {
     await refreshTags()
     await refreshStats()
   }, [refreshTags, refreshStats])
+
+  /** 标签列表里的增删改：除了侧栏本身，书架上的书也要重取一遍 */
+  const onTagsChanged = useCallback(async () => {
+    await onLibraryChanged()
+    setTagRevision((revision) => revision + 1)
+  }, [onLibraryChanged])
 
   // 正在筛的那个标签被删掉时把筛选退回「全部」，否则列表会一直是空的
   useEffect(() => {
@@ -204,6 +212,7 @@ export default function App() {
             tags={reading === null && page === 'library' ? tags : null}
             tagFilter={tagFilter}
             onPickTag={setTagFilter}
+            onTagsChanged={onTagsChanged}
             statusFilter={statusFilter}
             onPickStatus={setStatusFilter}
             stats={stats}
@@ -241,6 +250,7 @@ export default function App() {
                     onOpen={openBook}
                     tags={tags}
                     tagFilter={tagFilter}
+                    tagRevision={tagRevision}
                     statusFilter={statusFilter}
                     onLibraryChanged={onLibraryChanged}
                     query={libraryQuery}

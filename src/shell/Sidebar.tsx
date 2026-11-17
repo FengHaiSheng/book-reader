@@ -1,5 +1,6 @@
 import type { CSSProperties, MouseEvent as ReactMouseEvent } from 'react'
 import type { BookStatus, LibraryStats, Tag } from '@shared/types'
+import { TagManager } from '../features/library/TagManager'
 import { formatBytes } from '../features/library/shelf'
 import { TocPanel } from '../features/reader/TocPanel'
 import { IS_MAC, SIDEBAR_PAD_TOP } from '../features/reader/chrome'
@@ -102,6 +103,7 @@ export function Sidebar({
   tags,
   tagFilter,
   onPickTag,
+  onTagsChanged,
   statusFilter,
   onPickStatus,
   stats
@@ -119,6 +121,8 @@ export function Sidebar({
   tags?: Tag[] | null
   tagFilter?: number | null
   onPickTag?: (tagId: number | null) => void
+  /** 标签增删改之后：侧栏计数、书库汇总与书架列表都要重取 */
+  onTagsChanged?: () => Promise<void>
   statusFilter?: BookStatus | null
   onPickStatus?: (status: BookStatus | null) => void
   stats?: LibraryStats | null
@@ -225,32 +229,12 @@ export function Sidebar({
           </ul>
 
           <div className="sidebar__section">标签</div>
-          <ul className="side-list">
-            <li>
-              <button
-                type="button"
-                className={`tag-item${tagFilter === null ? ' tag-item--active' : ''}`}
-                onClick={() => onPickTag?.(null)}
-              >
-                <span className="tag-item__name">全部</span>
-              </button>
-            </li>
-            {tags.map((tag) => (
-              <li key={tag.id}>
-                <button
-                  type="button"
-                  className={`tag-item${tagFilter === tag.id ? ' tag-item--active' : ''}`}
-                  onClick={() => onPickTag?.(tag.id)}
-                >
-                  <span className={`tag-dot tag-dot--${tag.color}`} />
-                  <span className="tag-item__name">{tag.name}</span>
-                  <span className="tag-item__count">{tag.bookCount}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-
-          {tags.length === 0 && <p className="sidebar__hint">还没有标签</p>}
+          <TagManager
+            tags={tags}
+            activeId={tagFilter ?? null}
+            onPick={(tagId) => onPickTag?.(tagId)}
+            onChanged={onTagsChanged ?? (async () => {})}
+          />
         </div>
       ) : null}
 

@@ -5,6 +5,7 @@ import type { BookSummary, Tag } from '@shared/types'
 /**
  * 单本书的标签指派。整块内容由 LibraryPage 套在 Modal 里，标题用《书名》，
  * 这里只管内容。用复选框而不是菜单：指派本身要能一眼看到「已经打了哪些」。
+ * 标签的创建、改名、删除只在侧栏标签列表里做，这里只负责打上 / 取消。
  *
  * `mine` 由 props 现算，父组件在每次改动后重新拉列表，所以这里不维护本地副本——
  * 本地副本与真相源两份，迟早会出现「关掉标签后 chip 还在」。
@@ -18,7 +19,6 @@ export function TagPicker({
   tags: Tag[]
   onChanged: () => Promise<void>
 }) {
-  const [draft, setDraft] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   /**
@@ -49,26 +49,11 @@ export function TagPicker({
     }
   }
 
-  async function create(): Promise<void> {
-    const name = draft.trim()
-    if (!name) return
-    setBusy(true)
-    try {
-      const tag = await window.api.library.tagCreate(name)
-      setDraft('')
-      setError(null)
-      await window.api.library.tagAssign(book.id, tag.id, true)
-      await onChanged()
-    } catch (e) {
-      setError(readableError(e, '标签没有建成'))
-    } finally {
-      setBusy(false)
-    }
-  }
-
   return (
     <>
-      {tags.length === 0 && <p className="tag-picker__hint">还没有标签，先在下面建一个</p>}
+      {tags.length === 0 && (
+        <p className="tag-picker__hint">还没有标签，先在侧栏的标签列表里建一个</p>
+      )}
 
       {tags.map((tag) => (
         <label key={tag.id} className="tag-picker__row">
@@ -82,21 +67,6 @@ export function TagPicker({
           <span className="tag-picker__name">{tag.name}</span>
         </label>
       ))}
-
-      <div className="tag-picker__new">
-        <input
-          value={draft}
-          placeholder="新标签名"
-          maxLength={24}
-          onChange={(event) => setDraft(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') void create()
-          }}
-        />
-        <button type="button" className="btn" disabled={busy || !draft.trim()} onClick={() => void create()}>
-          新建并打上
-        </button>
-      </div>
 
       {error && <p className="tag-picker__error">{error}</p>}
     </>

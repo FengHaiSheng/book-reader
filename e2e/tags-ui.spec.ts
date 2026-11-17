@@ -5,7 +5,7 @@ import { expect, test } from '@playwright/test'
 import { coverBookFiles, novelFiles, writeEpub } from '../fixtures/make-epub'
 import { launchAppWithUserData } from './helpers'
 
-test('标签：网格卡片与列表的指派、侧栏筛选、管理模态框改名与删除', async () => {
+test('标签：侧栏列表内新建、改名、删除，卡片指派与侧栏筛选', async () => {
   const userDataDir = mkdtempSync(join(tmpdir(), 'book-read-tags-ui-'))
   const novel = join(userDataDir, 'novel.epub')
   const other = join(userDataDir, 'other.epub')
@@ -25,33 +25,29 @@ test('标签：网格卡片与列表的指派、侧栏筛选、管理模态框�
 
   const closeModal = win.getByRole('button', { name: '关闭', exact: true })
 
-  // 管理模态框里建一个标签
-  await win.getByRole('button', { name: '标签', exact: true }).click()
-  await expect(win.locator('.modal__title')).toHaveText('标签')
-  await win.locator('.tag-manager__new input').fill('待读')
-  await win.getByRole('button', { name: '新建' }).click()
-  const managed = win.locator('.tag-manager__row')
+  // 侧栏标签列表就是唯一入口：新建、改名、删除都在这
+  await win.locator('.tag-new input').fill('待读')
+  await win.getByRole('button', { name: '新建', exact: true }).click()
+  const managed = win.locator('.tag-row')
   await expect(managed).toHaveCount(1)
   await expect(win.locator('.tag-item')).toHaveCount(2) // 「全部」+「待读」
 
-  // 平时是一行字，点一下才变成输入框；Esc 放弃不落库
-  await managed.locator('.tag-manager__name').click()
-  await win.locator('.tag-manager__rename').fill('临时')
+  // 平时是一行字，点「改名」才变成输入框；Esc 放弃不落库
+  await managed.hover()
+  await win.getByRole('button', { name: '改名 待读' }).click()
+  await win.locator('.tag-row__rename').fill('临时')
   await win.keyboard.press('Escape')
-  await expect(managed.locator('.tag-manager__name')).toHaveText('待读')
+  await expect(managed.locator('.tag-item__name')).toHaveText('待读')
 
   // 回车提交改名，改完回到「一行字」
-  await managed.locator('.tag-manager__name').click()
-  await win.locator('.tag-manager__rename').fill('想读')
+  await win.getByRole('button', { name: '改名 待读' }).click()
+  await win.locator('.tag-row__rename').fill('想读')
   await win.keyboard.press('Enter')
-  await expect(managed.locator('.tag-manager__name')).toHaveText('想读')
-  await managed.locator('.tag-manager__name').click()
-  await win.locator('.tag-manager__rename').fill('待读')
+  await expect(managed.locator('.tag-item__name')).toHaveText('想读')
+  await win.getByRole('button', { name: '改名 想读' }).click()
+  await win.locator('.tag-row__rename').fill('待读')
   await win.keyboard.press('Enter')
-  await expect(managed.locator('.tag-manager__name')).toHaveText('待读')
-
-  await closeModal.click()
-  await expect(win.locator('.modal')).toHaveCount(0)
+  await expect(managed.locator('.tag-item__name')).toHaveText('待读')
 
   // 网格卡片上就能指派：chip 当场出现在卡面上（动作在封面悬停层）
   const firstCard = win.locator('.book-grid__cell').first()
@@ -85,14 +81,13 @@ test('标签：网格卡片与列表的指派、侧栏筛选、管理模态框�
 
   // 在筛选态下删掉标签：筛选要退回「全部」，书一本都不能少
   // 删除是两次点击（先「删除」再「确定删除」），不走原生 confirm
-  await win.getByRole('button', { name: '标签', exact: true }).click()
-  const row = win.locator('.tag-manager__row')
+  const row = win.locator('.tag-row')
   await row.hover()
-  await row.getByRole('button', { name: '删除', exact: true }).click()
+  await row.getByRole('button', { name: '删除 待读' }).click()
   await row.getByRole('button', { name: '确定删除', exact: true }).click()
 
-  // 筛选退回「全部」会让模态框跟着收起（见 LibraryPage 的 effect）
-  await expect(win.locator('.modal')).toHaveCount(0)
+  // 筛选退回「全部」（见 App 里的 effect），书一本都不能少
+  await expect(win.locator('.tag-row')).toHaveCount(0)
   await expect(win.locator('.tag-item')).toHaveCount(1) // 只剩「全部」
   await expect(win.locator('.book-list__item')).toHaveCount(2)
   expect(await win.evaluate(() => (window as any).api.library.list())).toHaveLength(2)

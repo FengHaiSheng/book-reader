@@ -14,9 +14,7 @@ export function LibraryTitlebarTools({
   onSearchBody,
   onEscape,
   busy,
-  onPick,
-  managing,
-  onToggleTags
+  onPick
 }: {
   query: string
   onQuery: (value: string) => void
@@ -26,8 +24,6 @@ export function LibraryTitlebarTools({
   onEscape: () => void
   busy: boolean
   onPick: () => void
-  managing: boolean
-  onToggleTags: () => void
 }) {
   const [host, setHost] = useState<HTMLElement | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -87,9 +83,6 @@ export function LibraryTitlebarTools({
       </div>
       <span className="tb-sep" aria-hidden="true" />
       <ImportButton busy={busy} onPick={onPick} />
-      <button type="button" className="tb-btn" aria-expanded={managing} onClick={onToggleTags}>
-        标签
-      </button>
     </div>,
     host
   )

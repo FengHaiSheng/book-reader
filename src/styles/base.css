@@ -2985,6 +2985,145 @@ html[data-theme='dark'] .seg__b.is-on {
   font-variant-numeric: tabular-nums;
 }
 
+/* 标签行：改名的输入框与悬停动作都挂在这一行里，行框自己吃背景 */
+.tag-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s1);
+  border-radius: var(--r-sm);
+  transition: background var(--ease);
+}
+
+.tag-row:hover {
+  background: var(--hover);
+}
+
+.tag-row--active {
+  background: var(--active);
+}
+
+.tag-row .tag-item {
+  flex: 1;
+  min-width: 0;
+  width: auto;
+  background: none;
+}
+
+.tag-row .tag-item__name {
+  text-align: left;
+}
+
+/* 悬停露出动作时把计数让开，名字仍然保持一整行字的宽度 */
+.tag-row:hover .tag-item__count,
+.tag-row:focus-within .tag-item__count {
+  visibility: hidden;
+}
+
+.tag-row__acts {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-right: var(--s2);
+}
+
+.tag-row__act {
+  flex: 0 0 auto;
+  height: 22px;
+  padding: 0 var(--s1);
+  border-radius: var(--r-sm);
+  font-size: 11px;
+  color: var(--ink-muted);
+  opacity: 0;
+  transition: opacity var(--ease), color var(--ease), background var(--ease);
+}
+
+.tag-row:hover .tag-row__act,
+.tag-row__act:focus-visible {
+  opacity: 1;
+}
+
+.tag-row__act:hover {
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  color: var(--accent-link);
+}
+
+/* 二次确认留在行内，确认态要有底，否则看起来仍像一行说明 */
+.tag-row__act--danger {
+  color: var(--accent-mark);
+  background: color-mix(in srgb, var(--accent-mark) 12%, transparent);
+  opacity: 1;
+}
+
+.tag-row__act--danger:hover {
+  color: var(--accent-mark);
+  background: color-mix(in srgb, var(--accent-mark) 20%, transparent);
+}
+
+.tag-row__rename {
+  flex: 1;
+  min-width: 0;
+  height: 26px;
+  margin: 2px var(--s2);
+  padding: 0 var(--s2);
+  font: inherit;
+  font-size: 13px;
+  color: var(--ink);
+  background: var(--paper-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+}
+
+/* 新建入口常驻在列表底部：标签的增删改都只在这一个地方发生 */
+.tag-new {
+  display: flex;
+  align-items: center;
+  gap: var(--s1);
+  padding: var(--s1) var(--s3) 0;
+}
+
+.tag-new input {
+  flex: 1;
+  min-width: 0;
+  height: 26px;
+  padding: 0 var(--s2);
+  font: inherit;
+  font-size: 12px;
+  color: var(--ink);
+  background: var(--paper-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+}
+
+.tag-new input::placeholder {
+  color: var(--ink-muted);
+}
+
+.tag-new__go {
+  flex: 0 0 auto;
+  height: 26px;
+  padding: 0 var(--s2);
+  border-radius: var(--r-sm);
+  font-size: 12px;
+  color: var(--ink-muted);
+  transition: background var(--ease), color var(--ease);
+}
+
+.tag-new__go:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.tag-new__go:disabled {
+  opacity: 0.5;
+}
+
+.tag-new__error {
+  margin: 0;
+  padding: var(--s1) var(--s3) 0;
+  font-size: 11px;
+  color: var(--accent-mark);
+}
+
 .tag-dot {
   flex: 0 0 auto;
   width: 9px;
@@ -3138,7 +3277,7 @@ html[data-theme='dark'] .tag-dot {
 }
 
 /*
- * 模态框的内容面：管理和指派都是「一排一排」的，间距统一由这里给。
+ * 模态框的内容面：指派是「一排一排」的，间距统一由这里给。
  * 左右 16 而不是 24：每行自己还有 8 的内边距，加起来正好和标题的左边缘对齐。
  */
 .modal__body {
@@ -3149,17 +3288,15 @@ html[data-theme='dark'] .tag-dot {
   overflow-y: auto;
 }
 
-.tag-picker__hint,
-.tag-manager__hint {
+.tag-picker__hint {
   margin: 0;
   padding: var(--s2) var(--s2) 0;
   font-size: 12px;
   color: var(--ink-muted);
 }
 
-/* 两个模态框里的行共用一套行框：悬停有底、行高按桌面端密度收紧 */
-.tag-picker__row,
-.tag-manager__row {
+/* 指派模态框里的行：悬停有底、行高按桌面端密度收紧 */
+.tag-picker__row {
   display: flex;
   align-items: center;
   gap: var(--s2);
@@ -3170,8 +3307,7 @@ html[data-theme='dark'] .tag-dot {
   transition: background var(--ease);
 }
 
-.tag-picker__row:hover,
-.tag-manager__row:hover {
+.tag-picker__row:hover {
   background: var(--hover);
 }
 
@@ -3179,8 +3315,7 @@ html[data-theme='dark'] .tag-dot {
   cursor: pointer;
 }
 
-.tag-picker__name,
-.tag-manager__name {
+.tag-picker__name {
   flex: 1;
   min-width: 0;
   display: block;
@@ -3190,101 +3325,7 @@ html[data-theme='dark'] .tag-dot {
   text-align: left;
 }
 
-/* 名字就是改名的入口：平时是一行安静的字，悬停才亮起来说自己能点 */
-.tag-manager__name {
-  padding: 0;
-}
-
-.tag-manager__name:hover:not(:disabled) {
-  color: var(--accent-link);
-}
-
-.tag-manager__count {
-  flex: 0 0 auto;
-  font-size: 12px;
-  color: var(--ink-muted);
-  font-variant-numeric: tabular-nums;
-}
-
-/* 行内动作和书架一样悬停才显出来，平时这一列是安静的 */
-.tag-manager__act {
-  flex: 0 0 auto;
-  height: 22px;
-  padding: 0 var(--s2);
-  border-radius: var(--r-sm);
-  font-size: 12px;
-  color: var(--ink-muted);
-  opacity: 0;
-  transition: opacity var(--ease), color var(--ease), background var(--ease);
-}
-
-.tag-manager__row:hover .tag-manager__act,
-.tag-manager__act:focus-visible {
-  opacity: 1;
-}
-
-.tag-manager__act:hover {
-  background: color-mix(in srgb, var(--ink) 8%, transparent);
-  color: var(--accent-link);
-}
-
-/* 二次确认留在行内：原生 confirm 会把模态框的情绪打断，还要重看一眼才知道自己在删什么。
-   确认态要有底：光把字染红，看起来仍像一行说明，不像一个能按的东西 */
-.tag-manager__act--danger {
-  color: var(--accent-mark);
-  background: color-mix(in srgb, var(--accent-mark) 12%, transparent);
-  opacity: 1;
-}
-
-.tag-manager__act--danger:hover {
-  color: var(--accent-mark);
-  background: color-mix(in srgb, var(--accent-mark) 20%, transparent);
-}
-
-.tag-picker__new,
-.tag-manager__new {
-  display: flex;
-  align-items: center;
-  gap: var(--s2);
-  min-height: 32px;
-  padding: 0 var(--s2);
-}
-
-/*
- * 模态框里所有文字输入的同一副皮：原生默认的凹陷边框放在这套纸面上很扎眼。
- * 三处（指派页新建、管理页新建、就地改名）必须长得一模一样，否则同一个框换一行就变样。
- */
-.tag-picker__new input,
-.tag-manager__new input,
-.tag-manager__rename {
-  flex: 1;
-  min-width: 0;
-  height: 28px;
-  padding: 0 var(--s2);
-  font: inherit;
-  font-size: 13px;
-  color: var(--ink);
-  background: var(--paper-raised);
-  border: 1px solid var(--line);
-  border-radius: var(--r-sm);
-}
-
-.tag-picker__new input::placeholder,
-.tag-manager__new input::placeholder {
-  color: var(--ink-muted);
-}
-
-/* 删标签不删书这句话原来是原生 confirm 说的，确认框挪进行内之后由它来说 */
-.tag-manager__note {
-  margin: var(--s1) 0 0;
-  padding: 0 var(--s2);
-  font-size: 12px;
-  line-height: 1.6;
-  color: var(--ink-muted);
-}
-
-.tag-picker__error,
-.tag-manager__error {
+.tag-picker__error {
   margin: 0;
   padding: 0 var(--s2);
   font-size: 12px;

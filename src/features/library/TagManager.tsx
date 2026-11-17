@@ -3,13 +3,24 @@ import { readableError } from '@shared/errors'
 import type { Tag } from '@shared/types'
 
 /**
- * 新建 / 改名 / 删除。整块内容由 LibraryPage 套在 Modal 里，这里只管内容与间距。
+ * 侧栏标签列表：筛选、新建、改名、删除都在这一个列表里完成，不再另开管理弹窗。
  *
- * 改名不给每一行常驻一个输入框：平时它只是一行字，点一下才就地变成输入框
+ * 改名不给每一行常驻一个输入框：平时它只是一行字，点「改名」才就地变成输入框
  * （回车或失焦提交，Esc 还原）。每敲一个字母就发 IPC 会让中间态也进库，
  * 用户看到的是标签名在闪，所以提交点留在「结束编辑」这一刻。
  */
-export function TagManager({ tags, onChanged }: { tags: Tag[]; onChanged: () => Promise<void> }) {
+export function TagManager({
+  tags,
+  activeId,
+  onPick,
+  onChanged
+}: {
+  tags: Tag[]
+  /** 当前正在筛选的标签；null 是「全部」 */
+  activeId: number | null
+  onPick: (tagId: number | null) => void
+  onChanged: () => Promise<void>
+}) {
   const [draft, setDraft] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -21,18 +32,18 @@ export function TagManager({ tags, onChanged }: { tags: Tag[]; onChanged: () => 
   /** Esc 放弃改名时置位：失焦提交要放这一枪空过去，否则会把旧名字又写回库里 */
   const cancelled = useRef(false)
 
-  // 确认态和改名态都只在「还盯着这一行」时成立，点别处就收回去
+  // 确认态只在「还盯着这一行」时成立，点别处就收回去
   useEffect(() => {
-    if (confirmingId === null && editingId === null) return
+    if (confirmingId === null) return
     function onDown(event: MouseEvent): void {
       const target = event.target as Node
-      if (!(target instanceof Element) || !target.closest('.tag-manager__row')) {
+      if (!(target instanceof Element) || !target.closest('.tag-row')) {
         setConfirmingId(null)
       }
     }
     document.addEventListener('mousedown', onDown)
     return () => document.removeEventListener('mousedown', onDown)
-  }, [confirmingId, editingId])
+  }, [confirmingId])
 
   async function guard(action: () => Promise<unknown>, fallback: string): Promise<void> {
     setBusy(true)
@@ -69,82 +80,116 @@ export function TagManager({ tags, onChanged }: { tags: Tag[]; onChanged: () => 
 
   return (
     <>
-      {tags.length === 0 && <p className="tag-manager__hint">还没有标签，先在下面建一个</p>}
+      <ul className="side-list">
+        <li>
+          <button
+            type="button"
+            className={`tag-item${activeId === null ? ' tag-item--active' : ''}`}
+            onClick={() => onPick(null)}
+          >
+            <span className="tag-item__name">全部</span>
+          </button>
+        </li>
 
-      {tags.map((tag) => (
-        <div key={tag.id} className="tag-manager__row">
-          <span className={`tag-dot tag-dot--${tag.color}`} />
-
-          {editingId === tag.id ? (
-            <input
-              className="tag-manager__rename"
-              value={editingName}
-              maxLength={24}
-              disabled={busy}
-              autoFocus
-              onFocus={(event) => event.currentTarget.select()}
-              onChange={(event) => setEditingName(event.target.value)}
-              onBlur={() => {
-                if (cancelled.current) {
-                  cancelled.current = false
-                  return
-                }
-                commitRename(tag)
-              }}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') event.currentTarget.blur()
-                if (event.key === 'Escape') {
-                  // preventDefault 是给 Modal 看的：这次 Esc 只用来放弃改名
-                  event.preventDefault()
-                  cancelled.current = true
-                  setEditingId(null)
-                }
-              }}
-            />
-          ) : (
-            <button
-              type="button"
-              className="tag-manager__name"
-              title="点击改名"
-              disabled={busy}
-              onClick={() => startRename(tag)}
+        {tags.map((tag) => {
+          const editing = editingId === tag.id
+          const confirming = confirmingId === tag.id
+          return (
+            <li
+              key={tag.id}
+              className={`tag-row${activeId === tag.id ? ' tag-row--active' : ''}`}
             >
-              {tag.name}
-            </button>
-          )}
+              {editing ? (
+                <input
+                  className="tag-row__rename"
+                  value={editingName}
+                  maxLength={24}
+                  disabled={busy}
+                  autoFocus
+                  onFocus={(event) => event.currentTarget.select()}
+                  onChange={(event) => setEditingName(event.target.value)}
+                  onBlur={() => {
+                    if (cancelled.current) {
+                      cancelled.current = false
+                      return
+                    }
+                    commitRename(tag)
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') event.currentTarget.blur()
+                    if (event.key === 'Escape') {
+                      event.preventDefault()
+                      cancelled.current = true
+                      setEditingId(null)
+                    }
+                  }}
+                />
+              ) : (
+                <button
+                  type="button"
+                  className="tag-item"
+                  title={`按「${tag.name}」筛选`}
+                  onClick={() => onPick(tag.id)}
+                >
+                  <span className={`tag-dot tag-dot--${tag.color}`} />
+                  <span className="tag-item__name">{tag.name}</span>
+                  <span className="tag-item__count">{tag.bookCount}</span>
+                </button>
+              )}
 
-          <span className="tag-manager__count">{tag.bookCount} 本</span>
+              {!editing && (
+                <span className="tag-row__acts">
+                  {confirming ? (
+                    <button
+                      type="button"
+                      className="tag-row__act tag-row__act--danger"
+                      disabled={busy}
+                      onClick={() => {
+                        setConfirmingId(null)
+                        void guard(() => window.api.library.tagDelete(tag.id), '标签没有删掉')
+                      }}
+                    >
+                      确定删除
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        className="tag-row__act"
+                        title="改名"
+                        aria-label={`改名 ${tag.name}`}
+                        disabled={busy}
+                        onClick={() => startRename(tag)}
+                      >
+                        改名
+                      </button>
+                      <button
+                        type="button"
+                        className="tag-row__act"
+                        title="删除（书不会被删掉）"
+                        aria-label={`删除 ${tag.name}`}
+                        disabled={busy}
+                        onClick={() => setConfirmingId(tag.id)}
+                      >
+                        删除
+                      </button>
+                    </>
+                  )}
+                </span>
+              )}
+            </li>
+          )
+        })}
+      </ul>
 
-          {confirmingId === tag.id ? (
-            <button
-              type="button"
-              className="tag-manager__act tag-manager__act--danger"
-              disabled={busy}
-              onClick={() => {
-                setConfirmingId(null)
-                void guard(() => window.api.library.tagDelete(tag.id), '标签没有删掉')
-              }}
-            >
-              确定删除
-            </button>
-          ) : (
-            <button
-              type="button"
-              className="tag-manager__act"
-              disabled={busy}
-              onClick={() => setConfirmingId(tag.id)}
-            >
-              删除
-            </button>
-          )}
-        </div>
-      ))}
+      {tags.length === 0 && <p className="sidebar__hint">还没有标签</p>}
 
-      <div className="tag-manager__new">
+      <div className="tag-new">
         <input
           value={draft}
-          placeholder="新标签名"
+          placeholder="新标签"
           maxLength={24}
+          aria-label="新标签名"
           onChange={(event) => setDraft(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === 'Enter' && draft.trim()) void create()
@@ -152,7 +197,7 @@ export function TagManager({ tags, onChanged }: { tags: Tag[]; onChanged: () => 
         />
         <button
           type="button"
-          className="btn"
+          className="tag-new__go"
           disabled={busy || !draft.trim()}
           onClick={() => void create()}
         >
@@ -160,10 +205,7 @@ export function TagManager({ tags, onChanged }: { tags: Tag[]; onChanged: () => 
         </button>
       </div>
 
-      {/* 这句话原来是原生 confirm 说的。挪进行内确认后，得有个地方一直讲清楚 */}
-      <p className="tag-manager__note">删除标签只是让书不再带这个标签，书本身不会被删掉。</p>
-
-      {error && <p className="tag-manager__error">{error}</p>}
+      {error && <p className="tag-new__error">{error}</p>}
     </>
   )
 }

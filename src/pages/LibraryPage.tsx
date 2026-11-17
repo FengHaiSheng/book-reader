@@ -6,7 +6,6 @@ import { BookList } from '../features/library/BookList'
 import { EmptyShelf } from '../features/library/EmptyShelf'
 import { LibraryTitlebarTools } from '../features/library/LibraryTitlebarTools'
 import { LibraryToolbar } from '../features/library/LibraryToolbar'
-import { TagManager } from '../features/library/TagManager'
 import { TagPicker } from '../features/library/TagPicker'
 import { TrackShelf } from '../features/library/TrackShelf'
 import { Modal } from '../shell/Modal'
@@ -27,6 +26,7 @@ export function LibraryPage({
   onOpen,
   tags,
   tagFilter,
+  tagRevision,
   statusFilter,
   onLibraryChanged,
   query,
@@ -37,6 +37,8 @@ export function LibraryPage({
   onOpen: (id: string) => void
   tags: Tag[]
   tagFilter: number | null
+  /** 侧栏里增删改标签后递增：书卡上的 tag chip 与筛选结果要跟着重取 */
+  tagRevision: number
   statusFilter: BookStatus | null
   onLibraryChanged: () => Promise<void>
   /** 书名筛选与正文搜索共用输入；状态在 App，进阅读后回来不丢 */
@@ -52,7 +54,6 @@ export function LibraryPage({
   const [trackNodes, setTrackNodes] = useState<TrackShelfNode[] | null>(null)
   const [sort, setSort] = useState<LibrarySort>('recent')
   const [dropping, setDropping] = useState(false)
-  const [managing, setManaging] = useState(false)
   /**
    * 只记 id，不记那本书本身：指派之后要重新拉列表，记对象的话拿到的还是旧快照，
    * 复选框会在改完之后弹回原状。
@@ -94,7 +95,7 @@ export function LibraryPage({
 
   useEffect(() => {
     void refresh()
-  }, [refresh])
+  }, [refresh, tagRevision])
 
   useEffect(() => {
     void refreshTrack()
@@ -107,9 +108,8 @@ export function LibraryPage({
     })
   }, [])
 
-  // 切换标签或状态筛选相当于换了个上下文，模态框跟着收起，避免停在旧上下文里
+  // 切换标签或状态筛选相当于换了个上下文，指派模态框跟着收起，避免停在旧上下文里
   useEffect(() => {
-    setManaging(false)
     setTaggingId(null)
   }, [tagFilter, statusFilter])
 
@@ -211,8 +211,6 @@ export function LibraryPage({
         onEscape={onEscapeSearch}
         busy={busy}
         onPick={onPick}
-        managing={managing}
-        onToggleTags={() => setManaging(!managing)}
       />
 
       <LibraryToolbar
@@ -231,12 +229,6 @@ export function LibraryPage({
         {progress && <span className="import__progress">{progressText(progress)}</span>}
         {notice && <span className="import__notice">{notice}</span>}
       </div>
-
-      {managing && (
-        <Modal title="标签" onClose={() => setManaging(false)}>
-          <TagManager tags={tags} onChanged={refreshAll} />
-        </Modal>
-      )}
 
       {tagging && (
         <Modal title={`《${tagging.title}》的标签`} onClose={() => setTaggingId(null)}>
