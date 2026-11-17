@@ -1,6 +1,7 @@
 import {
   CITATION_FLASH_NAME,
   HIGHLIGHT_COLORS,
+  READ_ALOUD_NAME,
   highlightRegistryName,
   type HighlightColor
 } from '@shared/highlights'
@@ -64,6 +65,22 @@ export function clearHighlights(win: Window): void {
   const api = apiOf(win)
   if (!api) return
   for (const color of HIGHLIGHT_COLORS) api.registry.delete(highlightRegistryName(color))
+}
+
+/**
+ * 标出正在朗读的一句。
+ *
+ * 与标注一样不碰 DOM；每次只换这一条注册名，四色标注不受影响。
+ * 环境不支持 Highlight API 时静默跳过 —— 朗读本身不依赖它。
+ */
+export function paintReadAloud(win: Window, range: Range): void {
+  const api = apiOf(win)
+  if (!api) return
+  api.registry.set(READ_ALOUD_NAME, new api.Ctor(range))
+}
+
+export function clearReadAloud(win: Window): void {
+  apiOf(win)?.registry.delete(READ_ALOUD_NAME)
 }
 
 /**

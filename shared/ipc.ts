@@ -78,6 +78,10 @@ export const CH = {
   aiCancelDigest: 'ai:cancelDigest',
   /** 打开面板时回填已有结果。只读 ai_results，不发起任何模型调用 */
   aiCachedResults: 'ai:cachedResults',
+  /** 自建朗读服务探活：返回音色列表，也用来告诉界面「服务起没起」 */
+  ttsHealth: 'tts:health',
+  /** 合成一句并写磁盘缓存。音频以 WAV 字节回传，失败走结果里的 error */
+  ttsSynthesize: 'tts:synthesize',
   /**
    * 学习脉络。阶段进度复用 aiProgress：kind 为 track，label 前缀 track:build / track:gap。
    * 不另开 track:onProgress，避免和索引、全书要点各听一条通道。
@@ -177,5 +181,6 @@ export const API_SHAPE = {
     'cancel',
     'matchBooks',
     'confirmMatch'
-  ]
+  ],
+  tts: ['health', 'synthesize']
 } as const

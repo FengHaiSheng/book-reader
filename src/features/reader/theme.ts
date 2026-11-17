@@ -1,5 +1,10 @@
 import type { ReadingPrefs } from '@shared/types'
-import { CITATION_FLASH_NAME, HIGHLIGHT_COLORS, highlightRegistryName } from '@shared/highlights'
+import {
+  CITATION_FLASH_NAME,
+  HIGHLIGHT_COLORS,
+  READ_ALOUD_NAME,
+  highlightRegistryName
+} from '@shared/highlights'
 import { COLUMN_GAP, type ReaderLayout } from './layout'
 
 /** 与 tokens.css 保持一致的两套字体栈。iframe 里拿不到父文档的 CSS 变量，所以这里写死字面量 */
@@ -46,6 +51,23 @@ function citationFlashRule(theme: ReadingPrefs['theme']): string {
   return `::highlight(${CITATION_FLASH_NAME}) {
   background-color: ${CITATION_FLASH_BG[theme]};
   color: inherit;
+}`
+}
+
+/**
+ * 正在朗读的那一句。底色比四色标注更中性，再加下划线，
+ * 一眼能看出「这里是语音读到的位置」，又不会和用户自己的高亮混淆。
+ */
+const READ_ALOUD_BG: Record<ReadingPrefs['theme'], string> = {
+  light: '#e7dcc7',
+  dark: '#3d372d'
+}
+
+function readAloudRule(theme: ReadingPrefs['theme']): string {
+  return `::highlight(${READ_ALOUD_NAME}) {
+  background-color: ${READ_ALOUD_BG[theme]};
+  color: inherit;
+  text-decoration: underline;
 }`
 }
 
@@ -113,5 +135,6 @@ a {
   background: color-mix(in srgb, ${ink} 18%, transparent);
 }
 ${highlightRules(prefs.theme)}
-${citationFlashRule(prefs.theme)}`
+${citationFlashRule(prefs.theme)}
+${readAloudRule(prefs.theme)}`
 }

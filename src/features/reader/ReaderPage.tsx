@@ -31,6 +31,8 @@ import { bookPercent } from './progress'
 import { IDLE_MS, creditMs } from '../reading/tracker'
 import { setUnrecordedMs } from '../reading/failures'
 import { TypographyPanel } from './TypographyPanel'
+import { SpeechPanel } from './SpeechPanel'
+import { useReadAloud } from './useReadAloud'
 import { ComicReader } from './ComicReader'
 import { readerBarPadLeft } from './chrome'
 import { AiPanel, type AiSeed } from '../ai/AiPanel'
@@ -136,6 +138,10 @@ export function ReaderPage({
   const [bookmarkNote, setBookmarkNote] = useState<string | null>(null)
   /** 当前页页首的 CFI：用来判断「这一页是不是已经有书签」，按钮文案跟着它变 */
   const [pageCfi, setPageCfi] = useState<string | null>(null)
+  /** 朗读面板是否开着。语音与语速都落在同一条 ReadingPrefs 上 */
+  const [speechOpen, setSpeechOpen] = useState(false)
+  /** 朗读的一句提示（例如读到了最后一章），与书签提示同寿命 */
+  const [speechNote, setSpeechNote] = useState<string | null>(null)
 
   const stageRef = useRef<HTMLDivElement | null>(null)
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
@@ -152,6 +158,13 @@ export function ReaderPage({
     excerpt?: string
     miss?: string
   } | null>(null)
+
+  /** 朗读自动切章时置位：chapterIndex 的变化不是用户操作，不该停朗读 */
+  const autoChapterRef = useRef(false)
+  /** 自动切章后，等新文档载入再接着读 */
+  const resumeReadRef = useRef(false)
+  /** 上一次看到的章号：用来区分「用户换章」与「朗读自动换章」 */
+  const speechChapterRef = useRef(chapterIndex)
 
   /**
    * 阅读时长的三个时间戳。
@@ -226,6 +239,68 @@ export function ReaderPage({
   }, [layout, prefs])
 
   const chapter = readable[chapterIndex] ?? null
+
+  /**
+   * 系统朗读。一句一句读整章：当前页第一句开始，读到页底自动翻页，
+   * 本章读完再问一次有没有下一章。用户手动翻页 / 换章时由下面几个入口停掉。
+   */
+  const readAloud = useReadAloud({
+    docVersion,
+    iframeRef,
+    paginatorRef,
+    engine: prefs?.ttsEngine ?? DEFAULT_PREFS.ttsEngine,
+    endpoint: prefs?.ttsEndpoint ?? DEFAULT_PREFS.ttsEndpoint,
+    voice:
+      (prefs?.ttsEngine ?? DEFAULT_PREFS.ttsEngine) === 'http'
+        ? (prefs?.ttsServerVoice ?? DEFAULT_PREFS.ttsServerVoice)
+        : (prefs?.ttsVoice ?? DEFAULT_PREFS.ttsVoice),
+    rate: prefs?.ttsRate ?? DEFAULT_PREFS.ttsRate,
+    onPage: (pageNo, pages) => {
+      setPage(pageNo)
+      setPageCount(pages)
+      // 听着书也是在读：刷新活动时间，否则连续听十分钟会被计时器判成离开
+      markActivity()
+    },
+    onChapterEnd: () => {
+      if (chapterIndex + 1 >= readable.length) {
+        setSpeechNote('已经读到最后一章。')
+        return false
+      }
+      autoChapterRef.current = true
+      pendingRef.current = null
+      setChapterIndex(chapterIndex + 1)
+      return true
+    }
+  })
+  const { status: speechStatus, stop: stopSpeech } = readAloud
+
+  // 章号变了：若不是朗读自己切的章，立刻收声，免得下一句把页面又拽回去
+  useEffect(() => {
+    if (speechChapterRef.current === chapterIndex) return
+    speechChapterRef.current = chapterIndex
+    if (autoChapterRef.current) {
+      autoChapterRef.current = false
+      resumeReadRef.current = true
+      return
+    }
+    stopSpeech()
+  }, [chapterIndex, stopSpeech])
+
+  // 自动切章后，等新文档载入（docVersion 变）再接着读
+  useEffect(() => {
+    if (!resumeReadRef.current) return
+    resumeReadRef.current = false
+    readAloud.start()
+  }, [docVersion, readAloud.start])
+
+  // 换书 / 卸载：系统语音不能留在后台继续念
+  useEffect(() => () => stopSpeech(), [bookId, stopSpeech])
+
+  useEffect(() => {
+    if (!speechNote) return
+    const timer = window.setTimeout(() => setSpeechNote(null), 6000)
+    return () => window.clearTimeout(timer)
+  }, [speechNote])
 
   // ⑥ 取本章标注。换章、换书都要重取，翻页不用——标注是章级的
   useEffect(() => {
@@ -438,6 +513,8 @@ export function ReaderPage({
   const turn = useCallback(
     (direction: 1 | -1) => {
       markActivity()
+      // 手动翻页就把朗读停下来：下一句的「自动翻页」会把页面又拽回正在读的位置
+      stopSpeech()
       // 翻页时收掉浮条与浮层：它们的坐标锚在上一页的正文上，留着就是错位
       setActive(null)
       setSelection(null)
@@ -454,7 +531,7 @@ export function ReaderPage({
       pendingRef.current = direction === -1 ? { edge: 'end' } : null
       setChapterIndex(target)
     },
-    [chapterIndex, readable.length, markActivity]
+    [chapterIndex, readable.length, markActivity, stopSpeech]
   )
 
   const goToChapterById = useCallback(
@@ -462,10 +539,11 @@ export function ReaderPage({
       markActivity()
       const index = readable.findIndex((item) => item.id === chapterId)
       if (index < 0 || index === chapterIndex) return
+      stopSpeech()
       pendingRef.current = null
       setChapterIndex(index)
     },
-    [readable, chapterIndex, markActivity]
+    [readable, chapterIndex, markActivity, stopSpeech]
   )
 
   /**
@@ -476,6 +554,7 @@ export function ReaderPage({
    */
   const goToCitation = useCallback(
     (citation: Citation) => {
+      stopSpeech()
       setCitationNote(null)
       const index =
         citation.chapterId === null
@@ -496,7 +575,7 @@ export function ReaderPage({
       const found = paginatorRef.current?.goToExcerpt(citation.excerpt) ?? false
       if (!found) setCitationNote(CITATION_MISS)
     },
-    [readable, chapterIndex]
+    [readable, chapterIndex, stopSpeech]
   )
 
   useEffect(() => {
@@ -590,6 +669,7 @@ export function ReaderPage({
    */
   const goToHit = useCallback(
     (hit: SearchHit) => {
+      stopSpeech()
       setFindNote(null)
       const index =
         hit.chapterId === null ? -1 : readable.findIndex((item) => item.id === hit.chapterId)
@@ -605,7 +685,7 @@ export function ReaderPage({
       }
       if (!paginatorRef.current?.goToExcerpt(hit.text)) setFindNote(FIND_MISS)
     },
-    [readable, chapterIndex]
+    [readable, chapterIndex, stopSpeech]
   )
 
   /** 点某一条结果：先记住是第几条（查找条要显示「第 N / M 条」），再跳过去 */
@@ -632,6 +712,7 @@ export function ReaderPage({
   const openLink = useCallback(
     (href: string, currentEntry: string) => {
       if (!book) return
+      stopSpeech()
       const target = classifyLink(href, chapterBaseHref(book.id, currentEntry), book.id)
 
       if (target.kind === 'anchor') {
@@ -654,7 +735,7 @@ export function ReaderPage({
       pendingRef.current = target.fragment ? { fragment: target.fragment } : null
       setChapterIndex(index)
     },
-    [book, readable, chapterIndex]
+    [book, readable, chapterIndex, stopSpeech]
   )
 
   /**
@@ -734,6 +815,7 @@ export function ReaderPage({
    */
   const goToBookmark = useCallback(
     (mark: Bookmark) => {
+      stopSpeech()
       setBookmarkNote(null)
       const index =
         mark.chapterId === null ? -1 : readable.findIndex((item) => item.id === mark.chapterId)
@@ -762,7 +844,7 @@ export function ReaderPage({
       }
       setCitationNote(BOOKMARK_MISS)
     },
-    [readable, chapterIndex]
+    [readable, chapterIndex, stopSpeech]
   )
 
   // 书签提示与引用提示一样是「事件不是状态」，过一会儿收掉
@@ -1317,6 +1399,43 @@ export function ReaderPage({
         <button type="button" className="btn" onClick={() => turn(1)}>
           下一页
         </button>
+        {readAloud.supported && (
+          <>
+            <button
+              type="button"
+              className={`btn${speechStatus !== 'idle' ? ' btn--on' : ''}`}
+              aria-pressed={speechStatus !== 'idle'}
+              onClick={() => {
+                setSpeechNote(null)
+                readAloud.toggle()
+              }}
+            >
+              {speechStatus === 'speaking'
+                ? '暂停'
+                : speechStatus === 'paused'
+                  ? '继续'
+                  : '朗读'}
+            </button>
+            {speechStatus !== 'idle' && (
+              <button type="button" className="btn" onClick={stopSpeech}>
+                停止
+              </button>
+            )}
+            <button
+              type="button"
+              className={`btn${speechOpen ? ' btn--on' : ''}`}
+              aria-pressed={speechOpen}
+              onClick={() => {
+                const next = !speechOpen
+                setSpeechOpen(next)
+                // 两个设置面板同宽，同时打开会把正文挤得太窄
+                if (next) setPanelOpen(false)
+              }}
+            >
+              声音
+            </button>
+          </>
+        )}
         <button
           type="button"
           className={`btn${findOpen ? ' btn--on' : ''}`}
@@ -1333,7 +1452,16 @@ export function ReaderPage({
         >
           AI
         </button>
-        <button type="button" className="btn" onClick={() => setPanelOpen((open) => !open)}>
+        <button
+          type="button"
+          className="btn"
+          onClick={() => {
+            const next = !panelOpen
+            setPanelOpen(next)
+            // 与「声音」面板互斥，避免正文被两个 248px 的设置栏夹住
+            if (next) setSpeechOpen(false)
+          }}
+        >
           排版
         </button>
       </div>
@@ -1366,6 +1494,16 @@ export function ReaderPage({
       {bookmarkNote && (
         <p className="reader__degrade" role="status">
           {bookmarkNote}
+        </p>
+      )}
+      {speechNote && (
+        <p className="reader__degrade" role="status">
+          {speechNote}
+        </p>
+      )}
+      {readAloud.error && (
+        <p className="reader__degrade reader__degrade--error" role="status">
+          {readAloud.error}
         </p>
       )}
       {!canHighlight && docVersion > 0 && (
@@ -1437,6 +1575,23 @@ export function ReaderPage({
             layout={layout}
             onChange={applyPrefs}
             onClose={() => setPanelOpen(false)}
+          />
+        )}
+        {speechOpen && prefs && readAloud.supported && (
+          <SpeechPanel
+            engine={prefs.ttsEngine}
+            endpoint={prefs.ttsEndpoint}
+            systemVoice={prefs.ttsVoice}
+            serverVoice={prefs.ttsServerVoice}
+            voices={readAloud.voices}
+            rate={prefs.ttsRate}
+            onEngine={(ttsEngine) => applyPrefs({ ttsEngine })}
+            onEndpoint={(ttsEndpoint) => applyPrefs({ ttsEndpoint })}
+            onSystemVoice={(ttsVoice) => applyPrefs({ ttsVoice })}
+            onServerVoice={(ttsServerVoice) => applyPrefs({ ttsServerVoice })}
+            onRate={(ttsRate) => applyPrefs({ ttsRate })}
+            onCheck={readAloud.check}
+            onClose={() => setSpeechOpen(false)}
           />
         )}
       </div>

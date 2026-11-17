@@ -44,6 +44,14 @@ export function highlightRegistryName(color: HighlightColor): string {
  */
 export const CITATION_FLASH_NAME = 'cite-flash'
 
+/**
+ * 朗读到哪一句用的注册名。
+ *
+ * 与引用闪烁同理，不放进 `HIGHLIGHT_COLORS`：朗读高亮跟着语音走、随时清掉，
+ * 而四色标注是用户的持久数据，两者的生命周期不能混在一起。
+ */
+export const READ_ALOUD_NAME = 'read-aloud'
+
 export function isHighlightColor(value: unknown): value is HighlightColor {
   return typeof value === 'string' && (HIGHLIGHT_COLORS as readonly string[]).includes(value)
 }

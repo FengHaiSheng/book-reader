@@ -49,7 +49,10 @@ import type {
   SearchHit,
   SearchHitWithBook,
   Tag,
-  TermsPayload
+  TermsPayload,
+  TtsHealth,
+  TtsSynthesizeRequest,
+  TtsSynthesizeResult
 } from '@shared/types'
 import type { TrackMatchResult } from '@shared/track-match'
 import type { StoredGap, TrackNodeView, TrackRow } from '../main/track/repo'
@@ -136,6 +139,16 @@ const api = {
     /** 只送增量秒数；日期串由主进程生成 */
     addSeconds: (seconds: number): Promise<void> =>
       ipcRenderer.invoke(CH.readingAddSeconds, seconds)
+  },
+  /**
+   * 自建朗读服务。HTTP 请求与磁盘缓存都在主进程：
+   * 渲染进程的 CSP 不必放开本地端口，缓存也不会跟着书库备份走。
+   */
+  tts: {
+    health: (endpoint: string): Promise<TtsHealth> =>
+      ipcRenderer.invoke(CH.ttsHealth, endpoint),
+    synthesize: (request: TtsSynthesizeRequest): Promise<TtsSynthesizeResult> =>
+      ipcRenderer.invoke(CH.ttsSynthesize, request)
   },
   notes: {
     listChapter: (bookId: string, chapterId: number): Promise<Highlight[]> =>

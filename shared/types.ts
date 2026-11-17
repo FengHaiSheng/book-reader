@@ -71,6 +71,19 @@ export type ReadingPrefs = {
    * 这个宽度，窗口不够宽时由 `computeAiPanelWidth` 收窄，先保证正文列有最小宽度。
    */
   aiPanelWidth: number
+  /** 系统朗读音色。存 voiceURI；空串表示自动（中文优先）。换电脑后找不到会自动回落 */
+  ttsVoice: string
+  /** 朗读语速，1 为正常速度 */
+  ttsRate: number
+  /**
+   * 朗读引擎。system 走 Web Speech，http 走用户自建的 CosyVoice 服务。
+   * 默认系统语音：不依赖网络，也不需要用户先跑一个服务。
+   */
+  ttsEngine: TtsEngineId
+  /** 自建服务根地址，例如 http://127.0.0.1:8000。协议见 README */
+  ttsEndpoint: string
+  /** 自建服务的音色 id；空串表示交给服务端默认音色 */
+  ttsServerVoice: string
 }
 
 export const DEFAULT_PREFS: ReadingPrefs = {
@@ -78,8 +91,46 @@ export const DEFAULT_PREFS: ReadingPrefs = {
   fontSize: 19,
   lineHeight: 1.85,
   theme: 'light',
-  aiPanelWidth: 720
+  aiPanelWidth: 720,
+  ttsVoice: '',
+  ttsRate: 1,
+  ttsEngine: 'system',
+  ttsEndpoint: 'http://127.0.0.1:8000',
+  ttsServerVoice: ''
 }
+
+/** 朗读引擎。system = Web Speech；http = 自建 CosyVoice 服务 */
+export type TtsEngineId = 'system' | 'http'
+
+/** 统一后的音色视图。系统语音的 id 是 voiceURI，自建服务的是服务端音色 id */
+export type TtsVoice = {
+  id: string
+  name: string
+  lang: string
+}
+
+/** 自建服务 /health 的归一化结果。失败也走这个结构，界面不需要分辨异常类型 */
+export type TtsHealth = {
+  ok: boolean
+  voices: TtsVoice[]
+  error: string | null
+}
+
+export type TtsSynthesizeRequest = {
+  endpoint: string
+  text: string
+  voice: string
+  rate: number
+}
+
+/**
+ * 主进程合成一句的结果。音频以 WAV 字节回传，缓存命中时 cached 为 true。
+ * 失败用 error 而不是抛异常：IPC 抛出的错误会被包成 "Error invoking remote method"，
+ * 用户看到的应该是「连不上朗读服务」这种话。
+ */
+export type TtsSynthesizeResult =
+  | { ok: true; audio: Uint8Array; cached: boolean }
+  | { ok: false; error: string }
 
 export type BookStatus = 'unread' | 'reading' | 'finished'
 
@@ -171,7 +222,8 @@ export type IpcResult<T> = { ok: true; value: T } | { ok: false; error: AppError
 export const PREFS_LIMITS = {
   fontSize: [15, 32],
   lineHeight: [1.5, 2.2],
-  aiPanelWidth: [320, 720]
+  aiPanelWidth: [320, 720],
+  ttsRate: [0.5, 2]
 } as const
 
 /** 把任意输入夹进合法范围；类型不对或不是有限数就回落默认值。渲染进程与主进程都调它。 */
@@ -185,7 +237,32 @@ export function clampPrefs(input: Partial<ReadingPrefs>): ReadingPrefs {
       input.aiPanelWidth,
       PREFS_LIMITS.aiPanelWidth,
       DEFAULT_PREFS.aiPanelWidth
-    )
+    ),
+    ttsVoice: clampVoice(input.ttsVoice),
+    ttsRate: clampNumber(input.ttsRate, PREFS_LIMITS.ttsRate, DEFAULT_PREFS.ttsRate),
+    ttsEngine: input.ttsEngine === 'http' ? 'http' : 'system',
+    ttsEndpoint: clampEndpoint(input.ttsEndpoint),
+    ttsServerVoice: clampVoice(input.ttsServerVoice)
+  }
+}
+
+/** 音色标识只用于和系统语音列表比对，限一下长度避免脏数据无限长 */
+function clampVoice(value: unknown): string {
+  if (typeof value !== 'string') return DEFAULT_PREFS.ttsVoice
+  return value.trim().slice(0, 200)
+}
+
+/** 服务地址只接受 http(s)，去掉尾部斜杠，免得拼出 //tts */
+function clampEndpoint(value: unknown): string {
+  if (typeof value !== 'string') return DEFAULT_PREFS.ttsEndpoint
+  const trimmed = value.trim().slice(0, 300)
+  if (trimmed === '') return DEFAULT_PREFS.ttsEndpoint
+  try {
+    const url = new URL(trimmed)
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return DEFAULT_PREFS.ttsEndpoint
+    return trimmed.replace(/\/+$/, '')
+  } catch {
+    return DEFAULT_PREFS.ttsEndpoint
   }
 }
 

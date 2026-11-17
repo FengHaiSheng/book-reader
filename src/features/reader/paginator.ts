@@ -169,7 +169,8 @@ export class ChapterPaginator {
     return raw.replace(/\s+/gu, ' ').trim()
   }
 
-  private pageStartRange(): Range {
+  /** 当前页左上角折叠后的 Range。朗读用它判断「从哪一句开始读」 */
+  pageStartRange(): Range {
     const hit = this.doc.caretRangeFromPoint(PROBE_X, PROBE_Y)
     if (hit) return hit
     const fallback = this.doc.createRange()
@@ -250,6 +251,18 @@ export class ChapterPaginator {
     this.cancelFlash?.()
     this.cancelFlash = flashRange(win, range)
     return true
+  }
+
+  /**
+   * 把包含这个范围的页翻出来。朗读跟读用：每要读一句之前先确保它在屏幕上。
+   *
+   * 用范围起点的折叠位置算页码（与 `currentCfi` 同一套锚点），
+   * 一句跨页时按起始页算 —— 读到哪里，翻到哪一页。
+   */
+  revealRange(range: Range): void {
+    const start = range.cloneRange()
+    start.collapse(true)
+    this.settleAt(this.contentLeftOf(this.anchorRect(start)))
   }
 
   /**
