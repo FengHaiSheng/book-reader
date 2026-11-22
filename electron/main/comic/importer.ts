@@ -17,7 +17,7 @@ import type { ImportOutcome, ImportProgress } from '@shared/types'
 import { appError, toAppError } from '@shared/errors'
 import { sha256File } from '../storage/sha256'
 import { bookDir, ensureLibraryDir } from '../library/paths'
-import { findByHash, insertBookGraph, type ChapterInsert } from '../library/repo'
+import { findByHash, findByTitle, insertBookGraph, type ChapterInsert } from '../library/repo'
 import { listEntries, type ZipEntry } from '../epub/zip'
 import { isComicPage, pageEntry, pageFileExt, pageFileName, sortPageNames } from './pages'
 
@@ -56,6 +56,13 @@ export async function importComic(
     return { status: 'duplicate', bookId: existing.id, title: existing.title }
   }
 
+  // 漫画没有元数据，书名只能取文件名：同名但文件不同的漫画也按重复处理
+  const title = basename(sourcePath, extname(sourcePath)).trim() || '未命名漫画'
+  const sameTitle = findByTitle(db, title, null)
+  if (sameTitle) {
+    return { status: 'duplicate', bookId: sameTitle.id, title: sameTitle.title }
+  }
+
   const bookId = randomUUID()
   const dir = bookDir(bookId)
   const mediaDir = join(dir, MEDIA_DIR)
@@ -68,7 +75,6 @@ export async function importComic(
       throw appError('BOOK_PARSE_FAILED', '这个文件里没有可显示的图片页面，可能不是漫画压缩包')
     }
 
-    const title = basename(sourcePath, extname(sourcePath)).trim() || '未命名漫画'
     const coverPath = writeCover(mediaDir, dir, pages[0]!)
 
     onProgress({ phase: 'store', done: 0, total: 1 })

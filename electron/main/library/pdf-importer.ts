@@ -9,7 +9,7 @@ import { buildChunks } from '../epub/chunks'
 import { totalChars } from '../epub/parse'
 import { sha256File } from '../storage/sha256'
 import { bookDir, ensureLibraryDir } from './paths'
-import { findByHash, insertBookGraph, type ChapterInsert } from './repo'
+import { findByHash, findByTitle, insertBookGraph, type ChapterInsert } from './repo'
 import { buildPdfDraft } from '../pdf/chapters'
 import { extractPdfInWorker } from '../pdf/extract-pool'
 
@@ -52,6 +52,11 @@ export async function importPdf(
       'PDF_PARSE_FAILED',
       '这本 PDF 没有可抽取的文字，可能是扫描版；扫描件需要 OCR，暂不支持'
     )
+  }
+
+  const sameTitle = findByTitle(db, title, extracted.author)
+  if (sameTitle) {
+    return { status: 'duplicate', bookId: sameTitle.id, title: sameTitle.title }
   }
 
   const chapterRows = buildChapters(draft.toc, draft.spine, draft.texts)

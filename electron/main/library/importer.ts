@@ -11,7 +11,7 @@ import { loadToc, readEpubInfo, totalChars } from '../epub/parse'
 import { readEntries } from '../epub/zip'
 import { sha256File } from '../storage/sha256'
 import { bookDir, ensureLibraryDir } from './paths'
-import { findByHash, insertBookGraph, type ChapterInsert } from './repo'
+import { findByHash, findByTitle, insertBookGraph, type ChapterInsert } from './repo'
 
 type ProgressFn = (progress: ImportProgress) => void
 
@@ -39,6 +39,11 @@ export async function importEpub(
   }
 
   const info = await readEpubInfo(sourcePath)
+  const sameTitle = findByTitle(db, info.metadata.title, info.metadata.author)
+  if (sameTitle) {
+    return { status: 'duplicate', bookId: sameTitle.id, title: sameTitle.title }
+  }
+
   const toc = await loadToc(sourcePath, info)
 
   onProgress({ phase: 'extract', done: 0, total: info.spineEntries.length })

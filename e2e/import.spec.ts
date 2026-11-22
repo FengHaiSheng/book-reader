@@ -39,6 +39,23 @@ test('导入中文小说：落库正确、可检索、重复导入被去重、�
   expect(again.status).toBe('duplicate')
   expect(await win.evaluate(() => (window as any).api.library.list())).toHaveLength(1)
 
+  // 文件内容不同、但书名与作者相同的另一份副本也应被拦下
+  const sameTitlePath = join(userDataDir, 'novel-copy.epub')
+  const sameTitleFiles = novelFiles()
+  sameTitleFiles['OEBPS/ch1.xhtml'] = `<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml"><head><title>第一章</title></head>
+<body><h1>第一章 河边</h1>
+<p>这是从另一个来源下载的同一本书，正文措辞略有不同。</p></body></html>`
+  await writeEpub(sameTitlePath, sameTitleFiles)
+
+  const sameTitle = await win.evaluate(
+    (file) => (window as any).api.library.importPath(file),
+    sameTitlePath
+  )
+  expect(sameTitle.status).toBe('duplicate')
+  expect(sameTitle.title).toBe('河边的月亮')
+  expect(await win.evaluate(() => (window as any).api.library.list())).toHaveLength(1)
+
   await win.evaluate((id) => (window as any).api.library.remove(id), bookId)
   expect(await win.evaluate(() => (window as any).api.library.list())).toHaveLength(0)
   expect(

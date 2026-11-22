@@ -39,6 +39,35 @@ export function findByHash(db: Database.Database, hash: string): { id: string; t
   return row ?? null
 }
 
+/**
+ * 同名书去重：文件内容不同（例如重新下载、换了个格式），但书名相同的也不重复入库。
+ *
+ * 书名比较忽略首尾空白与英文大小写；双方都有作者时再比作者，任一方没作者就只认书名——
+ * 同名且缺作者的书，多半就是同一本。
+ */
+export function findByTitle(
+  db: Database.Database,
+  title: string,
+  author: string | null
+): { id: string; title: string } | null {
+  const normalizedTitle = title.trim()
+  if (normalizedTitle === '') return null
+  const normalizedAuthor = author?.trim() || null
+  const row = db
+    .prepare(
+      `SELECT id, title FROM books
+       WHERE TRIM(title) = ? COLLATE NOCASE
+         AND (? IS NULL
+              OR TRIM(COALESCE(author, '')) = ''
+              OR TRIM(author) = ? COLLATE NOCASE)
+       LIMIT 1`
+    )
+    .get(normalizedTitle, normalizedAuthor, normalizedAuthor) as
+    | { id: string; title: string }
+    | undefined
+  return row ?? null
+}
+
 /** listBooks 的中间形态：先按行取回，再把标签一次贴上去 */
 type BookRow = Omit<BookSummary, 'tags'>
 

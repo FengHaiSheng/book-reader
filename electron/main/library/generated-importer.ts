@@ -10,7 +10,7 @@ import { totalChars } from '../epub/parse'
 import type { EpubMetadata, SpineText, TocNode } from '../epub/types'
 import { sha256File } from '../storage/sha256'
 import { bookDir, ensureLibraryDir } from './paths'
-import { findByHash, insertBookGraph, type ChapterInsert } from './repo'
+import { findByHash, findByTitle, insertBookGraph, type ChapterInsert } from './repo'
 
 type ProgressFn = (progress: ImportProgress) => void
 
@@ -76,6 +76,13 @@ export async function importGeneratedBook(
     const title = draft.metadata.title.trim() || `未命名书籍`
     if (draft.spine.length === 0 || draft.texts.every((item) => item.text.trim() === '')) {
       throw appError('BOOK_PARSE_FAILED', '这本书没有可读的正文，文件可能已经损坏')
+    }
+
+    const sameTitle = findByTitle(db, title, draft.metadata.author)
+    if (sameTitle) {
+      // 解析阶段可能已经把封面 / 媒体写进书目录了，这里一并清掉，别留下半本书的残留
+      rmSync(dir, { recursive: true, force: true })
+      return { status: 'duplicate', bookId: sameTitle.id, title: sameTitle.title }
     }
 
     onProgress({ phase: 'store', done: 0, total: 1 })
