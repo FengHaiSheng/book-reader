@@ -51,6 +51,7 @@ import type {
   Tag,
   TermsPayload,
   TtsHealth,
+  TtsApi,
   TtsSynthesizeRequest,
   TtsSynthesizeResult
 } from '@shared/types'
@@ -145,8 +146,8 @@ const api = {
    * 渲染进程的 CSP 不必放开本地端口，缓存也不会跟着书库备份走。
    */
   tts: {
-    health: (endpoint: string): Promise<TtsHealth> =>
-      ipcRenderer.invoke(CH.ttsHealth, endpoint),
+    health: (endpoint: string, api: TtsApi = 'simple'): Promise<TtsHealth> =>
+      ipcRenderer.invoke(CH.ttsHealth, endpoint, api),
     synthesize: (request: TtsSynthesizeRequest): Promise<TtsSynthesizeResult> =>
       ipcRenderer.invoke(CH.ttsSynthesize, request)
   },

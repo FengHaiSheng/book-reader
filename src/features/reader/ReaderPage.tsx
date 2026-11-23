@@ -250,6 +250,8 @@ export function ReaderPage({
     paginatorRef,
     engine: prefs?.ttsEngine ?? DEFAULT_PREFS.ttsEngine,
     endpoint: prefs?.ttsEndpoint ?? DEFAULT_PREFS.ttsEndpoint,
+    api: prefs?.ttsApi ?? DEFAULT_PREFS.ttsApi,
+    sampleRate: prefs?.ttsSampleRate ?? DEFAULT_PREFS.ttsSampleRate,
     voice:
       (prefs?.ttsEngine ?? DEFAULT_PREFS.ttsEngine) === 'http'
         ? (prefs?.ttsServerVoice ?? DEFAULT_PREFS.ttsServerVoice)
@@ -1581,12 +1583,16 @@ export function ReaderPage({
           <SpeechPanel
             engine={prefs.ttsEngine}
             endpoint={prefs.ttsEndpoint}
+            api={prefs.ttsApi}
+            sampleRate={prefs.ttsSampleRate}
             systemVoice={prefs.ttsVoice}
             serverVoice={prefs.ttsServerVoice}
             voices={readAloud.voices}
             rate={prefs.ttsRate}
             onEngine={(ttsEngine) => applyPrefs({ ttsEngine })}
             onEndpoint={(ttsEndpoint) => applyPrefs({ ttsEndpoint })}
+            onApi={(ttsApi) => applyPrefs({ ttsApi })}
+            onSampleRate={(ttsSampleRate) => applyPrefs({ ttsSampleRate })}
             onSystemVoice={(ttsVoice) => applyPrefs({ ttsVoice })}
             onServerVoice={(ttsServerVoice) => applyPrefs({ ttsServerVoice })}
             onRate={(ttsRate) => applyPrefs({ ttsRate })}

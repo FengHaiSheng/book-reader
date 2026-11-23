@@ -1,4 +1,4 @@
-import type { TtsVoice } from '@shared/types'
+import type { TtsApi, TtsVoice } from '@shared/types'
 import {
   clampRate,
   type SpeechEngine,
@@ -10,6 +10,10 @@ import {
 export type HttpEngineDeps = {
   /** 每次请求时再取，用户改地址不用重建引擎 */
   endpoint: () => string
+  /** simple = 通用 /tts；cosyvoice = 官方 /inference_sft */
+  api: () => TtsApi
+  /** 官方 FastAPI 的裸 PCM 需要它补 WAV 头 */
+  sampleRate: () => number
   transport: TtsTransport | null
 }
 
@@ -38,7 +42,7 @@ export class HttpSpeechEngine implements SpeechEngine {
   async listVoices(): Promise<TtsVoice[]> {
     const transport = this.deps.transport
     if (!transport) throw new Error('自建朗读服务不可用：缺少主进程通道。')
-    const health = await transport.health(this.deps.endpoint())
+    const health = await transport.health(this.deps.endpoint(), this.deps.api())
     if (!health.ok) throw new Error(health.error ?? '连不上自建朗读服务。')
     return health.voices
   }
@@ -60,6 +64,8 @@ export class HttpSpeechEngine implements SpeechEngine {
       transport,
       {
         endpoint: this.deps.endpoint(),
+        api: this.deps.api(),
+        sampleRate: this.deps.sampleRate(),
         text,
         voice: options.voice,
         rate: clampRate(options.rate)
@@ -74,6 +80,8 @@ export class HttpSpeechEngine implements SpeechEngine {
     const endpoint = this.deps.endpoint()
     const request = {
       endpoint,
+      api: this.deps.api(),
+      sampleRate: this.deps.sampleRate(),
       voice: options.voice,
       rate: clampRate(options.rate)
     }
@@ -112,7 +120,14 @@ export class HttpSpeechEngine implements SpeechEngine {
   private async play(
     token: number,
     transport: TtsTransport,
-    request: { endpoint: string; text: string; voice: string; rate: number },
+    request: {
+      endpoint: string
+      api: TtsApi
+      sampleRate: number
+      text: string
+      voice: string
+      rate: number
+    },
     handlers: TtsSpeakHandlers
   ): Promise<void> {
     try {
@@ -135,6 +150,8 @@ export class HttpSpeechEngine implements SpeechEngine {
 
       const source = ctx.createBufferSource()
       source.buffer = buffer
+      // 官方 FastAPI 没有语速参数，只能在播放端变速；通用 /tts 已按 speed 合成过
+      source.playbackRate.value = request.api === 'cosyvoice' ? request.rate : 1
       source.connect(ctx.destination)
       this.source = source
       source.onended = (): void => {

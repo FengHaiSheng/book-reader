@@ -11,6 +11,8 @@ describe('clampPrefs', () => {
     expect(clampPrefs({ aiPanelWidth: 100 }).aiPanelWidth).toBe(320)
     expect(clampPrefs({ ttsRate: 9 }).ttsRate).toBe(2)
     expect(clampPrefs({ ttsRate: 0.1 }).ttsRate).toBe(0.5)
+    expect(clampPrefs({ ttsSampleRate: 90000 }).ttsSampleRate).toBe(48000)
+    expect(clampPrefs({ ttsSampleRate: 100 }).ttsSampleRate).toBe(16000)
   })
 
   it('坏值与缺省值回落到默认；旧 prefs 里的每行字数被丢弃', () => {
@@ -24,6 +26,10 @@ describe('clampPrefs', () => {
     expect(clampPrefs({ ttsRate: Number.NaN }).ttsRate).toBe(DEFAULT_PREFS.ttsRate)
     expect(clampPrefs({ ttsEngine: 'cloud' as never }).ttsEngine).toBe('system')
     expect(clampPrefs({ ttsServerVoice: 7 as never }).ttsServerVoice).toBe('')
+    expect(clampPrefs({ ttsApi: 'grpc' as never }).ttsApi).toBe('simple')
+    expect(clampPrefs({ ttsSampleRate: Number.NaN }).ttsSampleRate).toBe(
+      DEFAULT_PREFS.ttsSampleRate
+    )
   })
 
   it('服务地址只接受 http(s)，并去掉尾部斜杠', () => {
@@ -56,7 +62,9 @@ describe('clampPrefs', () => {
       ttsRate: 1.2,
       ttsEngine: 'http',
       ttsEndpoint: 'http://127.0.0.1:8000',
-      ttsServerVoice: 'cosy-default'
+      ttsServerVoice: 'cosy-default',
+      ttsApi: 'cosyvoice',
+      ttsSampleRate: 22050
     } as const
     expect(clampPrefs(wanted)).toEqual(wanted)
   })
@@ -74,7 +82,9 @@ describe('applyPrefsPatch', () => {
       ttsRate: 1,
       ttsEngine: 'system' as const,
       ttsEndpoint: 'http://127.0.0.1:8000',
-      ttsServerVoice: ''
+      ttsServerVoice: '',
+      ttsApi: 'simple' as const,
+      ttsSampleRate: 24000
     }
     expect(applyPrefsPatch(current, { fontSize: 18 })).toEqual({
       ...current,

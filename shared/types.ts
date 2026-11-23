@@ -84,6 +84,13 @@ export type ReadingPrefs = {
   ttsEndpoint: string
   /** 自建服务的音色 id；空串表示交给服务端默认音色 */
   ttsServerVoice: string
+  /** 自建服务的接口形态：通用 /tts，或 CosyVoice 官方 FastAPI */
+  ttsApi: TtsApi
+  /**
+   * 官方 FastAPI 返回的是裸 PCM，没有采样率信息，必须由客户端告诉它。
+   * CosyVoice2/3 是 24000，CosyVoice1 是 22050。
+   */
+  ttsSampleRate: number
 }
 
 export const DEFAULT_PREFS: ReadingPrefs = {
@@ -96,8 +103,13 @@ export const DEFAULT_PREFS: ReadingPrefs = {
   ttsRate: 1,
   ttsEngine: 'system',
   ttsEndpoint: 'http://127.0.0.1:8000',
-  ttsServerVoice: ''
+  ttsServerVoice: '',
+  ttsApi: 'simple',
+  ttsSampleRate: 24000
 }
+
+/** 自建服务的接口形态 */
+export type TtsApi = 'simple' | 'cosyvoice'
 
 /** 朗读引擎。system = Web Speech；http = 自建 CosyVoice 服务 */
 export type TtsEngineId = 'system' | 'http'
@@ -118,6 +130,10 @@ export type TtsHealth = {
 
 export type TtsSynthesizeRequest = {
   endpoint: string
+  /** simple = 约定的 /tts；cosyvoice = 官方 /inference_sft */
+  api: TtsApi
+  /** 官方 FastAPI 返回裸 PCM，用它来补 WAV 头；simple 模式忽略 */
+  sampleRate: number
   text: string
   voice: string
   rate: number
@@ -223,7 +239,8 @@ export const PREFS_LIMITS = {
   fontSize: [15, 32],
   lineHeight: [1.5, 2.2],
   aiPanelWidth: [320, 720],
-  ttsRate: [0.5, 2]
+  ttsRate: [0.5, 2],
+  ttsSampleRate: [16000, 48000]
 } as const
 
 /** 把任意输入夹进合法范围；类型不对或不是有限数就回落默认值。渲染进程与主进程都调它。 */
@@ -242,7 +259,13 @@ export function clampPrefs(input: Partial<ReadingPrefs>): ReadingPrefs {
     ttsRate: clampNumber(input.ttsRate, PREFS_LIMITS.ttsRate, DEFAULT_PREFS.ttsRate),
     ttsEngine: input.ttsEngine === 'http' ? 'http' : 'system',
     ttsEndpoint: clampEndpoint(input.ttsEndpoint),
-    ttsServerVoice: clampVoice(input.ttsServerVoice)
+    ttsServerVoice: clampVoice(input.ttsServerVoice),
+    ttsApi: input.ttsApi === 'cosyvoice' ? 'cosyvoice' : 'simple',
+    ttsSampleRate: clampNumber(
+      input.ttsSampleRate,
+      PREFS_LIMITS.ttsSampleRate,
+      DEFAULT_PREFS.ttsSampleRate
+    )
   }
 }
 

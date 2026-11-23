@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { RefObject } from 'react'
-import type { TtsEngineId, TtsVoice } from '@shared/types'
+import type { TtsApi, TtsEngineId, TtsVoice } from '@shared/types'
 import { clearReadAloud, paintReadAloud } from './highlights'
 import type { ChapterPaginator } from './paginator'
 import { speechSegments, speechSupported, startIndexForPage, type SpeechSegment } from './speech'
@@ -18,6 +18,10 @@ export type ReadAloudOptions = {
   /** 系统语音是 voiceURI，自建服务是音色 id */
   voice: string
   endpoint: string
+  /** 自建服务的接口形态：通用 /tts 或官方 CosyVoice FastAPI */
+  api: TtsApi
+  /** 官方 FastAPI 的裸 PCM 播放时用它补 WAV 头 */
+  sampleRate: number
   rate: number
   /** 朗读翻到新的一页时回传，让顶栏页码与进度跟上 */
   onPage: (page: number, pages: number) => void
@@ -79,6 +83,8 @@ export function useReadAloud(options: ReadAloudOptions): ReadAloud {
     const transport = typeof window === 'undefined' ? null : (window.api?.tts ?? null)
     const engine = createTtsEngine(id, {
       endpoint: () => optsRef.current.endpoint,
+      api: () => optsRef.current.api,
+      sampleRate: () => optsRef.current.sampleRate,
       transport: id === 'http' ? transport : null
     })
     engineRef.current = { id, engine }
@@ -124,7 +130,14 @@ export function useReadAloud(options: ReadAloudOptions): ReadAloud {
     clearCurrentHighlight()
     setStatus('idle')
     setError(null)
-  }, [options.engine, options.endpoint, clearCurrentHighlight, setStatus])
+  }, [
+    options.engine,
+    options.endpoint,
+    options.api,
+    options.sampleRate,
+    clearCurrentHighlight,
+    setStatus
+  ])
 
   /**
    * 读第 index 句。index 越界即本章结束。

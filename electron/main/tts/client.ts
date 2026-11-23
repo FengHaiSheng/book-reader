@@ -2,12 +2,15 @@ import { app } from 'electron'
 import { randomUUID } from 'node:crypto'
 import { mkdir, readFile, readdir, rename, stat, unlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import type { TtsHealth, TtsSynthesizeResult } from '@shared/types'
+import type { TtsApi, TtsHealth, TtsSynthesizeResult } from '@shared/types'
 import {
+  DEFAULT_SPK_ID,
   TTS_CACHE_LIMIT_BYTES,
   normalizeEndpoint,
   normalizeTtsRequest,
+  openApiHasInference,
   parseHealthPayload,
+  pcm16ToWav,
   pickCacheVictims,
   ttsCacheKey,
   type NormalizedTtsRequest
@@ -76,6 +79,13 @@ async function pruneCache(): Promise<void> {
 }
 
 async function requestAudio(request: NormalizedTtsRequest): Promise<Uint8Array> {
+  return request.api === 'cosyvoice'
+    ? requestCosyVoiceAudio(request)
+    : requestSimpleAudio(request)
+}
+
+/** 通用协议：POST /tts，返回 WAV */
+async function requestSimpleAudio(request: NormalizedTtsRequest): Promise<Uint8Array> {
   let response: Response
   try {
     response = await fetch(`${request.endpoint}/tts`, {
@@ -103,13 +113,76 @@ async function requestAudio(request: NormalizedTtsRequest): Promise<Uint8Array> 
   return audio
 }
 
-/** 探活同时充当音色列表：面板切到自建服务时就知道该显示哪些声音 */
-export async function ttsHealth(endpoint: unknown): Promise<TtsHealth> {
+/**
+ * 官方 CosyVoice FastAPI：`POST /inference_sft`，表单两个字段，回裸 PCM。
+ *
+ * 官方服务没有采样率、没有 WAV 头，也不接受语速 —— 采样率由客户端补，
+ * 语速交给播放端的 playbackRate（见 `HttpSpeechEngine`）。
+ */
+async function requestCosyVoiceAudio(request: NormalizedTtsRequest): Promise<Uint8Array> {
+  const body = new URLSearchParams({
+    tts_text: request.text,
+    spk_id: request.voice || DEFAULT_SPK_ID
+  })
+
+  let response: Response
+  try {
+    response = await fetch(`${request.endpoint}/inference_sft`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: body.toString(),
+      signal: AbortSignal.timeout(60_000)
+    })
+  } catch (error) {
+    throw new Error(readableFetchError(error, request.endpoint))
+  }
+
+  if (!response.ok) {
+    // FastAPI 的 422 会带 detail，直接丢掉的话用户只看到「HTTP 422」无从下手
+    const detail = await readErrorDetail(response)
+    throw new Error(
+      `CosyVoice 返回 HTTP ${response.status}${detail === '' ? '' : `：${detail}`}`
+    )
+  }
+
+  const pcm = new Uint8Array(await response.arrayBuffer())
+  if (pcm.byteLength < 64) throw new Error('CosyVoice 返回的音频是空的。')
+  return pcm16ToWav(pcm, request.sampleRate)
+}
+
+/** 尽量从错误响应里捞出可读的一句话，别把整页 HTML 甩给用户 */
+async function readErrorDetail(response: Response): Promise<string> {
+  const text = await response.text().catch(() => '')
+  if (text === '') return ''
+  try {
+    const payload = JSON.parse(text) as { detail?: unknown }
+    if (typeof payload.detail === 'string') return payload.detail.slice(0, 200)
+    if (Array.isArray(payload.detail)) {
+      const first = payload.detail[0] as { msg?: unknown } | undefined
+      if (typeof first?.msg === 'string') return first.msg.slice(0, 200)
+    }
+  } catch {
+    // 不是 JSON，按文本截一段
+  }
+  return text.replace(/\s+/g, ' ').trim().slice(0, 200)
+}
+
+/**
+ * 探活同时充当音色列表：面板切到自建服务时就知道该显示哪些声音。
+ *
+ * 官方 FastAPI 没有 `/health`，音色（spk_id）也不在接口里暴露，
+ * 只能看 `/openapi.json` 里有没有推理路由；音色由用户手填。
+ */
+export async function ttsHealth(endpoint: unknown, api: unknown): Promise<TtsHealth> {
   const base = normalizeEndpoint(endpoint)
   if (!base) {
     return { ok: false, voices: [], error: '朗读服务地址不合法，需要 http(s) 地址。' }
   }
+  const mode: TtsApi = api === 'cosyvoice' ? 'cosyvoice' : 'simple'
+  return mode === 'cosyvoice' ? cosyVoiceHealth(base) : simpleHealth(base)
+}
 
+async function simpleHealth(base: string): Promise<TtsHealth> {
   try {
     const response = await fetch(`${base}/health`, { signal: AbortSignal.timeout(4000) })
     if (!response.ok) {
@@ -121,6 +194,28 @@ export async function ttsHealth(endpoint: unknown): Promise<TtsHealth> {
       return { ok: false, voices: [], error: '朗读服务的 /health 不是预期格式。' }
     }
     return { ok: true, voices, error: null }
+  } catch (error) {
+    return { ok: false, voices: [], error: readableFetchError(error, base) }
+  }
+}
+
+async function cosyVoiceHealth(base: string): Promise<TtsHealth> {
+  try {
+    const response = await fetch(`${base}/openapi.json`, {
+      signal: AbortSignal.timeout(4000)
+    })
+    if (!response.ok) {
+      return { ok: false, voices: [], error: `朗读服务返回 HTTP ${response.status}。` }
+    }
+    const payload = await response.json().catch(() => null)
+    if (!openApiHasInference(payload)) {
+      return {
+        ok: false,
+        voices: [],
+        error: '这个地址不像 CosyVoice 官方 FastAPI：/openapi.json 里没有 /inference_* 接口。'
+      }
+    }
+    return { ok: true, voices: [], error: null }
   } catch (error) {
     return { ok: false, voices: [], error: readableFetchError(error, base) }
   }

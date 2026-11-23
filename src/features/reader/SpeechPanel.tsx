@@ -1,21 +1,28 @@
 import { useState } from 'react'
-import { PREFS_LIMITS, type TtsEngineId, type TtsVoice } from '@shared/types'
+import { PREFS_LIMITS, type TtsApi, type TtsEngineId, type TtsVoice } from '@shared/types'
 
 /**
  * 朗读面板。
  *
- * 系统语音只选音色；自建服务多一个地址与探活。两个音色字段分开存：
+ * 系统语音只选音色；自建服务多一个地址、接口形态与探活。两个音色字段分开存：
  * 切回系统语音时不会把服务端音色 id 当成 voiceURI 用。
+ *
+ * 自建服务支持两种接口：约定的通用 /tts，以及 CosyVoice 官方 FastAPI。
+ * 后者没有 /health、也没有采样率，所以多一个服务类型与采样率选项。
  */
 export function SpeechPanel({
   engine,
   endpoint,
+  api,
+  sampleRate,
   systemVoice,
   serverVoice,
   voices,
   rate,
   onEngine,
   onEndpoint,
+  onApi,
+  onSampleRate,
   onSystemVoice,
   onServerVoice,
   onRate,
@@ -24,12 +31,16 @@ export function SpeechPanel({
 }: {
   engine: TtsEngineId
   endpoint: string
+  api: TtsApi
+  sampleRate: number
   systemVoice: string
   serverVoice: string
   voices: TtsVoice[]
   rate: number
   onEngine: (engine: TtsEngineId) => void
   onEndpoint: (endpoint: string) => void
+  onApi: (api: TtsApi) => void
+  onSampleRate: (sampleRate: number) => void
   onSystemVoice: (voice: string) => void
   onServerVoice: (voice: string) => void
   onRate: (rate: number) => void
@@ -40,6 +51,7 @@ export function SpeechPanel({
   const [testing, setTesting] = useState(false)
   const [checkNote, setCheckNote] = useState<{ ok: boolean; text: string } | null>(null)
 
+  const official = api === 'cosyvoice'
   const chinese = voices.filter((item) => item.lang.toLowerCase().startsWith('zh'))
   const others = voices.filter((item) => !item.lang.toLowerCase().startsWith('zh'))
   const known = voices.some((item) => item.id === serverVoice)
@@ -118,6 +130,23 @@ export function SpeechPanel({
       ) : (
         <>
           <div className="typo__field">
+            <label className="typo__label" htmlFor="tts-api">
+              服务类型
+            </label>
+            <select
+              id="tts-api"
+              className="typo__select"
+              value={api}
+              onChange={(event) =>
+                onApi(event.target.value === 'cosyvoice' ? 'cosyvoice' : 'simple')
+              }
+            >
+              <option value="simple">通用 /tts 协议</option>
+              <option value="cosyvoice">CosyVoice 官方 FastAPI</option>
+            </select>
+          </div>
+
+          <div className="typo__field">
             <label className="typo__label" htmlFor="tts-endpoint">
               服务地址
             </label>
@@ -126,7 +155,7 @@ export function SpeechPanel({
               className="typo__input"
               type="url"
               value={endpoint}
-              placeholder="http://127.0.0.1:8000"
+              placeholder={official ? 'http://127.0.0.1:50000' : 'http://127.0.0.1:8000'}
               onChange={(event) => onEndpoint(event.target.value)}
             />
             <button type="button" className="btn" disabled={testing} onClick={() => void test()}>
@@ -139,9 +168,29 @@ export function SpeechPanel({
             )}
           </div>
 
+          {official && (
+            <div className="typo__field">
+              <label className="typo__label" htmlFor="tts-sample-rate">
+                采样率
+              </label>
+              <select
+                id="tts-sample-rate"
+                className="typo__select"
+                value={sampleRate === 22050 ? 22050 : 24000}
+                onChange={(event) => onSampleRate(Number(event.target.value))}
+              >
+                <option value={24000}>24000 Hz（CosyVoice2 / 3）</option>
+                <option value={22050}>22050 Hz（CosyVoice1）</option>
+              </select>
+              <span className="typo__label">
+                官方接口返回裸 PCM，不带采样率，选错了会变调或变速。
+              </span>
+            </div>
+          )}
+
           <div className="typo__field">
             <label className="typo__label" htmlFor="tts-server-voice">
-              服务音色
+              {official ? '说话人（spk_id）' : '服务音色'}
             </label>
             {voices.length > 0 ? (
               <select
@@ -164,12 +213,17 @@ export function SpeechPanel({
                 className="typo__input"
                 type="text"
                 value={serverVoice}
-                placeholder="留空使用服务默认音色"
+                placeholder={
+                  official ? '留空使用「中文女」' : '留空使用服务默认音色'
+                }
                 onChange={(event) => onServerVoice(event.target.value)}
               />
             )}
             <span className="typo__label">
-              服务需实现 GET /health 与 POST /tts（WAV）。合成的句子缓存在本地，上限 200MB。
+              {official
+                ? '请求官方 POST /inference_sft。服务没有语速参数，语速由播放端调整。'
+                : '服务需实现 GET /health 与 POST /tts（WAV）。'}
+              合成的句子缓存在本地，上限 200MB。
             </span>
           </div>
         </>

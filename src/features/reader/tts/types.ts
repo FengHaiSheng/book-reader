@@ -1,4 +1,5 @@
 import type {
+  TtsApi,
   TtsEngineId,
   TtsHealth,
   TtsSynthesizeRequest,
@@ -48,7 +49,8 @@ export type SpeechEngine = {
 
 /** HTTP 引擎需要的最小主进程通道。抽出来是为了让引擎可以单独测试 */
 export type TtsTransport = {
-  health(endpoint: string): Promise<TtsHealth>
+  /** 官方 FastAPI 走 /openapi.json 探活；省略时按通用 /health 处理 */
+  health(endpoint: string, api?: TtsApi): Promise<TtsHealth>
   synthesize(request: TtsSynthesizeRequest): Promise<TtsSynthesizeResult>
 }
 
