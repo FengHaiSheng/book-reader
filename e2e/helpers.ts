@@ -153,7 +153,7 @@ export async function exitReading(win: Page): Promise<void> {
   await win.getByRole('navigation', { name: '主导航' }).getByRole('button', { name: '书架' }).click()
 }
 
-/** 阅读侧栏默认收起；操作目录/书签前先展开 */
+/** 文字书进入阅读后目录会自动展开；这里只兜底「用户先收起了侧栏」的情况 */
 export async function ensureSidebarExpanded(win: Page): Promise<void> {
   const expand = win.getByRole('button', { name: '展开侧栏' })
   if (await expand.isVisible()) await expand.click()

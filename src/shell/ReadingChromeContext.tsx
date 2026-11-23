@@ -2,7 +2,7 @@ import { createContext, useContext, type ReactNode } from 'react'
 import type { Bookmark, ReaderChapter } from '@shared/types'
 
 /** 阅读器上报给壳层侧栏的目录 / 书签数据 */
-export type ReadingChromeValue = {
+type TocChrome = {
   chapters: ReaderChapter[]
   currentChapterId: number | null
   onSelectChapter: (chapterId: number) => void
@@ -11,9 +11,13 @@ export type ReadingChromeValue = {
   onAddMark: () => void
   onRemoveMark: (id: number) => void
   onSelectMark: (bookmark: Bookmark) => void
-  /** 漫画等无目录时为 false */
-  showToc: boolean
 }
+
+/**
+ * 文字书有目录（showToc: true），漫画只有「这本书已经打开、没有目录」这一条信息。
+ * 壳层据此决定侧栏展开还是收成图标轨，不为一本漫画白占正文宽度。
+ */
+export type ReadingChromeValue = { showToc: false } | (TocChrome & { showToc: true })
 
 const ReadingChromeContext = createContext<ReadingChromeValue | null>(null)
 

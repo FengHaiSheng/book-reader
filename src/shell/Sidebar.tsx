@@ -14,7 +14,7 @@ import { useReadingChrome } from './ReadingChromeContext'
 
 export type PageId = 'library' | 'track' | 'notes' | 'settings'
 
-type NavIconName = 'library' | 'track' | 'notes' | 'settings' | 'expand' | 'collapse'
+type NavIconName = 'library' | 'track' | 'notes' | 'settings' | 'toc' | 'expand' | 'collapse'
 
 const NAV: { id: PageId; label: string; icon: NavIconName }[] = [
   { id: 'library', label: '书架', icon: 'library' },
@@ -79,6 +79,14 @@ function NavIcon({ name }: { name: NavIconName }) {
       </svg>
     )
   }
+  if (name === 'toc') {
+    return (
+      <svg {...common}>
+        <path d="M2.5 4h.01M2.5 8h.01M2.5 12h.01" />
+        <path d="M6 4h7.5M6 8h7.5M6 12h7.5" />
+      </svg>
+    )
+  }
   if (name === 'expand') {
     return (
       <svg {...common}>
@@ -100,6 +108,7 @@ export function Sidebar({
   width,
   onWidthChange,
   onToggleCollapsed,
+  onOpenToc,
   tags,
   tagFilter,
   onPickTag,
@@ -117,6 +126,8 @@ export function Sidebar({
   /** 阅读态拖宽；非阅读不传 */
   onWidthChange?: (width: number) => void
   onToggleCollapsed?: () => void
+  /** 收起轨里点「目录」：展开侧栏（目录在展开态里） */
+  onOpenToc?: () => void
   /** null 表示当前页面没有上下文列表；空数组是「还没建过标签」 */
   tags?: Tag[] | null
   tagFilter?: number | null
@@ -130,7 +141,7 @@ export function Sidebar({
   const chrome = useReadingChrome()
   const collapsed = reading && width <= SIDEBAR_COLLAPSED_WIDTH
   const showLibraryExtras = !reading && tags != null
-  const showToc = reading && !collapsed && chrome?.showToc === true
+  const toc = reading && !collapsed && chrome?.showToc === true ? chrome : null
 
   const countOf = (status: BookStatus | null): number | null => {
     if (!stats) return null
@@ -178,6 +189,21 @@ export function Sidebar({
   return (
     <nav className={className} style={style} aria-label="主导航">
       <div className="sidebar__nav">
+        {/* 收起态也留一个「目录」入口，与展开态顶部的目录保持一致，不让入口消失 */}
+        {reading && collapsed && chrome?.showToc === true ? (
+          <button
+            type="button"
+            className="nav-item nav-item--icon"
+            aria-label="目录"
+            title="目录"
+            onClick={onOpenToc}
+          >
+            <span className="nav-item__icon">
+              <NavIcon name="toc" />
+            </span>
+            <span className="nav-item__label">目录</span>
+          </button>
+        ) : null}
         {NAV.map((item) => {
           const active = !reading && current === item.id
           return (
@@ -238,17 +264,17 @@ export function Sidebar({
         </div>
       ) : null}
 
-      {showToc && chrome ? (
+      {toc ? (
         <div className="sidebar__toc">
           <TocPanel
-            chapters={chrome.chapters}
-            currentId={chrome.currentChapterId}
-            onSelect={chrome.onSelectChapter}
-            marks={chrome.marks}
-            currentMark={chrome.currentMark}
-            onAddMark={chrome.onAddMark}
-            onRemoveMark={chrome.onRemoveMark}
-            onSelectMark={chrome.onSelectMark}
+            chapters={toc.chapters}
+            currentId={toc.currentChapterId}
+            onSelect={toc.onSelectChapter}
+            marks={toc.marks}
+            currentMark={toc.currentMark}
+            onAddMark={toc.onAddMark}
+            onRemoveMark={toc.onRemoveMark}
+            onSelectMark={toc.onSelectMark}
           />
         </div>
       ) : null}

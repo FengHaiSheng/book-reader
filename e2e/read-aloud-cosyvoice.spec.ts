@@ -170,7 +170,7 @@ test('官方 CosyVoice FastAPI：OpenAPI 探活、表单合成、裸 PCM 补 WAV
     await expect(win.locator('#tts-api')).toHaveValue('cosyvoice')
     await expect(win.locator('#tts-sample-rate')).toHaveValue('24000')
     await expect(win.locator('#tts-server-voice')).toHaveValue('中文女')
-    await win.getByRole('button', { name: '收起' }).click()
+    await win.getByRole('button', { name: '收起', exact: true }).click()
 
     await win.getByRole('button', { name: '朗读' }).click()
     await expect.poll(() => calls.length).toBeGreaterThanOrEqual(2)

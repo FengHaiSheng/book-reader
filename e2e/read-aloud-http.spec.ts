@@ -134,7 +134,7 @@ test('自建朗读服务：探活、预合成与磁盘缓存都走通', async ()
     await win.getByRole('button', { name: '声音' }).click()
     await expect(win.locator('#tts-engine')).toHaveValue('http')
     await expect(win.locator('#tts-server-voice option[value="cosy"]')).toHaveCount(1)
-    await win.getByRole('button', { name: '收起' }).click()
+    await win.getByRole('button', { name: '收起', exact: true }).click()
 
     await win.getByRole('button', { name: '朗读' }).click()
     // 当前句之外还要预合成后面两句；0.25 秒的静音会很快推进，因此只验证「发过请求」

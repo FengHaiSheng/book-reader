@@ -55,10 +55,12 @@ export default function App() {
     close: closeBodySearch,
     clearAll: clearBodySearch
   } = useBodySearch()
-  /** 阅读侧栏宽度；进入阅读收成图标轨，可拖宽；退出恢复默认展开宽 */
+  /** 阅读侧栏宽度；进阅读默认展开看目录，退出恢复默认展开宽 */
   const [readingSidebarWidth, setReadingSidebarWidth] = useState(SIDEBAR_COLLAPSED_WIDTH)
   /** 上次展开宽，点「展开」时回到这里（不低于展开最小宽） */
   const lastExpandedWidth = useRef(Math.max(SIDEBAR_WIDTH, SIDEBAR_EXPANDED_MIN_WIDTH))
+  /** 进阅读后还要确认一次：漫画没有目录，书打开后要收回去；用户自己动过侧栏就不再插手 */
+  const autoTocSidebarRef = useRef(false)
   const [exitDialog, setExitDialog] = useState<{ to: PageId | null } | null>(null)
   const [readingChrome, setReadingChrome] = useState<ReadingChromeValue | null>(null)
   const flushExitRef = useRef<(() => void) | null>(null)
@@ -66,28 +68,45 @@ export default function App() {
     flushExitRef.current = fn
   }, [])
 
+  /**
+   * 进入阅读：文字书目录默认展开，所以先把侧栏展开再开书 ——
+   * 若等书打开后再展开，正文会先按收起态的宽度分页，随后重排把页码带偏。
+   * 漫画没有目录，等阅读器报来 `showToc: false` 再收起。
+   */
+  const enterReading = useCallback((target: ReadingTarget) => {
+    autoTocSidebarRef.current = true
+    setReadingSidebarWidth(clampExpandedSidebarWidth(lastExpandedWidth.current))
+    setReading(target)
+  }, [])
+
   // 稳定引用是必须的：target 进了 ReaderPage 开书 effect 的依赖，
   // 每次渲染给一个新对象会让开书 effect 反复重跑，读一次书要重开好几次
-  const openBook = useCallback((bookId: string) => {
-    setReading({ bookId, chapterId: null, cfi: null })
-  }, [])
+  const openBook = useCallback(
+    (bookId: string) => {
+      enterReading({ bookId, chapterId: null, cfi: null })
+    },
+    [enterReading]
+  )
 
   const openHit = useCallback(
     (hit: SearchHitWithBook) => {
       collapseBodySearch()
-      setReading({
+      enterReading({
         bookId: hit.bookId,
         chapterId: hit.chapterId,
         cfi: null,
         excerpt: hit.text
       })
     },
-    [collapseBodySearch]
+    [collapseBodySearch, enterReading]
   )
 
-  const openAt = useCallback((target: ReadingTarget) => {
-    setReading(target)
-  }, [])
+  const openAt = useCallback(
+    (target: ReadingTarget) => {
+      enterReading(target)
+    },
+    [enterReading]
+  )
 
   const refreshTags = useCallback(async () => {
     setTags(await window.api.library.tagsList())
@@ -140,12 +159,18 @@ export default function App() {
     })
   }, [])
 
-  // 进入阅读自动收成图标轨
+  /**
+   * 书打开后拿目录的有无做最终判断：漫画没有目录，把侧栏收回图标轨，
+   * 不让它白占正文宽度。文字书此时目录已就位，侧栏从进阅读起就是展开的。
+   */
   useEffect(() => {
-    if (reading) setReadingSidebarWidth(SIDEBAR_COLLAPSED_WIDTH)
-  }, [reading])
+    if (!reading || !autoTocSidebarRef.current || readingChrome === null) return
+    autoTocSidebarRef.current = false
+    if (!readingChrome.showToc) setReadingSidebarWidth(SIDEBAR_COLLAPSED_WIDTH)
+  }, [reading, readingChrome])
 
   const setSidebarWidth = useCallback((width: number) => {
+    autoTocSidebarRef.current = false
     setReadingSidebarWidth(width)
     if (width > SIDEBAR_COLLAPSED_WIDTH) {
       lastExpandedWidth.current = clampExpandedSidebarWidth(width)
@@ -153,6 +178,7 @@ export default function App() {
   }, [])
 
   const toggleCollapsed = useCallback(() => {
+    autoTocSidebarRef.current = false
     setReadingSidebarWidth((current) => {
       if (current <= SIDEBAR_COLLAPSED_WIDTH) {
         return clampExpandedSidebarWidth(lastExpandedWidth.current)
@@ -162,9 +188,20 @@ export default function App() {
     })
   }, [])
 
+  /** 收起轨里点「目录」：展开侧栏，目录就在展开态里 */
+  const openToc = useCallback(() => {
+    autoTocSidebarRef.current = false
+    setReadingSidebarWidth((current) =>
+      current <= SIDEBAR_COLLAPSED_WIDTH
+        ? clampExpandedSidebarWidth(lastExpandedWidth.current)
+        : current
+    )
+  }, [])
+
   /** 立刻离开阅读并可选切到壳层页（侧栏导航走这条，不弹确认） */
   const leaveReading = useCallback((to: PageId | null) => {
     flushExitRef.current?.()
+    autoTocSidebarRef.current = false
     setReading(null)
     setReadingChrome(null)
     flushExitRef.current = null
@@ -208,6 +245,7 @@ export default function App() {
             width={shellSidebarWidth}
             onWidthChange={reading !== null ? setSidebarWidth : undefined}
             onToggleCollapsed={reading !== null ? toggleCollapsed : undefined}
+            onOpenToc={reading !== null ? openToc : undefined}
             onSelect={(id) => (reading !== null ? leaveReading(id) : setPage(id))}
             tags={reading === null && page === 'library' ? tags : null}
             tagFilter={tagFilter}

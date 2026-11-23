@@ -1246,8 +1246,13 @@ export function ReaderPage({
 
   // 把目录/书签交给壳层侧栏（兄弟节点，不能靠 React 树向上冒泡）
   useEffect(() => {
-    if (missing || !book || book.kind === 'comic') {
+    if (missing || !book) {
       onChromeChange(null)
+      return () => onChromeChange(null)
+    }
+    // 漫画没有目录：报 showToc: false 而不是 null，壳层才知道「书已打开、可以收回侧栏了」
+    if (book.kind === 'comic') {
+      onChromeChange({ showToc: false })
       return () => onChromeChange(null)
     }
     onChromeChange({
