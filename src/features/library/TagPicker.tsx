@@ -3,8 +3,9 @@ import { readableError } from '@shared/errors'
 import type { BookSummary, Tag } from '@shared/types'
 
 /**
- * 单本书的标签指派。整块内容由 LibraryPage 套在 Modal 里，标题用《书名》，
- * 这里只管内容。用复选框而不是菜单：指派本身要能一眼看到「已经打了哪些」。
+ * 一本书的标签指派。整块内容由 LibraryPage 套在 Modal 里：
+ * 单本指派直接打开，批量导入后则逐本打开（同一个组件，每次只面对一本）。
+ * 用复选框而不是菜单：指派本身要能一眼看到「已经打了哪些」。
  * 标签的创建、改名、删除只在侧栏标签列表里做，这里只负责打上 / 取消。
  *
  * `mine` 由 props 现算，父组件在每次改动后重新拉列表，所以这里不维护本地副本——

@@ -9,7 +9,7 @@ export type KindleRawChapter = { id: string; html: string }
 export type KindleRawTocItem = { label: string; id: string | null; children: KindleRawTocItem[] }
 
 export type KindleExtract = {
-  metadata: Omit<EpubMetadata, 'isbn'> & { isbn: null }
+  metadata: EpubMetadata
   chapters: KindleRawChapter[]
   toc: KindleRawTocItem[]
   /** 解析器把封面写到 media 目录后的绝对路径；没有封面为 null */

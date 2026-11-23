@@ -85,6 +85,35 @@ export function splitTxtChapters(source: string): TxtChapter[] {
   return chapters.filter((chapter) => chapter.text.trim() !== '')
 }
 
+/**
+ * 从正文开头猜书名。TXT 没有标题元数据，但中文 txt 常在开头几行写《书名》、
+ * 「书名：…」，或者先单独写书名、下一行写作者。认不出来就返回 null，由调用方回退文件名。
+ */
+export function guessTxtTitle(source: string): string | null {
+  const lines = source
+    .replace(/\r\n?/g, '\n')
+    .replace(/^\uFEFF/, '')
+    .split('\n')
+    .map((line) => line.trim().replace(/[\s\u3000]+/g, ' '))
+    .filter((line) => line !== '')
+    .slice(0, 12)
+
+  for (const line of lines) {
+    // 只认行首的《书名》：正文里偶然出现的书名号不该被当成这本书的名字
+    const quoted = /^《([^》]{1,40})》/.exec(line)
+    if (quoted?.[1]?.trim()) return quoted[1].trim()
+
+    const labeled = /^(?:书\s*名|title)\s*[:：]\s*(.{1,40})$/i.exec(line)
+    if (labeled?.[1]?.trim()) return labeled[1].trim()
+  }
+
+  // 「书名 / 作者：xxx」相邻两行时，作者行的上一行就是书名
+  const authorIndex = lines.findIndex((line) => /^(?:作\s*者|著\s*者|author)\s*[:：]/i.test(line))
+  if (authorIndex > 0) return lines[authorIndex - 1] ?? null
+
+  return null
+}
+
 function isHeading(line: string): boolean {
   const trimmed = line.trim()
   if (!trimmed || trimmed.length > MAX_HEADING_CHARS) return false

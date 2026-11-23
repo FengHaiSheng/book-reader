@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { decodeTxt, splitTxtChapters } from '../electron/main/txt/parse'
+import { decodeTxt, guessTxtTitle, splitTxtChapters } from '../electron/main/txt/parse'
 
 describe('decodeTxt', () => {
   it('去掉 UTF-8 BOM', () => {
@@ -11,6 +11,25 @@ describe('decodeTxt', () => {
     // GBK 的「中文」：D6 D0 CE C4，在 UTF-8 里是非法字节序列
     const bytes = Buffer.from([0xd6, 0xd0, 0xce, 0xc4])
     expect(decodeTxt(bytes)).toBe('中文')
+  })
+})
+
+describe('guessTxtTitle', () => {
+  it('从《书名》里取书名', () => {
+    expect(guessTxtTitle('《河边的月亮》\n作者：测试作者\n第一章 河边')).toBe('河边的月亮')
+  })
+
+  it('从「书名：」里取书名', () => {
+    expect(guessTxtTitle('书名：夏夜\n第一章 河边')).toBe('夏夜')
+  })
+
+  it('书名与作者分两行时取作者上一行', () => {
+    expect(guessTxtTitle('夏夜\n作者：测试作者\n第一章 河边')).toBe('夏夜')
+  })
+
+  it('认不出书名时返回 null，让调用方回退文件名', () => {
+    expect(guessTxtTitle('第一章 河边\n河边的月色很好。')).toBeNull()
+    expect(guessTxtTitle('书名页\n第一章 河边')).toBeNull()
   })
 })
 

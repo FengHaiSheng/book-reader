@@ -42,6 +42,11 @@ test('导入中文小说：落库正确、可检索、重复导入被去重、�
   // 文件内容不同、但书名与作者相同的另一份副本也应被拦下
   const sameTitlePath = join(userDataDir, 'novel-copy.epub')
   const sameTitleFiles = novelFiles()
+  // 去掉 ISBN，这条用例才真正走「同名 + 同作者」兜底
+  sameTitleFiles['OEBPS/content.opf'] = String(sameTitleFiles['OEBPS/content.opf']).replace(
+    /<dc:identifier[^>]*>.*?<\/dc:identifier>/,
+    ''
+  )
   sameTitleFiles['OEBPS/ch1.xhtml'] = `<?xml version="1.0" encoding="UTF-8"?>
 <html xmlns="http://www.w3.org/1999/xhtml"><head><title>第一章</title></head>
 <body><h1>第一章 河边</h1>
@@ -54,6 +59,24 @@ test('导入中文小说：落库正确、可检索、重复导入被去重、�
   )
   expect(sameTitle.status).toBe('duplicate')
   expect(sameTitle.title).toBe('河边的月亮')
+  expect(await win.evaluate(() => (window as any).api.library.list())).toHaveLength(1)
+
+  // 书名与作者都不同、但 ISBN 相同（还带连字符）：ISBN 才是同一本书的权威标识
+  const sameIsbnPath = join(userDataDir, 'novel-other-edition.epub')
+  const sameIsbnFiles = novelFiles()
+  const sameIsbnOpf = String(sameIsbnFiles['OEBPS/content.opf'])
+    .replace('<dc:title>河边的月亮</dc:title>', '<dc:title>河边的月亮（新版）</dc:title>')
+    .replace('<dc:creator>测试作者</dc:creator>', '<dc:creator>另一位译者</dc:creator>')
+    .replace('urn:isbn:9787000000001', 'urn:isbn:978-7-0000-0000-1')
+  sameIsbnFiles['OEBPS/content.opf'] = sameIsbnOpf
+  await writeEpub(sameIsbnPath, sameIsbnFiles)
+
+  const sameIsbn = await win.evaluate(
+    (file) => (window as any).api.library.importPath(file),
+    sameIsbnPath
+  )
+  expect(sameIsbn.status).toBe('duplicate')
+  expect(sameIsbn.title).toBe('河边的月亮')
   expect(await win.evaluate(() => (window as any).api.library.list())).toHaveLength(1)
 
   await win.evaluate((id) => (window as any).api.library.remove(id), bookId)

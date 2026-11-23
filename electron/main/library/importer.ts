@@ -11,7 +11,7 @@ import { loadToc, readEpubInfo, totalChars } from '../epub/parse'
 import { readEntries } from '../epub/zip'
 import { sha256File } from '../storage/sha256'
 import { bookDir, ensureLibraryDir } from './paths'
-import { findByHash, findByTitle, insertBookGraph, type ChapterInsert } from './repo'
+import { findByHash, findByIsbn, findByTitle, insertBookGraph, type ChapterInsert } from './repo'
 
 type ProgressFn = (progress: ImportProgress) => void
 
@@ -39,6 +39,12 @@ export async function importEpub(
   }
 
   const info = await readEpubInfo(sourcePath)
+  // ISBN 是同一本书最可靠的标识：换了来源、改了书名也应认作重复
+  const sameIsbn = findByIsbn(db, info.metadata.isbn)
+  if (sameIsbn) {
+    return { status: 'duplicate', bookId: sameIsbn.id, title: sameIsbn.title }
+  }
+
   const sameTitle = findByTitle(db, info.metadata.title, info.metadata.author)
   if (sameTitle) {
     return { status: 'duplicate', bookId: sameTitle.id, title: sameTitle.title }

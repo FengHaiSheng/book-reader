@@ -3367,6 +3367,14 @@ html[data-theme='dark'] .tag-dot {
   color: var(--accent-mark);
 }
 
+/* 逐本打标签的底部动作：左「全部跳过」，右「下一本 / 完成」 */
+.tag-picker__actions {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--s2);
+  padding: var(--s3) var(--s2) 0;
+}
+
 /* ---- 书架：标题栏工具、舞台栏、空状态 ---- */
 .lib-tools {
   display: flex;

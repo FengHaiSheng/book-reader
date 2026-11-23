@@ -38,7 +38,7 @@
 - **格式**：EPUB、PDF、TXT、MOBI / AZW、AZW3（KF8）、FB2、HTMLZ、漫画 CBZ / CBR（`BOOK_EXTENSIONS`）
 - **阅读模式**：文字书 `text`（分栏排版）；漫画 `comic`（整页图片）
 - **入口**：选择文件导入、选择文件夹扫描导入、拖放多文件到书架页
-- **行为**：原文件复制进书库目录；**sha256 去重**（重复导入返回已有书）；导入进度事件（hash / extract / store）；若有 active 脉络，导入后对零挂载新书跑一次本地预归位（不调模型、无费用）
+- **行为**：原文件复制进书库目录；**去重按 ISBN → 同名同作者 → sha256 依次判断**（重复导入返回已有书，不新建）；文件名只在书内取不到书名时兜底（TXT 开头识别《书名》/「书名：」、PDF 首行、漫画 ComicInfo.xml）；导入进度事件（hash / extract / store）；导入结束后逐本弹出打标签（可跳过当前 / 全部跳过）；若有 active 脉络，导入后对零挂载新书跑一次本地预归位（不调模型、无费用）
 
 ### 2.2 浏览与管理
 
@@ -66,7 +66,7 @@
 - **书签**：当前页添加 / 移除；列表跳转；摘录预览
 - **书内查找**：FindBar + FTS5 bigram，本地、不调模型；结果上下条导航与定位
 - **系统朗读**（Web Speech API）：从当前页按句朗读，当前句用独立高亮标出；自动翻页并续读下一章；声音与语速存入 `ReadingPrefs`，离线可用
-- **自建朗读服务**（可选）：切到 CosyVoice HTTP 服务后按句合成 WAV，Web Audio 播放；预合成后两句，结果按「地址 + 音色 + 语速 + 原文」落盘缓存（上限 200MB）
+- **自建朗读服务**（可选）：切到 CosyVoice HTTP 服务后按句合成 WAV，Web Audio 播放；预合成后两句，结果按「地址 + 接口形态 + 音色 + 语速 + 原文」落盘缓存（上限 200MB）。支持两种接口：通用 `GET /health` + `POST /tts`，以及 CosyVoice 官方 FastAPI（`GET /openapi.json` 探活、`POST /inference_sft` 表单、裸 PCM 按手选采样率补 WAV 头、语速走 `playbackRate`）
 - 退出阅读确认弹窗（避免误切导航丢上下文）
 
 ### 3.2 漫画（comic）
@@ -201,7 +201,7 @@
 |---|---|
 | 格式范围 | 初版设计「仅 EPUB」→ 现已多格式 + 漫画 |
 | README | 2026-11-03 与本清单对齐，并含图文教程；2026-11-08 功能现状与功能列表补了学习脉络一句 |
-| TTS | 已实现系统朗读（Web Speech API）；可选自建 CosyVoice HTTP 服务：按句预合成、磁盘缓存、Web Audio 播放；云端 TTS 与音频导出未接 |
+| TTS | 已实现系统朗读（Web Speech API）；可选自建 CosyVoice HTTP 服务（通用 `/tts` 或官方 FastAPI `/inference_sft`）：按句预合成、磁盘缓存、Web Audio 播放；云端 TTS 与音频导出未接 |
 | 独立词典「查词」 | 未实现；划词提供解释 / 翻译 / 问 AI |
 
 ---

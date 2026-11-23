@@ -40,6 +40,37 @@ export function findByHash(db: Database.Database, hash: string): { id: string; t
 }
 
 /**
+ * ISBN 归一化：去掉 `urn:isbn:` 前缀、连字符与空白，末位 `x` 统一大写。
+ * 空串视为没有 ISBN —— 不能让「都没有 ISBN」的书互相判成重复。
+ */
+export function normalizeIsbn(raw: string | null | undefined): string | null {
+  if (!raw) return null
+  const cleaned = raw.trim().replace(/^urn:isbn:/i, '').replace(/[-\s]/g, '').toUpperCase()
+  return cleaned === '' ? null : cleaned
+}
+
+/**
+ * ISBN 去重：ISBN 才是判断「是不是同一本书」的权威标识，换格式、换书名都能认出来。
+ * 没有 ISBN 的书返回 null，由 findByHash / findByTitle 兜底。
+ */
+export function findByIsbn(
+  db: Database.Database,
+  isbn: string | null
+): { id: string; title: string } | null {
+  const normalized = normalizeIsbn(isbn)
+  if (!normalized) return null
+  const row = db
+    .prepare(
+      `SELECT id, title FROM books
+       WHERE isbn IS NOT NULL
+         AND REPLACE(REPLACE(UPPER(TRIM(isbn)), '-', ''), ' ', '') = ?
+       LIMIT 1`
+    )
+    .get(normalized) as { id: string; title: string } | undefined
+  return row ?? null
+}
+
+/**
  * 同名书去重：文件内容不同（例如重新下载、换了个格式），但书名相同的也不重复入库。
  *
  * 书名比较忽略首尾空白与英文大小写；双方都有作者时再比作者，任一方没作者就只认书名——

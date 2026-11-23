@@ -15,7 +15,7 @@ export function useImport(onDone: () => Promise<void> | void) {
   const [notice, setNotice] = useState<string | null>(null)
 
   const run = useCallback(
-    async (task: () => Promise<ImportOutcome[] | null>): Promise<void> => {
+    async (task: () => Promise<ImportOutcome[] | null>): Promise<ImportOutcome[] | null> => {
       setBusy(true)
       setNotice(null)
       const unsubscribe = window.api.library.onImportProgress(setProgress)
@@ -24,8 +24,11 @@ export function useImport(onDone: () => Promise<void> | void) {
         // 先归位再刷新：本地预归位写库后，书架的脉络分节要立刻看到新挂载
         setNotice(await noticeAfterImport(outcomes ?? [], window.api.track))
         await onDone()
+        // 返回结果给调用方：导入后要自动弹出「给新书打标签」，得知道哪些书是新入库的
+        return outcomes
       } catch (error) {
         setNotice(readableError(error, '导入没有成功'))
+        return null
       } finally {
         unsubscribe()
         setProgress(null)

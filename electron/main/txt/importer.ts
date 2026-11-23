@@ -8,7 +8,7 @@ import {
   importGeneratedBook,
   type GeneratedDraft
 } from '../library/generated-importer'
-import { decodeTxt, splitTxtChapters } from './parse'
+import { decodeTxt, guessTxtTitle, splitTxtChapters } from './parse'
 import { escapeHtml, wrapXhtml } from '../library/xhtml'
 
 type ProgressFn = (progress: ImportProgress) => void
@@ -27,7 +27,8 @@ export async function importTxt(
     sourcePath,
     'txt',
     async (): Promise<GeneratedDraft> => {
-      const chapters = splitTxtChapters(decodeTxt(await readFile(sourcePath)))
+      const text = decodeTxt(await readFile(sourcePath))
+      const chapters = splitTxtChapters(text)
 
       const toc: TocNode[] = []
       const spine: string[] = []
@@ -44,7 +45,11 @@ export async function importTxt(
 
       return {
         metadata: {
-          title: basename(sourcePath, extname(sourcePath)) || '未命名书籍',
+          // 优先正文里认出的书名，认不出才回退文件名 —— 列表里显示的应是书里的名字
+          title:
+            guessTxtTitle(text) ||
+            basename(sourcePath, extname(sourcePath)).trim() ||
+            '未命名书籍',
           author: null,
           publisher: null,
           language: null,

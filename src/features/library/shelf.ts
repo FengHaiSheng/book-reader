@@ -22,6 +22,11 @@ export function parseGroupBy(raw: string | undefined | null): LibraryGroupBy {
   return raw === 'track' ? 'track' : 'list'
 }
 
+/** 导入结果里真正新入库的书 id；重复导入的书不算新书 */
+export function importedBookIds(outcomes: readonly ImportOutcome[]): string[] {
+  return outcomes.filter((item) => item.status === 'imported').map((item) => item.bookId)
+}
+
 /** 导入结束后的那一句话：导入了几本、哪几本是重复的 */
 export function summarizeImport(outcomes: readonly ImportOutcome[]): string {
   const imported = outcomes.filter((item) => item.status === 'imported')
@@ -59,7 +64,7 @@ export async function noticeAfterImport(
   api: MatchApi
 ): Promise<string> {
   const base = summarizeImport(outcomes)
-  const importedIds = outcomes.filter((o) => o.status === 'imported').map((o) => o.bookId)
+  const importedIds = importedBookIds(outcomes)
   if (importedIds.length === 0) return base
   try {
     if (!(await api.getActive())) return base

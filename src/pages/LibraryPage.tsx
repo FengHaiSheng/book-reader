@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { BookStatus, BookSummary, LibrarySort, Tag } from '@shared/types'
+import type { BookStatus, BookSummary, ImportOutcome, LibrarySort, Tag } from '@shared/types'
 import { isBookFile } from '@shared/types'
 import { BookGrid } from '../features/library/BookGrid'
 import { BookList } from '../features/library/BookList'
@@ -11,6 +11,7 @@ import { TrackShelf } from '../features/library/TrackShelf'
 import { Modal } from '../shell/Modal'
 import {
   filterBooks,
+  importedBookIds,
   parseGroupBy,
   parseView,
   progressText,
@@ -56,14 +57,18 @@ export function LibraryPage({
   const [dropping, setDropping] = useState(false)
   /**
    * 只记 id，不记那本书本身：指派之后要重新拉列表，记对象的话拿到的还是旧快照，
-   * 复选框会在改完之后弹回原状。
+   * 复选框会在改完之后弹回原状。数组同时覆盖「单本指派」与「导入后逐本打标签」。
    */
-  const [taggingId, setTaggingId] = useState<string | null>(null)
+  const [taggingIds, setTaggingIds] = useState<string[] | null>(null)
+  /** 批量打标签时当前进行到第几本；单本指派恒为 0 */
+  const [taggingIndex, setTaggingIndex] = useState(0)
   const dragDepth = useRef(0)
 
+  // 拉全量、本地筛标签：导入后要按 id 找回新书并弹出打标签框，
+  // 若这里按标签筛选取列表，新书不在结果里就找不到了。
   const refresh = useCallback(async () => {
-    setBooks(await window.api.library.list(tagFilter))
-  }, [tagFilter])
+    setBooks(await window.api.library.list())
+  }, [])
 
   /** 脉络挂载会随导入、打标签之外的改动变化，分节视图要靠它重取 */
   const refreshTrack = useCallback(async () => {
@@ -110,7 +115,8 @@ export function LibraryPage({
 
   // 切换标签或状态筛选相当于换了个上下文，指派模态框跟着收起，避免停在旧上下文里
   useEffect(() => {
-    setTaggingId(null)
+    setTaggingIds(null)
+    setTaggingIndex(0)
   }, [tagFilter, statusFilter])
 
   /*
@@ -137,12 +143,40 @@ export function LibraryPage({
     void window.api.settings.set('library.groupBy', next)
   }
 
+  /** 导入完成后把新书逐本交给打标签模态框；全是重复导入时什么都不弹 */
+  function openTaggingForImport(outcomes: ImportOutcome[] | null): void {
+    const ids = importedBookIds(outcomes ?? [])
+    if (ids.length > 0) {
+      setTaggingIndex(0)
+      setTaggingIds(ids)
+    }
+  }
+
+  function openTaggingForBook(id: string): void {
+    setTaggingIndex(0)
+    setTaggingIds([id])
+  }
+
+  function closeTagging(): void {
+    setTaggingIds(null)
+    setTaggingIndex(0)
+  }
+
+  /** 逐本打标签：当前这本处理完就下一本，最后一本点「完成」收工 */
+  function nextTaggingBook(): void {
+    if (taggingIds && taggingIndex + 1 >= taggingIds.length) {
+      closeTagging()
+      return
+    }
+    setTaggingIndex((index) => index + 1)
+  }
+
   function onPick(): void {
-    void run(() => window.api.library.pickAndImport())
+    void run(() => window.api.library.pickAndImport()).then(openTaggingForImport)
   }
 
   function onPickFolder(): void {
-    void run(() => window.api.library.pickFolder())
+    void run(() => window.api.library.pickFolder()).then(openTaggingForImport)
   }
 
   async function onDrop(event: React.DragEvent<HTMLDivElement>): Promise<void> {
@@ -160,13 +194,17 @@ export function LibraryPage({
       )
       return
     }
-    await run(() => window.api.library.importPaths(paths))
+    openTaggingForImport(await run(() => window.api.library.importPaths(paths)))
   }
 
   if (!books) return <div className="page-placeholder">加载中…</div>
 
   const trimmed = query.trim()
-  const visible = sortBooks(filterBooks(books, { status: statusFilter, query }), sort)
+  const tagged =
+    tagFilter === null
+      ? books
+      : books.filter((book) => book.tags.some((tag) => tag.id === tagFilter))
+  const visible = sortBooks(filterBooks(tagged, { status: statusFilter, query }), sort)
   const title =
     statusFilter !== null
       ? statusLabel(statusFilter)
@@ -185,8 +223,12 @@ export function LibraryPage({
           trackNodes
         )
       : null
-  // 每轮刷新都从列表里现取，指派完 chip 与复选框一起变
-  const tagging = taggingId === null ? null : (books.find((book) => book.id === taggingId) ?? null)
+  // 每轮刷新都从列表里现取，指派完 chip 与复选框一起变。逐本打标签时只取当前这一本。
+  const taggingQueue = (taggingIds ?? [])
+    .map((id) => books.find((book) => book.id === id))
+    .filter((book): book is BookSummary => book !== undefined)
+  const taggingBook = taggingQueue[taggingIndex] ?? null
+  const taggingTotal = taggingQueue.length
 
   return (
     <div
@@ -230,9 +272,36 @@ export function LibraryPage({
         {notice && <span className="import__notice">{notice}</span>}
       </div>
 
-      {tagging && (
-        <Modal title={`《${tagging.title}》的标签`} onClose={() => setTaggingId(null)}>
-          <TagPicker book={tagging} tags={tags} onChanged={refreshAll} />
+      {taggingBook && (
+        <Modal
+          title={
+            taggingTotal === 1
+              ? `《${taggingBook.title}》的标签`
+              : `给新书打标签（${taggingIndex + 1}/${taggingTotal}）`
+          }
+          onClose={closeTagging}
+        >
+          {taggingTotal > 1 && (
+            <p className="tag-picker__hint">
+              《{taggingBook.title}》 · 不勾选直接「下一本」即跳过
+            </p>
+          )}
+          <TagPicker
+            key={taggingBook.id}
+            book={taggingBook}
+            tags={tags}
+            onChanged={refreshAll}
+          />
+          {taggingTotal > 1 && (
+            <div className="tag-picker__actions">
+              <button type="button" className="btn btn--quiet" onClick={closeTagging}>
+                全部跳过
+              </button>
+              <button type="button" className="btn btn--primary" onClick={nextTaggingBook}>
+                {taggingIndex + 1 >= taggingTotal ? '完成' : '下一本'}
+              </button>
+            </div>
+          )}
         </Modal>
       )}
 
@@ -250,21 +319,21 @@ export function LibraryPage({
             view={view}
             onOpen={onOpen}
             onRemove={(id) => void window.api.library.remove(id).then(refreshAll)}
-            onTag={(book) => setTaggingId(book.id)}
+            onTag={(book) => openTaggingForBook(book.id)}
           />
         ) : view === 'grid' ? (
           <BookGrid
             books={visible}
             onOpen={onOpen}
             onRemove={(id) => void window.api.library.remove(id).then(refreshAll)}
-            onTag={(book) => setTaggingId(book.id)}
+            onTag={(book) => openTaggingForBook(book.id)}
           />
         ) : (
           <BookList
             books={visible}
             onOpen={onOpen}
             onRemove={(id) => void window.api.library.remove(id).then(refreshAll)}
-            onTag={(book) => setTaggingId(book.id)}
+            onTag={(book) => openTaggingForBook(book.id)}
           />
         )}
       </div>

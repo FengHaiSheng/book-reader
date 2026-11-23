@@ -18,7 +18,7 @@ import { appError, toAppError } from '@shared/errors'
 import { sha256File } from '../storage/sha256'
 import { bookDir, ensureLibraryDir } from '../library/paths'
 import { findByHash, findByTitle, insertBookGraph, type ChapterInsert } from '../library/repo'
-import { listEntries, type ZipEntry } from '../epub/zip'
+import { listEntries, readEntries, type ZipEntry } from '../epub/zip'
 import { isComicPage, pageEntry, pageFileExt, pageFileName, sortPageNames } from './pages'
 
 type ProgressFn = (progress: ImportProgress) => void
@@ -56,8 +56,10 @@ export async function importComic(
     return { status: 'duplicate', bookId: existing.id, title: existing.title }
   }
 
-  // 漫画没有元数据，书名只能取文件名：同名但文件不同的漫画也按重复处理
-  const title = basename(sourcePath, extname(sourcePath)).trim() || '未命名漫画'
+  // 书名优先取包内的 ComicInfo.xml；没有才回退文件名
+  const title =
+    (await readComicTitle(sourcePath)) ??
+    (basename(sourcePath, extname(sourcePath)).trim() || '未命名漫画')
   const sameTitle = findByTitle(db, title, null)
   if (sameTitle) {
     return { status: 'duplicate', bookId: sameTitle.id, title: sameTitle.title }
@@ -295,6 +297,37 @@ async function extractRarPages(
 
 function isPageHeader(header: FileHeader): boolean {
   return !header.flags.directory && isComicPage(header.name)
+}
+
+/**
+ * 从 ComicInfo.xml 取书名。CBZ 是 zip，能单独读这一个条目；
+ * CBR 是 rar，当前解包器不支持按名取单文件，直接回退文件名。
+ */
+async function readComicTitle(sourcePath: string): Promise<string | null> {
+  const head = readFileSync(sourcePath).subarray(0, 8)
+  if (head.subarray(0, 7).toString('latin1') === 'Rar!\x1A\x07') return null
+
+  try {
+    const entries = await listEntries(sourcePath)
+    const entry = entries.find((item) => /(^|\/)ComicInfo\.xml$/i.test(item.name))?.name
+    if (!entry) return null
+    const files = await readEntries(sourcePath, [entry])
+    const xml = files.get(entry)?.toString('utf-8') ?? ''
+    const raw = /<Title>([\s\S]*?)<\/Title>/i.exec(xml)?.[1]?.trim()
+    return raw ? decodeXml(raw) : null
+  } catch {
+    // 读不出元数据不该挡住导入，回退文件名即可
+    return null
+  }
+}
+
+function decodeXml(value: string): string {
+  return value
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, '&')
 }
 
 /** 封面就是第一页：直接复制一份，书架上不再单独生成缩略图 */

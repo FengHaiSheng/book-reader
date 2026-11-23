@@ -11,6 +11,7 @@ import { sha256File } from '../storage/sha256'
 import { bookDir, ensureLibraryDir } from './paths'
 import { findByHash, findByTitle, insertBookGraph, type ChapterInsert } from './repo'
 import { buildPdfDraft } from '../pdf/chapters'
+import type { PdfExtract } from '../pdf/extract'
 import { extractPdfInWorker } from '../pdf/extract-pool'
 
 type ProgressFn = (progress: ImportProgress) => void
@@ -45,7 +46,10 @@ export async function importPdf(
   })
 
   const title =
-    extracted.title ?? basename(sourcePath, extname(sourcePath)) ?? '未命名 PDF'
+    extracted.title ??
+    firstPageTitle(extracted.pages) ??
+    basename(sourcePath, extname(sourcePath)) ??
+    '未命名 PDF'
   const draft = buildPdfDraft(extracted)
   if (draft.texts.length === 0) {
     throw appError(
@@ -104,6 +108,16 @@ export async function importPdf(
     rmSync(dir, { recursive: true, force: true })
     throw toAppError(error, '导入失败，已回滚，没有留下未完成的数据')
   }
+}
+
+/**
+ * PDF 的 Title 元数据经常是空的。第一页第一块短文本大概率就是书名
+ * （跨页重复的页眉已被 dropRunningHeads 剔掉）；太长就当它是正文，宁可回退文件名也不猜。
+ */
+function firstPageTitle(pages: PdfExtract['pages']): string | null {
+  const block = pages[0]?.find((item) => item.text.trim() !== '')
+  const text = block?.text.trim() ?? ''
+  return text !== '' && text.length <= 60 ? text : null
 }
 
 /** 章节 HTML 写到 `library/<bookId>/pdf/`，由 epub:// 协议按同一套路径规则读回。 */

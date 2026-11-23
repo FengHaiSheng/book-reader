@@ -22,6 +22,9 @@ type BookParser = {
     author?: string | string[] | { name?: string; firstName?: string; lastName?: string }
     publisher?: string
     language?: string
+    /** FB2 的 <isbn> 与部分 MOBI 的 identifier 可能直接写着 ISBN */
+    isbn?: string
+    identifier?: string
   }
   getSpine(): { id: string }[]
   loadChapter(id: string): { html: string } | undefined
@@ -64,6 +67,13 @@ function mapToc(items: TocSource[] | undefined, parser: BookParser): KindleRawTo
   }))
 }
 
+/** 只有长得像 ISBN（10 / 13 位）的值才收下：identifier 常常是 ASIN 等别的编号。 */
+function isbnOf(raw: string | undefined): string | null {
+  if (!raw) return null
+  const cleaned = raw.trim().replace(/^urn:isbn:/i, '').replace(/[-\s]/g, '').toUpperCase()
+  return /^(97[89])?\d{9}[\dX]$/.test(cleaned) ? cleaned : null
+}
+
 /** Kindle 的 author 是字符串数组，FB2 的是一个 Author 对象，统一成一行。 */
 function authorName(author: ReturnType<BookParser['getMetadata']>['author']): string | null {
   if (!author) return null
@@ -95,7 +105,7 @@ async function run(): Promise<void> {
         author: authorName(metadata.author),
         publisher: metadata.publisher || null,
         language: metadata.language || null,
-        isbn: null
+        isbn: isbnOf(metadata.isbn ?? metadata.identifier)
       },
       chapters,
       toc: mapToc(parser.getToc(), parser),
