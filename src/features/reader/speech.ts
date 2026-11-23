@@ -179,20 +179,21 @@ export function speechSegments(doc: Document): SpeechSegment[] {
 }
 
 /**
- * 从当前页开始读：找出第一句「还没读完」的句子。
+ * 从文档里的某个位置开始读：找出第一句「还没读完」的句子。
  *
- * 页首可能落在一句话中间（上一页只排了半句），这一句也要读，所以比较的是句尾与页首。
+ * 位置可以是当前页页首，也可以是上次朗读停下的那句句首。页首可能落在一句话中间
+ * （上一页只排了半句），这一句也要读，所以比较的是句尾与位置。
  * compareBoundaryPoints 的 2 是 END_TO_START —— 不能用父窗口的 Range 常量：
  * 这里的 Range 来自 iframe 的 realm，跨 realm 取常量不可靠，而数值是规范固定的。
  */
 const END_TO_START = 2
 
-export function startIndexForPage(
+export function startIndexFromPoint(
   segments: readonly SpeechSegment[],
-  pageStart: Range
+  point: Range
 ): number {
   const index = segments.findIndex(
-    (segment) => segment.range.compareBoundaryPoints(END_TO_START, pageStart) > 0
+    (segment) => segment.range.compareBoundaryPoints(END_TO_START, point) > 0
   )
   return index < 0 ? segments.length : index
 }

@@ -146,6 +146,11 @@ export class ChapterPaginator {
     return pointCfi(this.doc, range.startContainer, range.startOffset, this.spineIndex)
   }
 
+  /** 一个 Range 的起点写成 CFI。朗读记「正在读的那一句」用它 */
+  cfiAt(range: Range): string {
+    return pointCfi(this.doc, range.startContainer, range.startOffset, this.spineIndex)
+  }
+
   /**
    * 页首那一小段原文：书签列表的辨识文字，也是书签回跳的兜底锚点。
    *

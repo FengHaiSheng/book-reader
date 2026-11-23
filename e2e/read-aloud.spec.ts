@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from '@playwright/test'
 import { novelFiles, writeEpub } from '../fixtures/make-epub'
-import { launchAppWithUserData } from './helpers'
+import { launchAppWithUserData, exitReading } from './helpers'
 
 /**
  * 把系统朗读换成一个确定性桩：真的调用语音合成会让 e2e 依赖这台电脑装了哪些声音，
@@ -117,6 +117,54 @@ test('朗读：从当前页开始、标出正在读的句子，并记住声音�
   await expect
     .poll(async () => (await win.evaluate(() => (window as any).api.settings.getPrefs())).ttsRate)
     .toBe(1.4)
+
+  await app.close()
+})
+
+test('继续阅读：离开阅读器再进来，朗读从停下的那一句自动续上', async () => {
+  const userDataDir = mkdtempSync(join(tmpdir(), 'book-read-speech-resume-'))
+  const epubPath = join(userDataDir, 'novel.epub')
+  await writeEpub(epubPath, novelFiles())
+
+  const app = await launchAppWithUserData(userDataDir)
+  await installSpeechStub(app)
+  const win = await app.firstWindow()
+
+  await win.evaluate((file) => (window as any).api.library.importPath(file), epubPath)
+  await win.reload()
+
+  await win.getByRole('button', { name: '列表' }).click()
+  await win.getByRole('button', { name: '打开' }).click()
+  await win.waitForFunction(() => {
+    const frame = document.querySelector('iframe.reader__view') as HTMLIFrameElement | null
+    return frame?.contentDocument?.getElementById('reader-theme') != null
+  })
+
+  await win.getByRole('button', { name: '朗读' }).click()
+  await expect
+    .poll(() => win.evaluate(() => (window as any).__spoken?.[0] ?? ''))
+    .toContain('月色沉入河底')
+
+  // 回书架时进度还没落库（防抖 600 毫秒），等它写完再走，否则卡片仍是「开始阅读」
+  await win.waitForTimeout(800)
+  await exitReading(win)
+  await win.getByRole('button', { name: '网格' }).click()
+
+  const card = win.locator('.book-grid__cell').first()
+  await card.hover()
+  await card.getByRole('button', { name: '继续阅读' }).click()
+  await win.waitForFunction(() => {
+    const frame = document.querySelector('iframe.reader__view') as HTMLIFrameElement | null
+    return frame?.contentDocument?.getElementById('reader-theme') != null
+  })
+
+  // 不点「朗读」也应该自己接上，而且仍从停下的那一句开始
+  await expect
+    .poll(() => win.evaluate(() => (window as any).__spoken?.length ?? 0))
+    .toBeGreaterThan(1)
+  await expect
+    .poll(() => win.evaluate(() => (window as any).__spoken?.at(-1) ?? ''))
+    .toContain('月色沉入河底')
 
   await app.close()
 })

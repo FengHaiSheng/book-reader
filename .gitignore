@@ -6,3 +6,7 @@ playwright-report/
 .vite/
 .trae/
 .DS_Store
+__pycache__/
+*.pyc
+tts-server/CosyVoice/
+tts-server/pretrained_models/

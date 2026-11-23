@@ -1,0 +1,5 @@
+# 本层（FastAPI 包装）的依赖。
+# torch / torchaudio / numpy 由 CosyVoice 自己的 requirements.txt 提供，
+# 先按 README 装好 CosyVoice 依赖，再装这里。
+fastapi>=0.110
+uvicorn[standard]>=0.29

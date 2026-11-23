@@ -48,6 +48,17 @@ export function spanFromSelection(doc: Document, range: Range, spineIndex: numbe
   }
 }
 
+/** 一个点的 CFI → 本章文档里折叠的 Range；CFI 坏了返回 null，由调用方兜底 */
+export function rangeFromPointCfi(doc: Document, cfi: string): Range | null {
+  const parts = localParts(cfi)
+  if (!parts) return null
+  try {
+    return toRange(doc, parts)
+  } catch {
+    return null
+  }
+}
+
 /** CFI 对 → 本章文档里的 Range；任一端定位不到就返回 null，由调用方兜底 */
 export function rangeFromSpan(doc: Document, startCfi: string, endCfi: string): Range | null {
   const startParts = localParts(startCfi)

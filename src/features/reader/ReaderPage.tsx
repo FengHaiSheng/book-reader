@@ -33,6 +33,7 @@ import { setUnrecordedMs } from '../reading/failures'
 import { TypographyPanel } from './TypographyPanel'
 import { SpeechPanel } from './SpeechPanel'
 import { useReadAloud } from './useReadAloud'
+import { loadSpeechResume, saveSpeechResume } from './speech-resume'
 import { ComicReader } from './ComicReader'
 import { readerBarPadLeft } from './chrome'
 import { AiPanel, type AiSeed } from '../ai/AiPanel'
@@ -165,6 +166,18 @@ export function ReaderPage({
   const resumeReadRef = useRef(false)
   /** 上一次看到的章号：用来区分「用户换章」与「朗读自动换章」 */
   const speechChapterRef = useRef(chapterIndex)
+  /** 朗读最近读到的那一句：章节 + 句首 CFI，离开后据此续读 */
+  const lastSentenceRef = useRef<{ chapterId: number; cfi: string } | null>(null)
+  /** 续读每次进阅读器只试一次，不能每换一章都重新开一次朗读 */
+  const resumeTriedRef = useRef(false)
+  /** 续读的章节与打开时的章节不一致：先切章，等新文档载入再从这里开始读 */
+  const autoResumeCfiRef = useRef<string | null>(null)
+  // 换书：续读位置与「正在读的句子」都是某本书的状态，不能带到下一本
+  useEffect(() => {
+    resumeTriedRef.current = false
+    autoResumeCfiRef.current = null
+    lastSentenceRef.current = null
+  }, [bookId])
 
   /**
    * 阅读时长的三个时间戳。
@@ -262,6 +275,12 @@ export function ReaderPage({
       setPageCount(pages)
       // 听着书也是在读：刷新活动时间，否则连续听十分钟会被计时器判成离开
       markActivity()
+    },
+    onSentence: (range) => {
+      const cfi = paginatorRef.current?.cfiAt(range)
+      if (!book || !chapter || !cfi) return
+      lastSentenceRef.current = { chapterId: chapter.id, cfi }
+      saveSpeechResume(book.id, { chapterId: chapter.id, cfi, active: true })
     },
     onChapterEnd: () => {
       if (chapterIndex + 1 >= readable.length) {
@@ -506,6 +525,50 @@ export function ReaderPage({
     setPage(paginator.page + 1)
     setPageCount(paginator.pages)
   }, [docVersion])
+
+  /**
+   * 续读：上次离开时朗读还开着，就从停下的那一句接着读。
+   *
+   * 只认「继续阅读」这种不带落点进来的开书；从笔记、检索带着位置进来的不自动出声。
+   * docVersion 为 0 时正文还没就位，等第一次载入完成再判断。
+   */
+  useEffect(() => {
+    if (docVersion === 0 || !book || !chapter) return
+    if (target?.chapterId != null || target?.excerpt) return
+    if (resumeTriedRef.current) return
+    const resume = loadSpeechResume(book.id)
+    if (!resume?.active) {
+      resumeTriedRef.current = true
+      return
+    }
+    resumeTriedRef.current = true
+    if (resume.chapterId === chapter.id) {
+      readAloud.start(resume.cfi)
+      return
+    }
+    // 进度与续读章节对不上（例如朗读自动翻章时进度写库慢了半拍）：以朗读位置为准
+    const index = readable.findIndex((item) => item.id === resume.chapterId)
+    if (index < 0) return
+    pendingRef.current = { cfi: resume.cfi }
+    autoResumeCfiRef.current = resume.cfi
+    setChapterIndex(index)
+  }, [docVersion, book, chapter, target, readable, readAloud.start])
+
+  // 续读切了章：等新文档就位再开始读
+  useEffect(() => {
+    if (docVersion === 0) return
+    const cfi = autoResumeCfiRef.current
+    if (!cfi) return
+    autoResumeCfiRef.current = null
+    readAloud.start(cfi)
+  }, [docVersion, readAloud.start])
+
+  // 朗读开关状态落盘：只有「还开着」才自动续读；显式停止、手动翻页都不续
+  useEffect(() => {
+    const last = lastSentenceRef.current
+    if (!book || !last) return
+    saveSpeechResume(book.id, { ...last, active: speechStatus !== 'idle' })
+  }, [speechStatus, book])
 
   // 阅读器自带主题：跟着偏好切，不污染一级页面的主题
   useEffect(() => {

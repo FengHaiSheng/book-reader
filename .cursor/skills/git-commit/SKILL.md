@@ -17,6 +17,18 @@ git log -10 --pretty=format:'%s'
 
 无改动则不提交。有未暂存改动时先 `git add` 相关文件（勿添加密钥：`.env`、credentials 等）。
 
+## 提交前：校验并补齐 CHANGELOG.md
+
+提交前必须检查仓库根 `CHANGELOG.md`，与本次 diff 对齐：
+
+1. 读 `CHANGELOG.md` 顶层 + `package.json` 的 `version`；以 `package.json` 版本为准，缺该版本段则新建（`## <version>`），并把新条目放到最前。
+2. 判断本次改动是否有用户可感知变化（`feat` / `fix` / `perf` / 行为相关 `refactor`）：
+   - 有 → 在对应版本下补条目，沿用现有小节：`### 新增`、`### 修复`、`### 构建与发布`；必要时新建小节，顺序为 新增 → 修复 → 构建与发布。
+   - 仅 `docs` / `test` / `chore` / 内部结构调整 → 默认不写日志。
+3. 条目写法：`- ` 开头，一句话讲用户可见结果（与 commit subject 一致但可更完整）；不写文件名、不写实现细节；已存在的条目不要重复添加。
+4. 若版本号已在代码中变更，确认 `CHANGELOG.md` 顶部版本与之匹配。
+5. 更新后与本次改动一起 `git add CHANGELOG.md`，随同一提交落库；无 CHANGELOG.md 则跳过并告知用户。
+
 ## 消息格式
 
 ```
@@ -75,3 +87,4 @@ fix: 修复划线缺 CFI 时误创建 AI 笔记
 - `--no-verify`、改 git config、interactive rebase
 - 空提交；把无关改动塞进同一 commit
 - 把 secrets 打进仓库
+- 用户可感知变更（feat / fix / perf）未校验并补齐 `CHANGELOG.md` 就提交

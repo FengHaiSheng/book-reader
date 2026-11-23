@@ -3,7 +3,8 @@ import type { RefObject } from 'react'
 import type { TtsApi, TtsEngineId, TtsVoice } from '@shared/types'
 import { clearReadAloud, paintReadAloud } from './highlights'
 import type { ChapterPaginator } from './paginator'
-import { speechSegments, speechSupported, startIndexForPage, type SpeechSegment } from './speech'
+import { rangeFromPointCfi } from './cfi'
+import { speechSegments, speechSupported, startIndexFromPoint, type SpeechSegment } from './speech'
 import { createTtsEngine, type SpeechEngine } from './tts'
 
 export type ReadAloudStatus = 'idle' | 'speaking' | 'paused'
@@ -26,6 +27,11 @@ export type ReadAloudOptions = {
   /** 朗读翻到新的一页时回传，让顶栏页码与进度跟上 */
   onPage: (page: number, pages: number) => void
   /**
+   * 每开始读一句时回传这一句在正文里的 Range。
+   * 调用方据此记下续读位置，下次进阅读器时从这一句接着读。
+   */
+  onSentence?: (range: Range) => void
+  /**
    * 本章读完时调用。返回 true 表示已经切到下一章，等新文档载入后调用方要再 `start()`；
    * 返回 false 表示没有下一章，朗读到此结束。
    */
@@ -41,7 +47,8 @@ export type ReadAloud = {
   error: string | null
   /** 主动探活自建服务；成功返回 null，失败返回可读原因 */
   check: () => Promise<string | null>
-  start: () => void
+  /** 不给 atCfi 时从当前页页首开始；给了就从那个位置所在的那一句开始读 */
+  start: (atCfi?: string) => void
   pause: () => void
   resume: () => void
   stop: () => void
@@ -188,6 +195,7 @@ export function useReadAloud(options: ReadAloudOptions): ReadAloud {
               }
               const win = optsRef.current.iframeRef.current?.contentWindow
               if (win) paintReadAloud(win, segment.range)
+              optsRef.current.onSentence?.(segment.range)
             },
             onend: () => {
               if (session !== sessionRef.current) return
@@ -217,7 +225,7 @@ export function useReadAloud(options: ReadAloudOptions): ReadAloud {
     setError(null)
   }, [clearCurrentHighlight, getEngine, setStatus])
 
-  const start = useCallback(() => {
+  const start = useCallback((atCfi?: string) => {
     const engine = getEngine()
     if (!engine.available) {
       setError(
@@ -249,7 +257,9 @@ export function useReadAloud(options: ReadAloudOptions): ReadAloud {
       return
     }
 
-    const from = startIndexForPage(segments, paginator.pageStartRange())
+    // 续读位置定不到（CFI 失效、正文被重新导入过）就退回当前页页首，不假装续上了
+    const point = atCfi ? rangeFromPointCfi(doc, atCfi) : null
+    const from = startIndexFromPoint(segments, point ?? paginator.pageStartRange())
     if (from >= segments.length) {
       setStatus('idle')
       setError('这一页之后没有可朗读的正文。')
