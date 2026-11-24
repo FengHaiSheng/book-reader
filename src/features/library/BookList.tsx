@@ -6,13 +6,16 @@ export function BookList({
   books,
   onOpen,
   onRemove,
-  onTag
+  onTag,
+  onTogglePin
 }: {
   books: BookSummary[]
   onOpen: (id: string) => void
   onRemove: (id: string) => void
   /** 打标签的入口交给页面：指派是一个模态框，两套视图共用同它 */
   onTag: (book: BookSummary) => void
+  /** 置顶上限的校验在主进程，界面只负责发起与展示失败原因 */
+  onTogglePin: (book: BookSummary) => void
 }) {
   return (
     <ul className="book-list">
@@ -20,7 +23,10 @@ export function BookList({
         <li key={book.id} className="book-list__item">
           <BookCover book={book} width={40} />
           <button type="button" className="book-list__open" onClick={() => onOpen(book.id)}>
-            <span className="book-list__title">{book.title}</span>
+            <span className="book-list__title">
+              {book.title}
+              {book.pinnedAt !== null && <span className="book-list__pin">置顶</span>}
+            </span>
             <span className="book-list__meta">
               {book.author ?? '未知作者'} · {book.chapterCount} 章 ·{' '}
               {Math.round(book.totalChars / 1000)}k 字
@@ -44,6 +50,13 @@ export function BookList({
               </span>
             ))}
           </span>
+          <button
+            type="button"
+            className="book-list__pin-toggle"
+            onClick={() => onTogglePin(book)}
+          >
+            {book.pinnedAt !== null ? '取消置顶' : '置顶'}
+          </button>
           <button type="button" className="book-list__tag-add" onClick={() => onTag(book)}>
             ＋标签
           </button>

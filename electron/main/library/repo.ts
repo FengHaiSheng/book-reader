@@ -11,6 +11,8 @@ import type {
 import { tagsByBook } from './tags'
 import { toIndexText, toMatchQuery, toSingleIndexText } from '../epub/bigram'
 import type { ChapterRow, ChunkDraft } from '../epub/types'
+import { LIBRARY_PIN_LIMIT } from '@shared/types'
+import { appError } from '@shared/errors'
 
 export type BookInsert = {
   id: string
@@ -109,10 +111,12 @@ export function listBooks(db: Database.Database, tagId: number | null = null): B
               chapter_count AS chapterCount, total_chars AS totalChars,
               file_size AS fileSize,
               COALESCE((SELECT percent FROM reading_progress p WHERE p.book_id = books.id), 0) AS percent,
-              added_at AS addedAt, last_opened_at AS lastOpenedAt
+              added_at AS addedAt, last_opened_at AS lastOpenedAt,
+              pinned_at AS pinnedAt
        FROM books
        WHERE ? IS NULL OR id IN (SELECT book_id FROM book_tags WHERE tag_id = ?)
-       ORDER BY COALESCE(last_opened_at, added_at) DESC`
+       ORDER BY (pinned_at IS NOT NULL) DESC, pinned_at DESC,
+                COALESCE(last_opened_at, added_at) DESC`
     )
     .all(tagId, tagId) as BookRow[]
 
@@ -296,6 +300,35 @@ export function updateBookStatus(
   status: 'unread' | 'reading' | 'finished'
 ): void {
   db.prepare('UPDATE books SET status = ? WHERE id = ?').run(status, bookId)
+}
+
+/**
+ * 置顶 / 取消置顶。上限只在这里校验一次：写库是同步的，
+ * 界面并发点两下也不会挤出第三本。
+ */
+export function setBookPinned(db: Database.Database, bookId: string, pinned: boolean): void {
+  if (!pinned) {
+    db.prepare('UPDATE books SET pinned_at = NULL WHERE id = ?').run(bookId)
+    return
+  }
+
+  const row = db.prepare('SELECT pinned_at AS pinnedAt FROM books WHERE id = ?').get(bookId) as
+    | { pinnedAt: number | null }
+    | undefined
+  // 书不在了（刚被删 / 刚被别处删掉）就什么都不做，不必给出一个用户无法处理的错误
+  if (!row || row.pinnedAt !== null) return
+
+  const { count } = db
+    .prepare('SELECT COUNT(*) AS count FROM books WHERE pinned_at IS NOT NULL')
+    .get() as { count: number }
+  if (count >= LIBRARY_PIN_LIMIT) {
+    throw appError(
+      'LIBRARY_PIN_LIMIT',
+      `书架最多置顶 ${LIBRARY_PIN_LIMIT} 本书，请先取消一本已置顶的书`
+    )
+  }
+
+  db.prepare('UPDATE books SET pinned_at = ? WHERE id = ?').run(Date.now(), bookId)
 }
 
 export function touchOpened(db: Database.Database, bookId: string, at: number): void {

@@ -24,7 +24,8 @@ import {
   listBooks,
   listChapters,
   searchAllChunks,
-  searchChunks
+  searchChunks,
+  setBookPinned
 } from '../library/repo'
 import { getDatabase } from '../store/db'
 
@@ -187,6 +188,19 @@ export function registerLibraryIpc(): void {
     db.transaction(() => deleteBookRows(db, bookId))()
     rmSync(bookDir(bookId), { recursive: true, force: true })
   })
+
+  // 上限错误要原样交给界面提示，所以走结果信封而不是 throw（throw 会被套上英文前缀）
+  ipcMain.handle(
+    CH.librarySetPinned,
+    (_event, bookId: string, pinned: boolean): IpcResult<void> => {
+      try {
+        setBookPinned(getDatabase(), bookId, pinned === true)
+        return { ok: true, value: undefined }
+      } catch (error) {
+        return { ok: false, error: toAppError(error, '置顶没有成功') }
+      }
+    }
+  )
 }
 
 type ImportSlot = { index: number; count: number }

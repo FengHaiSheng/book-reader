@@ -17,6 +17,8 @@ export const CH = {
   /** 全库跨书搜索：去掉 book_id 过滤，复用同一套 chunks_fts 索引 */
   librarySearchAll: 'library:searchAll',
   libraryRemove: 'library:remove',
+  /** 书架置顶 / 取消置顶。超过上限时回传可读中文错误，由界面提示 */
+  librarySetPinned: 'library:setPinned',
   readerOpen: 'reader:open',
   readerSaveProgress: 'reader:saveProgress',
   bookmarksList: 'bookmarks:list',
@@ -117,6 +119,7 @@ export const API_SHAPE = {
     'search',
     'searchAll',
     'remove',
+    'setPinned',
     'tagsList',
     'tagCreate',
     'tagRename',

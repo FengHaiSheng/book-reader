@@ -277,5 +277,18 @@ export const migrations: Migration[] = [
         );
       `)
     }
+  },
+  {
+    version: 9,
+    up: (db) => {
+      /**
+       * 书架置顶。用时间戳而不是布尔值：同样是置顶，后置顶的排在前面更符合直觉。
+       * 上限（2 本）由 repo 在写入时校验，DDL 不表达业务规则。
+       */
+      db.exec(`
+        ALTER TABLE books ADD COLUMN pinned_at INTEGER;
+        CREATE INDEX idx_books_pinned ON books(pinned_at DESC) WHERE pinned_at IS NOT NULL;
+      `)
+    }
   }
 ]

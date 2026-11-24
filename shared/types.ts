@@ -170,9 +170,14 @@ export type BookSummary = {
   fileSize: number
   addedAt: number
   lastOpenedAt: number | null
+  /** 置顶时刻；null 表示未置顶。书架按它排在前面，最多允许 LIBRARY_PIN_LIMIT 本 */
+  pinnedAt: number | null
   /** 按标签名排序；没打标签就是空数组，不是 undefined */
   tags: BookTag[]
 }
+
+/** 书架最多能置顶几本。渲染层提示与主进程落库校验共用这一份。 */
+export const LIBRARY_PIN_LIMIT = 2
 
 /** 书架的排序口径。recent 用「上次阅读，没有就加入时间」 */
 export type LibrarySort = 'recent' | 'title' | 'added' | 'progress'

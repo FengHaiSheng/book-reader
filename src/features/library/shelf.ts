@@ -118,23 +118,29 @@ function progressRank(book: BookSummary): number {
   return book.status === 'finished' ? 1 : book.percent
 }
 
-/** 排序口径见 shared/types 的 LibrarySort。返回新数组，不改原数组。 */
+/** 置顶的书永远排在最前，未被置顶的书沿用调用方选的排序口径。 */
 export function sortBooks(books: readonly BookSummary[], sort: LibrarySort): BookSummary[] {
-  const copy = [...books]
+  const pinned = books.filter((book) => book.pinnedAt !== null)
+  const rest = books.filter((book) => book.pinnedAt === null)
+  // 后置顶的在前：同样是置顶，刚钉上去的那本更该被先看到
+  pinned.sort((a, b) => (b.pinnedAt ?? 0) - (a.pinnedAt ?? 0))
+  rest.sort((a, b) => compareBySort(a, b, sort))
+  return [...pinned, ...rest]
+}
+
+function compareBySort(a: BookSummary, b: BookSummary, sort: LibrarySort): number {
   if (sort === 'title') {
-    copy.sort((a, b) => a.title.localeCompare(b.title, 'zh-Hans-CN'))
-  } else if (sort === 'added') {
-    copy.sort((a, b) => b.addedAt - a.addedAt)
-  } else if (sort === 'progress') {
-    copy.sort((a, b) => {
-      const delta = progressRank(b) - progressRank(a)
-      if (delta !== 0) return delta
-      return a.title.localeCompare(b.title, 'zh-Hans-CN')
-    })
-  } else {
-    copy.sort((a, b) => (b.lastOpenedAt ?? b.addedAt) - (a.lastOpenedAt ?? a.addedAt))
+    return a.title.localeCompare(b.title, 'zh-Hans-CN')
   }
-  return copy
+  if (sort === 'added') {
+    return b.addedAt - a.addedAt
+  }
+  if (sort === 'progress') {
+    const delta = progressRank(b) - progressRank(a)
+    if (delta !== 0) return delta
+    return a.title.localeCompare(b.title, 'zh-Hans-CN')
+  }
+  return (b.lastOpenedAt ?? b.addedAt) - (a.lastOpenedAt ?? a.addedAt)
 }
 
 /** 封面悬停 CTA：按状态给出下一步动作 */

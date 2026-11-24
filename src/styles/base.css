@@ -2905,7 +2905,7 @@ html[data-theme='dark'] .seg__b.is-on {
 
 .book-card__acts {
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: center;
   gap: 6px;
@@ -2924,9 +2924,26 @@ html[data-theme='dark'] .seg__b.is-on {
   transition: background var(--ease), color var(--ease);
 }
 
+.book-card__pin-toggle:hover,
 .book-card__tag-add:hover {
   background: rgba(20, 18, 16, 0.88);
   color: #fff;
+}
+
+/* 已置顶的封面角标：与进度环分居左上 / 右下，悬停时也不消失 */
+.book-card__pin {
+  position: absolute;
+  left: 6px;
+  top: 6px;
+  z-index: 1;
+  padding: 1px 6px;
+  border-radius: var(--r-sm);
+  background: var(--accent-mark);
+  /* paper 在浅色下近白、深色下近黑，两种主题都能压在强调色上 */
+  color: var(--paper);
+  font-size: 11px;
+  line-height: 1.5;
+  pointer-events: none;
 }
 
 .book-card__remove:hover {
@@ -3258,19 +3275,34 @@ html[data-theme='dark'] .tag-dot {
   max-width: 220px;
 }
 
-.book-list__tag-add {
+.book-list__tag-add,
+.book-list__pin-toggle {
   font-size: 12px;
   color: var(--ink-muted);
   opacity: 0;
   transition: opacity var(--ease), color var(--ease);
 }
 
-.book-list__item:hover .book-list__tag-add {
+.book-list__item:hover .book-list__tag-add,
+.book-list__item:hover .book-list__pin-toggle {
   opacity: 1;
 }
 
-.book-list__tag-add:hover {
+.book-list__tag-add:hover,
+.book-list__pin-toggle:hover {
   color: var(--accent-link);
+}
+
+/* 列表里的置顶标记跟标题同一行，比封面角标更克制 */
+.book-list__pin {
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--accent-mark) 14%, transparent);
+  color: var(--accent-mark);
+  font-size: 11px;
+  line-height: 1.6;
+  vertical-align: 1px;
 }
 
 /* ---- 模态框 ---- */

@@ -51,6 +51,7 @@ function summary(partial: Partial<BookSummary> & { id: string }): BookSummary {
     fileSize: 0,
     addedAt: 0,
     lastOpenedAt: null,
+    pinnedAt: null,
     tags: [],
     ...partial
   }

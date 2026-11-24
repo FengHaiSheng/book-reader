@@ -108,6 +108,9 @@ const api = {
     searchAll: (query: string, limit?: number): Promise<SearchHitWithBook[]> =>
       ipcRenderer.invoke(CH.librarySearchAll, query, limit),
     remove: (bookId: string): Promise<void> => ipcRenderer.invoke(CH.libraryRemove, bookId),
+    /** 超过置顶上限时抛出的 Error.message 就是可直接展示的中文 */
+    setPinned: async (bookId: string, pinned: boolean): Promise<void> =>
+      unwrap(await ipcRenderer.invoke(CH.librarySetPinned, bookId, pinned)),
     tagsList: (): Promise<Tag[]> => ipcRenderer.invoke(CH.libraryTagsList),
     tagCreate: (name: string): Promise<Tag> => ipcRenderer.invoke(CH.libraryTagCreate, name),
     tagRename: (id: number, name: string): Promise<Tag> =>

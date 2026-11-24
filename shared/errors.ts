@@ -10,6 +10,7 @@ export const APP_ERROR_CODES = [
   'AI_TIMEOUT',
   'AI_UNSUPPORTED',
   'SECRET_UNAVAILABLE',
+  'LIBRARY_PIN_LIMIT',
   'OFFLINE',
   'UNKNOWN'
 ] as const

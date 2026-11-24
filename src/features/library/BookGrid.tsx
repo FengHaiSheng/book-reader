@@ -22,6 +22,7 @@ export function BookGrid({
   onOpen,
   onRemove,
   onTag,
+  onTogglePin,
   showDrop = true
 }: {
   books: BookSummary[]
@@ -29,6 +30,8 @@ export function BookGrid({
   onRemove: (id: string) => void
   /** 打标签的入口交给页面：指派是一个模态框，两套视图共用同它 */
   onTag: (book: BookSummary) => void
+  /** 置顶上限的校验在主进程，界面只负责发起与展示失败原因 */
+  onTogglePin: (book: BookSummary) => void
   /** 按脉络分节时每节都渲染网格，只在平铺书架保留一个拖放终点 */
   showDrop?: boolean
 }) {
@@ -48,6 +51,11 @@ export function BookGrid({
                 >
                   <span className="book-card__cover-wrap">
                     <BookCover book={book} width={132} fill />
+                    {book.pinnedAt !== null && (
+                      <span className="book-card__pin" aria-label="已置顶">
+                        置顶
+                      </span>
+                    )}
                     {progress.visible && (
                       <span
                         className={`book-card__ring${progress.done ? ' is-done' : ''}`}
@@ -78,6 +86,18 @@ export function BookGrid({
                     {ctaLabel(book)}
                   </button>
                   <span className="book-card__acts">
+                    <button
+                      type="button"
+                      className="book-card__pin-toggle"
+                      onClick={(event) => {
+                        // 置顶后卡片会跳到最前面。按钮若留着焦点，:focus-within 会让
+                        // 悬停菜单跟着卡片一直亮着，所以点完先失焦。
+                        event.currentTarget.blur()
+                        onTogglePin(book)
+                      }}
+                    >
+                      {book.pinnedAt !== null ? '取消置顶' : '置顶'}
+                    </button>
                     <button type="button" className="book-card__tag-add" onClick={() => onTag(book)}>
                       ＋标签
                     </button>

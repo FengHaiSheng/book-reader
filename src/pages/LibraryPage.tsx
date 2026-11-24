@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { BookStatus, BookSummary, ImportOutcome, LibrarySort, Tag } from '@shared/types'
 import { isBookFile } from '@shared/types'
+import { readableError } from '@shared/errors'
 import { BookGrid } from '../features/library/BookGrid'
 import { BookList } from '../features/library/BookList'
 import { EmptyShelf } from '../features/library/EmptyShelf'
@@ -171,6 +172,17 @@ export function LibraryPage({
     setTaggingIndex((index) => index + 1)
   }
 
+  /** 置顶上限由主进程判定；超过时把原因显示在状态行，而不是静默失败 */
+  async function togglePin(book: BookSummary): Promise<void> {
+    setNotice(null)
+    try {
+      await window.api.library.setPinned(book.id, book.pinnedAt === null)
+      await refreshAll()
+    } catch (error) {
+      setNotice(readableError(error, '置顶没有成功'))
+    }
+  }
+
   function onPick(): void {
     void run(() => window.api.library.pickAndImport()).then(openTaggingForImport)
   }
@@ -320,6 +332,7 @@ export function LibraryPage({
             onOpen={onOpen}
             onRemove={(id) => void window.api.library.remove(id).then(refreshAll)}
             onTag={(book) => openTaggingForBook(book.id)}
+            onTogglePin={(book) => void togglePin(book)}
           />
         ) : view === 'grid' ? (
           <BookGrid
@@ -327,6 +340,7 @@ export function LibraryPage({
             onOpen={onOpen}
             onRemove={(id) => void window.api.library.remove(id).then(refreshAll)}
             onTag={(book) => openTaggingForBook(book.id)}
+            onTogglePin={(book) => void togglePin(book)}
           />
         ) : (
           <BookList
@@ -334,6 +348,7 @@ export function LibraryPage({
             onOpen={onOpen}
             onRemove={(id) => void window.api.library.remove(id).then(refreshAll)}
             onTag={(book) => openTaggingForBook(book.id)}
+            onTogglePin={(book) => void togglePin(book)}
           />
         )}
       </div>

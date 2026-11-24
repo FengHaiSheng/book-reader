@@ -14,7 +14,8 @@ export function TrackShelf({
   view,
   onOpen,
   onRemove,
-  onTag
+  onTag,
+  onTogglePin
 }: {
   sections: readonly TrackShelfSection[]
   books: readonly BookSummary[]
@@ -22,6 +23,7 @@ export function TrackShelf({
   onOpen: (id: string) => void
   onRemove: (id: string) => void
   onTag: (book: BookSummary) => void
+  onTogglePin: (book: BookSummary) => void
 }) {
   const byId = new Map(books.map((book) => [book.id, book]))
   return (
@@ -55,9 +57,16 @@ export function TrackShelf({
                 onOpen={onOpen}
                 onRemove={onRemove}
                 onTag={onTag}
+                onTogglePin={onTogglePin}
               />
             ) : (
-              <BookList books={list} onOpen={onOpen} onRemove={onRemove} onTag={onTag} />
+              <BookList
+                books={list}
+                onOpen={onOpen}
+                onRemove={onRemove}
+                onTag={onTag}
+                onTogglePin={onTogglePin}
+              />
             )}
           </section>
         )

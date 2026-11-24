@@ -30,6 +30,7 @@ function book(
     fileSize: 0,
     addedAt: 0,
     lastOpenedAt: null,
+    pinnedAt: null,
     tags: [] as BookTag[],
     ...overrides
   }
@@ -151,6 +152,15 @@ describe('sortBooks', () => {
       book({ id: 'd', title: '将完', status: 'reading', percent: 0.9 })
     ]
     expect(sortBooks(mixed, 'progress').map((b) => b.id)).toEqual(['c', 'd', 'a', 'b'])
+  })
+
+  it('置顶的书排在最前，且后置顶的在前', () => {
+    const mixed = [
+      ...books,
+      book({ id: 'p1', title: '早置顶', pinnedAt: 100, addedAt: 1 }),
+      book({ id: 'p2', title: '晚置顶', pinnedAt: 200, addedAt: 2 })
+    ]
+    expect(sortBooks(mixed, 'title').map((b) => b.id)).toEqual(['p2', 'p1', 'b', 'a', 'c'])
   })
 
   it('返回新数组，不改原数组', () => {
