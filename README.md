@@ -350,7 +350,7 @@ POST /inference_sft
 
 - 探活看 `GET /openapi.json` 里有没有 `/inference_*` —— 官方服务没有 `/health`。
 - 采样率必须手选：CosyVoice2/3 是 `24000`，CosyVoice1 是 `22050`。应用按它给裸 PCM 补 WAV 头；选错会变调或变速。
-- 说话人就是 `spk_id`，留空按 `中文女` 发送。官方接口不暴露可用音色列表，需要按模型目录里的 `spk2info` 自己填。
+- 说话人就是 `spk_id`，留空按 `中文女` 发送。官方接口不暴露可用音色列表，应用里内置了常见的说话人选项；自行注册的说话人可切到「手动输入 spk_id」填写。
 - 部分 `CosyVoice2-0.5B` 快照不带 `spk2info.pt`，此时 `/inference_sft` 会报 `KeyError`。先用官方脚本调用 `add_zero_shot_spk(...)` 再 `save_spkinfo()` 注册说话人（SFT 还需要在对应条目里补 campplus `embedding`），或改用 `/inference_zero_shot` 自带参考音频。
 - 官方接口没有语速参数，语速由播放端 `playbackRate` 实现；通用 `/tts` 模式则由服务自己按 `speed` 合成。
 

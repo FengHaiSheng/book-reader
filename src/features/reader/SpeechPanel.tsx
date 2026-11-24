@@ -2,6 +2,20 @@ import { useState } from 'react'
 import { PREFS_LIMITS, type TtsApi, type TtsEngineId, type TtsVoice } from '@shared/types'
 
 /**
+ * CosyVoice 官方 FastAPI 不暴露音色列表，能直接用的就是 SFT 内置的几个 spk_id。
+ * 列在这里让用户可以直接选，不用去翻服务端模型目录。
+ */
+const COSYVOICE_SPEAKERS: TtsVoice[] = [
+  { id: '中文女', name: '中文女', lang: '中文' },
+  { id: '中文男', name: '中文男', lang: '中文' },
+  { id: '英文女', name: '英文女', lang: '英文' },
+  { id: '英文男', name: '英文男', lang: '英文' },
+  { id: '日语男', name: '日语男', lang: '日文' },
+  { id: '粤语女', name: '粤语女', lang: '粤语' },
+  { id: '韩语女', name: '韩语女', lang: '韩文' }
+]
+
+/**
  * 朗读面板。
  *
  * 系统语音只选音色；自建服务多一个地址、接口形态与探活。两个音色字段分开存：
@@ -50,11 +64,22 @@ export function SpeechPanel({
   const [minRate, maxRate] = PREFS_LIMITS.ttsRate
   const [testing, setTesting] = useState(false)
   const [checkNote, setCheckNote] = useState<{ ok: boolean; text: string } | null>(null)
+  // 自建服务的音色不一定都在列表里（如自行注册的 spk_id），保留手动输入入口
+  const [manualVoice, setManualVoice] = useState(false)
 
   const official = api === 'cosyvoice'
   const chinese = voices.filter((item) => item.lang.toLowerCase().startsWith('zh'))
   const others = voices.filter((item) => !item.lang.toLowerCase().startsWith('zh'))
-  const known = voices.some((item) => item.id === serverVoice)
+  // 官方接口没有音色列表，用内置说话人兜底；服务端若真的返回了音色，再合并进去
+  const serverVoices: TtsVoice[] = official
+    ? [
+        ...COSYVOICE_SPEAKERS,
+        ...voices.filter(
+          (item) => !COSYVOICE_SPEAKERS.some((preset) => preset.id === item.id)
+        )
+      ]
+    : voices
+  const known = serverVoices.some((item) => item.id === serverVoice)
 
   const test = async (): Promise<void> => {
     setTesting(true)
@@ -192,36 +217,55 @@ export function SpeechPanel({
             <label className="typo__label" htmlFor="tts-server-voice">
               {official ? '说话人（spk_id）' : '服务音色'}
             </label>
-            {voices.length > 0 ? (
+            {serverVoices.length > 0 && !manualVoice ? (
               <select
                 id="tts-server-voice"
                 className="typo__select"
-                value={known ? serverVoice : ''}
-                onChange={(event) => onServerVoice(event.target.value)}
+                value={serverVoice}
+                onChange={(event) => {
+                  if (event.target.value === '__manual__') {
+                    setManualVoice(true)
+                    return
+                  }
+                  onServerVoice(event.target.value)
+                }}
               >
                 <option value="">服务默认音色</option>
-                {voices.map((item) => (
+                {!known && serverVoice !== '' && (
+                  <option value={serverVoice}>当前：{serverVoice}</option>
+                )}
+                {serverVoices.map((item) => (
                   <option key={item.id} value={item.id}>
                     {item.name}
                     {item.lang === '' ? '' : `（${item.lang}）`}
                   </option>
                 ))}
+                <option value="__manual__">
+                  {official ? '手动输入 spk_id…' : '手动输入音色…'}
+                </option>
               </select>
             ) : (
-              <input
-                id="tts-server-voice"
-                className="typo__input"
-                type="text"
-                value={serverVoice}
-                placeholder={
-                  official ? '留空使用「中文女」' : '留空使用服务默认音色'
-                }
-                onChange={(event) => onServerVoice(event.target.value)}
-              />
+              <>
+                <input
+                  id="tts-server-voice"
+                  className="typo__input"
+                  type="text"
+                  value={serverVoice}
+                  placeholder={
+                    official ? '留空使用「中文女」' : '留空使用服务默认音色'
+                  }
+                  onChange={(event) => onServerVoice(event.target.value)}
+                />
+                {serverVoices.length > 0 && (
+                  <button type="button" className="btn" onClick={() => setManualVoice(false)}>
+                    从列表选择
+                  </button>
+                )}
+              </>
             )}
             <span className="typo__label">
               {official
-                ? '请求官方 POST /inference_sft。服务没有语速参数，语速由播放端调整。'
+                ? '请求官方 POST /inference_sft。内置说话人外自行注册的 spk_id 可手动输入。服务没有语速参数，语速由播放端调整。'
                 : '服务需实现 GET /health 与 POST /tts（WAV）。'}
               合成的句子缓存在本地，上限 200MB。
             </span>
