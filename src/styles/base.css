@@ -644,6 +644,47 @@ html[data-theme='dark'] .seg__b.is-on {
   font-size: 13px;
 }
 
+/* ── 专注模式：全屏只留正文，倒计时与退出提示临时露一下 ─────────────── */
+
+.reader--focus .reader__bar {
+  display: none;
+}
+
+.focus-hud {
+  position: fixed;
+  top: var(--s5);
+  right: var(--s5);
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  padding: var(--s2) var(--s3);
+  border: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--paper) 86%, transparent);
+  box-shadow: var(--shadow-sheet);
+  color: var(--ink-muted);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 260ms var(--ease);
+}
+
+.focus-hud.is-on {
+  opacity: 1;
+}
+
+.focus-hud__time {
+  color: var(--ink);
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+.focus-hud__hint {
+  font-size: 11px;
+}
+
 /* ── 漫画阅读：整页图片，左右翻页 ─────────────────────────────────── */
 
 .comic {
@@ -3321,6 +3362,91 @@ html[data-theme='dark'] .tag-dot {
   flex-direction: column;
   gap: var(--s1);
   overflow-y: auto;
+}
+
+/* 专注时长：四个档位 + 自定义分钟 */
+.focus-set {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s4);
+  padding-top: var(--s2);
+}
+
+.focus-set__hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--ink-muted);
+}
+
+.focus-set__presets {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--s2);
+}
+
+.focus-set__preset {
+  height: 34px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--paper-raised);
+  color: var(--ink-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  transition: background var(--ease), color var(--ease), border-color var(--ease);
+}
+
+.focus-set__preset:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.focus-set__preset.is-on {
+  background: var(--active);
+  border-color: color-mix(in srgb, var(--ink) 26%, var(--line));
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.focus-set__field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+
+.focus-set__unit {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+}
+
+.focus-set__input {
+  width: 76px;
+  height: 30px;
+  padding: 0 var(--s2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--paper-raised);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.focus-set__error {
+  margin: 0;
+  font-size: 11px;
+  color: var(--accent-mark);
+}
+
+.focus-set__acts {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--s2);
 }
 
 .tag-picker__hint {

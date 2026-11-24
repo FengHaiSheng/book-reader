@@ -63,6 +63,8 @@ export default function App() {
   const autoTocSidebarRef = useRef(false)
   const [exitDialog, setExitDialog] = useState<{ to: PageId | null } | null>(null)
   const [readingChrome, setReadingChrome] = useState<ReadingChromeValue | null>(null)
+  /** 专注模式：阅读器进入全屏时壳层把侧栏也收起来，屏幕上只留正文 */
+  const [readerFocus, setReaderFocus] = useState(false)
   const flushExitRef = useRef<(() => void) | null>(null)
   const registerFlushExit = useCallback((fn: (() => void) | null) => {
     flushExitRef.current = fn
@@ -204,6 +206,7 @@ export default function App() {
     autoTocSidebarRef.current = false
     setReading(null)
     setReadingChrome(null)
+    setReaderFocus(false)
     flushExitRef.current = null
     if (to !== null) setPage(to)
     setReadingSidebarWidth(SIDEBAR_WIDTH)
@@ -239,22 +242,25 @@ export default function App() {
       <div className="app">
         {reading === null && <TitleBar />}
         <div className="body">
-          <Sidebar
-            current={page}
-            reading={reading !== null}
-            width={shellSidebarWidth}
-            onWidthChange={reading !== null ? setSidebarWidth : undefined}
-            onToggleCollapsed={reading !== null ? toggleCollapsed : undefined}
-            onOpenToc={reading !== null ? openToc : undefined}
-            onSelect={(id) => (reading !== null ? leaveReading(id) : setPage(id))}
-            tags={reading === null && page === 'library' ? tags : null}
-            tagFilter={tagFilter}
-            onPickTag={setTagFilter}
-            onTagsChanged={onTagsChanged}
-            statusFilter={statusFilter}
-            onPickStatus={setStatusFilter}
-            stats={stats}
-          />
+          {/* 专注模式下连侧栏一起隐藏：全屏里只剩正文 */}
+          {!readerFocus && (
+            <Sidebar
+              current={page}
+              reading={reading !== null}
+              width={shellSidebarWidth}
+              onWidthChange={reading !== null ? setSidebarWidth : undefined}
+              onToggleCollapsed={reading !== null ? toggleCollapsed : undefined}
+              onOpenToc={reading !== null ? openToc : undefined}
+              onSelect={(id) => (reading !== null ? leaveReading(id) : setPage(id))}
+              tags={reading === null && page === 'library' ? tags : null}
+              tagFilter={tagFilter}
+              onPickTag={setTagFilter}
+              onTagsChanged={onTagsChanged}
+              statusFilter={statusFilter}
+              onPickStatus={setStatusFilter}
+              stats={stats}
+            />
+          )}
           <main className={`content${reading !== null ? ' content--reading' : ''}`}>
             {bodyActive && (
               <LibraryBodySearchOverlay
@@ -280,6 +286,7 @@ export default function App() {
                 onRequestExit={requestExitFromReader}
                 registerFlushExit={registerFlushExit}
                 onChromeChange={setReadingChrome}
+                onFocusModeChange={setReaderFocus}
               />
             ) : (
               <>

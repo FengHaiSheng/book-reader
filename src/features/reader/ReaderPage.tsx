@@ -31,6 +31,7 @@ import { bookPercent } from './progress'
 import { IDLE_MS, creditMs } from '../reading/tracker'
 import { setUnrecordedMs } from '../reading/failures'
 import { TypographyPanel } from './TypographyPanel'
+import { FocusSetup } from './FocusSetup'
 import { SpeechPanel } from './SpeechPanel'
 import { useReadAloud } from './useReadAloud'
 import { loadSpeechResume, saveSpeechResume } from './speech-resume'
@@ -85,7 +86,8 @@ export function ReaderPage({
   exitConfirmOpen = false,
   onRequestExit,
   registerFlushExit,
-  onChromeChange
+  onChromeChange,
+  onFocusModeChange
 }: {
   bookId: string
   /** 从笔记「回到原文」进来时指定落点；从书架进来传 null，沿用上次进度 */
@@ -100,6 +102,8 @@ export function ReaderPage({
   registerFlushExit: (fn: (() => void) | null) => void
   /** 把目录/书签交给壳层侧栏；卸载时清 null */
   onChromeChange: (value: ReadingChromeValue | null) => void
+  /** 专注模式开关：壳层据此把侧栏一起收起来 */
+  onFocusModeChange: (on: boolean) => void
 }) {
   const [book, setBook] = useState<ReaderBook | null>(null)
   const [prefs, setPrefs] = useState<ReadingPrefs | null>(null)
@@ -143,6 +147,16 @@ export function ReaderPage({
   const [speechOpen, setSpeechOpen] = useState(false)
   /** 朗读的一句提示（例如读到了最后一章），与书签提示同寿命 */
   const [speechNote, setSpeechNote] = useState<string | null>(null)
+  /** 专注时长弹窗是否开着（进入专注前的设置） */
+  const [focusSetOpen, setFocusSetOpen] = useState(false)
+  /** 专注进行中：只记结束时刻，剩余时间由此推算，不靠累加 */
+  const [focus, setFocus] = useState<{ endsAt: number } | null>(null)
+  /** 剩余毫秒，每秒刷新一次 */
+  const [focusRemaining, setFocusRemaining] = useState(0)
+  /** 倒计时与 Esc 提示只在刚进入或有操作时露一下，其余时间不占正文 */
+  const [focusHudOn, setFocusHudOn] = useState(false)
+  /** 专注结束的提示（时间到 / 无法全屏），与其他事件提示同寿命 */
+  const [focusNote, setFocusNote] = useState<string | null>(null)
 
   const stageRef = useRef<HTMLDivElement | null>(null)
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
@@ -1374,6 +1388,24 @@ export function ReaderPage({
     onKeyRef.current = (event) => {
       // 漫画阅读器有自己的键盘处理（翻页、Esc 退出），这里整条让开，避免双重响应
       if (comicModeRef.current) return
+      // 专注时长弹窗开着时，Esc 只关弹窗，不触发「离开阅读」的确认
+      if (event.key === 'Escape' && focusSetOpen) {
+        event.preventDefault()
+        setFocusSetOpen(false)
+        return
+      }
+      // 专注模式：Esc 只退出专注；查找 / 加书签这类入口在专注里不打开
+      if (focusRef.current) {
+        if (event.key === 'Escape') {
+          event.preventDefault()
+          exitFocus()
+          return
+        }
+        if ((event.metaKey || event.ctrlKey) && ['f', 'd'].includes(event.key.toLowerCase())) {
+          event.preventDefault()
+          return
+        }
+      }
       // ⌘F / Ctrl+F 打开查找。必须排在修饰键总闸之前，否则会被下一句直接吞掉
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'f') {
         event.preventDefault()
@@ -1427,6 +1459,130 @@ export function ReaderPage({
 
   const barPad = readerBarPadLeft(shellSidebarWidth)
 
+  // ── 专注模式 ─────────────────────────────────────────────────────────
+
+  /** 专注中标记。键盘与全屏事件都从 ref 读，避免闭包拿到上一轮的 state */
+  const focusRef = useRef(false)
+  const hudTimerRef = useRef<number | null>(null)
+
+  /** 倒计时与 Esc 提示不是常驻：露 3 秒后自己收掉，正文区始终干净 */
+  const revealFocusHud = useCallback(() => {
+    setFocusHudOn(true)
+    if (hudTimerRef.current !== null) window.clearTimeout(hudTimerRef.current)
+    hudTimerRef.current = window.setTimeout(() => {
+      hudTimerRef.current = null
+      setFocusHudOn(false)
+    }, 3200)
+  }, [])
+
+  const exitFocus = useCallback(
+    (note: string | null = null) => {
+      focusRef.current = false
+      setFocus(null)
+      setFocusHudOn(false)
+      if (hudTimerRef.current !== null) {
+        window.clearTimeout(hudTimerRef.current)
+        hudTimerRef.current = null
+      }
+      onFocusModeChange(false)
+      // 按 Esc 退出全屏时浏览器已经自己退了，这里只在还全屏时补一次
+      if (document.fullscreenElement) {
+        void document.exitFullscreen().catch(() => {
+          // 退全屏失败不拦着界面恢复：专注已经结束，正文随时可以继续读
+        })
+      }
+      if (note) setFocusNote(note)
+    },
+    [onFocusModeChange]
+  )
+
+  const startFocus = useCallback(
+    (minutes: number) => {
+      setFocusSetOpen(false)
+      // 专注里没有入口能再打开这些浮层，进入时统一收掉
+      setPanelOpen(false)
+      setSpeechOpen(false)
+      setAiOpen(false)
+      closeFind()
+      setActive(null)
+      setSelection(null)
+      setFocusNote(null)
+      focusRef.current = true
+      const totalMs = minutes * 60_000
+      setFocus({ endsAt: Date.now() + totalMs })
+      setFocusRemaining(totalMs)
+      onFocusModeChange(true)
+      revealFocusHud()
+      // 必须留在按钮点击的同一个调用栈里：全屏请求要被认作一次用户操作
+      if (typeof document.documentElement.requestFullscreen === 'function') {
+        void document.documentElement.requestFullscreen().catch(() => {
+          setFocusNote('当前环境不允许自动全屏，已隐藏界面进入专注；按 Esc 退出。')
+        })
+      } else {
+        setFocusNote('当前环境不支持全屏，已隐藏界面进入专注；按 Esc 退出。')
+      }
+    },
+    [closeFind, onFocusModeChange, revealFocusHud]
+  )
+
+  // 倒计时：按结束时刻算剩余，不累加，休眠回来也不会漂
+  useEffect(() => {
+    if (!focus) return
+    const tick = (): void => {
+      const left = Math.max(0, focus.endsAt - Date.now())
+      setFocusRemaining(left)
+      if (left <= 0) exitFocus('专注时间到了。')
+    }
+    tick()
+    const timer = window.setInterval(tick, 1000)
+    return () => window.clearInterval(timer)
+  }, [focus, exitFocus])
+
+  // 浏览器（含 Electron）按 Esc 会自己退出全屏，且不一定把按键送到页面：
+  // 以「已经不在全屏」为准同步退出专注，界面不会卡在只剩正文的状态
+  useEffect(() => {
+    const onChange = (): void => {
+      if (!document.fullscreenElement && focusRef.current) exitFocus()
+    }
+    document.addEventListener('fullscreenchange', onChange)
+    return () => document.removeEventListener('fullscreenchange', onChange)
+  }, [exitFocus])
+
+  // 卸载（离开阅读器）时千万不能把窗口留在全屏
+  useEffect(
+    () => () => {
+      if (hudTimerRef.current !== null) window.clearTimeout(hudTimerRef.current)
+      if (document.fullscreenElement) void document.exitFullscreen().catch(() => {})
+      onFocusModeChange(false)
+    },
+    [onFocusModeChange]
+  )
+
+  // 专注里碰一下鼠标 / 敲一下键就把倒计时露出来，随后自己淡出
+  useEffect(() => {
+    if (!focus) return
+    const docs = [document, iframeRef.current?.contentDocument].filter(
+      (doc): doc is Document => Boolean(doc)
+    )
+    const show = (): void => revealFocusHud()
+    for (const doc of docs) {
+      doc.addEventListener('mousemove', show, { passive: true })
+      doc.addEventListener('keydown', show)
+    }
+    return () => {
+      for (const doc of docs) {
+        doc.removeEventListener('mousemove', show)
+        doc.removeEventListener('keydown', show)
+      }
+    }
+  }, [focus, docVersion, revealFocusHud])
+
+  useEffect(() => {
+    if (!focusNote) return
+    const timer = window.setTimeout(() => setFocusNote(null), 6000)
+    return () => window.clearTimeout(timer)
+  }, [focusNote])
+
   if (missing) {
     return (
       <div className="reader">
@@ -1453,7 +1609,8 @@ export function ReaderPage({
   }
 
   return (
-    <div className="reader">
+    <div className={`reader${focus ? ' reader--focus' : ''}`}>
+      {/* 专注时整条顶栏由 .reader--focus 隐去：屏幕上只留正文 */}
       <div className="reader__bar" style={{ paddingLeft: barPad }}>
         {/* 章名仅供读屏与 e2e；顶栏左/中故意留空，避免与侧栏/红绿灯抢位 */}
         <span className="reader__chapter reader__chapter--sr">
@@ -1534,6 +1691,9 @@ export function ReaderPage({
         >
           排版
         </button>
+        <button type="button" className="btn" onClick={() => setFocusSetOpen(true)}>
+          专注
+        </button>
       </div>
       {findOpen && (
         <FindBar
@@ -1584,6 +1744,11 @@ export function ReaderPage({
       {annotError && (
         <p className="reader__degrade reader__degrade--error" role="status">
           {annotError}
+        </p>
+      )}
+      {focusNote && (
+        <p className="reader__degrade" role="status">
+          {focusNote}
         </p>
       )}
       <div className="reader__body">
@@ -1669,8 +1834,25 @@ export function ReaderPage({
           />
         )}
       </div>
+      {focus !== null && (
+        <div className={`focus-hud${focusHudOn ? ' is-on' : ''}`}>
+          <span className="focus-hud__time">{formatFocusRemaining(focusRemaining)}</span>
+          <span className="focus-hud__hint">按 Esc 退出 · ← → 翻页</span>
+        </div>
+      )}
+      {focusSetOpen && (
+        <FocusSetup onStart={startFocus} onClose={() => setFocusSetOpen(false)} />
+      )}
     </div>
   )
+}
+
+/** 专注倒计时：向上取整，免得刚进入就显示少一秒 */
+function formatFocusRemaining(ms: number): string {
+  const total = Math.max(0, Math.ceil(ms / 1000))
+  const minutes = Math.floor(total / 60)
+  const seconds = total % 60
+  return `${minutes}:${String(seconds).padStart(2, '0')}`
 }
 
 /** 窗口宽度：`computeLayout` 的断点看的是窗口，不是正文区 */
